@@ -89,8 +89,8 @@ function yearly(st, h) {
     return {
         hero: `<h1>${start === 1 ? 'Year' : 'Financial year'} ${year.label}</h1>
             <div class="stats">${h.stat('Income', L.money(income))}${h.stat('Expense', L.money(expense))}${h.stat('Savings', L.money(income - expense))}</div>`,
-        filters: `<label class="inline">Year<select data-model="insights.year" data-rerender>${years.map((y) => `<option value="${y.key}" ${y.key === year.key ? 'selected' : ''}>${y.label}</option>`).join('')}</select></label>
-            <label class="inline">Year starts in<select data-setting="yearStart">${MONTHS.map((n, i) => `<option value="${i + 1}" ${i + 1 === start ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`,
+        filters: `<label class="pick"><span>Year</span><select data-model="insights.year" data-rerender>${years.map((y) => `<option value="${y.key}" ${y.key === year.key ? 'selected' : ''}>${y.label}</option>`).join('')}</select></label>
+            <label class="pick"><span>Year starts in</span><select data-setting="yearStart">${MONTHS.map((n, i) => `<option value="${i + 1}" ${i + 1 === start ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`,
         body: `<div class="kpis">
                 ${kpi('Savings rate', income ? `${Math.round(((income - expense) / income) * 100)}%` : '–')}
                 ${kpi('Average month', past.length ? L.money(Math.round(expense / past.length)) : '–')}
@@ -139,8 +139,8 @@ export function dashboards(st, h) {
     const view = tab[2](st, h);
     return `<header class="hero"><small class="eyebrow ${tab[0] === 'monthly' ? 'center' : ''}">Dashboards</small>${view.hero}</header>
     <main>
-        <div class="toolbar"><div class="seg fit">${TABS.map(([id, label]) => `<button class="${id === tab[0] ? 'on' : ''}" data-action="insTab" data-tab="${id}">${label}</button>`).join('')}</div>
-            ${view.filters ? `<div class="split wrap">${view.filters}</div>` : ''}</div>
+        <div class="filterbar"><div class="seg">${TABS.map(([id, label]) => `<button class="${id === tab[0] ? 'on' : ''}" data-action="insTab" data-tab="${id}">${label}</button>`).join('')}</div>
+            ${view.filters || ''}</div>
         ${view.body}
     </main>`;
 }
@@ -206,17 +206,17 @@ export function reports(st, h) {
     if (report.period === 'range') {
         const list = R.presets(S.data, today, start);
         const preset = list.find((p) => p.id === st.preset) || list[0];
-        control = `<label class="inline">Period<select data-model="reports.preset" data-rerender>${list.map((p) => `<option value="${p.id}" ${p.id === preset.id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}</select></label>
-            ${preset.id === 'custom' ? `<label class="inline">From<input type="date" value="${esc(params.from)}" max="${today}" data-model="reports.from" data-rerender></label><label class="inline">To<input type="date" value="${esc(params.to)}" max="${today}" data-model="reports.to" data-rerender></label>` : ''}`;
+        control = `<label class="pick"><span>Period</span><select data-model="reports.preset" data-rerender>${list.map((p) => `<option value="${p.id}" ${p.id === preset.id ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}</select></label>
+            ${preset.id === 'custom' ? `<label class="pick"><span>From</span><input type="date" value="${esc(params.from)}" max="${today}" data-model="reports.from" data-rerender></label><label class="pick"><span>To</span><input type="date" value="${esc(params.to)}" max="${today}" data-model="reports.to" data-rerender></label>` : ''}`;
     } else if (report.period === 'month') {
-        control = `<label class="inline">Month<input type="month" value="${esc(params.month)}" max="${L.monthKey(today)}" data-model="reports.month" data-rerender></label>`;
+        control = `<label class="pick"><span>Month</span><input type="month" value="${esc(params.month)}" max="${L.monthKey(today)}" data-model="reports.month" data-rerender></label>`;
     } else if (report.period === 'year') {
-        control = `<label class="inline">Year<select data-model="reports.year" data-rerender>${R.yearsWithData(S.data, start, today).map((y) => `<option value="${y.key}" ${y.key === params.year.key ? 'selected' : ''}>${y.label}</option>`).join('')}</select></label>`;
+        control = `<label class="pick"><span>Year</span><select data-model="reports.year" data-rerender>${R.yearsWithData(S.data, start, today).map((y) => `<option value="${y.key}" ${y.key === params.year.key ? 'selected' : ''}>${y.label}</option>`).join('')}</select></label>`;
     }
     return `<header class="hero"><small class="eyebrow">Reports</small><h1>${esc(report.name)}</h1><p class="hero-sub">${esc(report.about)}</p></header>
     <main>
         <div class="toolbar">
-            <div class="split wrap"><label class="inline">Report<select data-model="reports.id" data-rerender>${R.REPORTS.map((r) => `<option value="${r.id}" ${r.id === report.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>${control}</div>
+            <div class="filterbar"><label class="pick"><span>Report</span><select data-model="reports.id" data-rerender>${R.REPORTS.map((r) => `<option value="${r.id}" ${r.id === report.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>${control}</div>
             <button class="btn" data-action="reportDownload" ${t.rows.length ? '' : 'disabled'}>${h.icon('income')} Download CSV</button>
         </div>
         <section class="card flush"><div class="card-head pad"><span><h2>${esc(report.name)}</h2><small>${esc(period)} · ${t.rows.length} ${t.rows.length === 1 ? 'row' : 'rows'}</small></span></div>${table(t)}</section>

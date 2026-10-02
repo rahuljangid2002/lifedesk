@@ -42,6 +42,25 @@ const categoryName = (id) => (byId(S.data.categories, id) || {}).name || '';
 const personName = (id) => (byId(S.data.people, id) || {}).name || '';
 const KIND_ICON = { bank: 'bank', wallet: 'wallet', cash: 'cash', card: 'card' };
 
+// Light / dark: 'system' follows the device; 'light' and 'dark' are fixed. Kept on this device (it also has to
+// apply on the sign-in screen, before any account is known). index.html applies it before the first paint.
+const THEME_KEY = 'lifedesk-theme';
+function theme() {
+    try {
+        const t = localStorage.getItem(THEME_KEY);
+        return t === 'light' || t === 'dark' ? t : 'system';
+    } catch (e) {
+        return 'system';
+    }
+}
+function applyTheme(t) {
+    if (t === 'light' || t === 'dark') {
+        document.documentElement.dataset.theme = t;
+    } else {
+        delete document.documentElement.dataset.theme;
+    }
+}
+
 /** Plain words for the sign-in errors people can actually hit. */
 const AUTH_ERRORS = {
     'auth/requires-recent-login': 'For safety, sign out, sign in again, and then delete the account.',
@@ -382,14 +401,14 @@ function daily() {
         <div class="stats">${stat(d.view === 'income' ? 'Income' : d.view === 'spend' ? 'Spent' : 'Entries', d.view === 'all' ? count : L.money(total))}${stat('Per day', d.view === 'all' ? '–' : L.money(Math.round(total / span)))}${stat('Highest day', top && d.view !== 'all' ? `${shortDate(top.date)} · ${L.money(top.total)}` : '–')}</div>
     </header>
     <main>
-        <div class="filters">
+        <div class="filterbar">
             <div class="seg">${seg('spend', 'Spending')}${seg('income', 'Income')}${seg('all', 'All entries')}</div>
-            <select data-model="daily.category" data-rerender aria-label="Category"><option value="">All categories</option>${cats.map((c) => `<option value="${c.id}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
-            <select data-model="daily.account" data-rerender aria-label="Account"><option value="">All accounts</option>${sortedAccounts().map((a) => `<option value="${a.id}" ${a.id === d.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
-            <input type="search" placeholder="Search description…" value="${esc(d.search)}" data-model="daily.search" data-rerender-soft aria-label="Search">
+            <label class="pick"><span>Category</span><select data-model="daily.category" data-rerender><option value="">All</option>${cats.map((c) => `<option value="${c.id}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+            <label class="pick"><span>Account</span><select data-model="daily.account" data-rerender><option value="">All</option>${sortedAccounts().map((a) => `<option value="${a.id}" ${a.id === d.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+            <label class="pick grow"><span>Search</span><input type="search" placeholder="description…" value="${esc(d.search)}" data-model="daily.search" data-rerender-soft></label>
         </div>
         <div class="toolbar">
-            ${d.custom ? `<div class="dates"><label>From<input type="date" value="${esc(d.from)}" data-model="daily.from" data-rerender></label><label>To<input type="date" value="${esc(d.to)}" data-model="daily.to" data-rerender></label><button class="link-btn" data-action="dailyCustom">Back to months</button></div>`
+            ${d.custom ? `<div class="filterbar"><label class="pick"><span>From</span><input type="date" value="${esc(d.from)}" max="${today()}" data-model="daily.from" data-rerender></label><label class="pick"><span>To</span><input type="date" value="${esc(d.to)}" max="${today()}" data-model="daily.to" data-rerender></label><button class="link-btn" data-action="dailyCustom">Back to months</button></div>`
                 : `<button class="link-btn" data-action="dailyCustom">${icon('calendar')} Custom dates</button>`}
             ${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}
         </div>
@@ -577,6 +596,9 @@ function more() {
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
     <main class="dash">
         ${S.isDemo ? `<div class="notice span">Demo mode: your data is saved only in this browser.</div>` : ''}
+        <section class="card"><div class="card-head"><h2>Appearance</h2></div>
+            <div class="seg">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, label]) => `<button class="${theme() === v ? 'on' : ''}" data-action="setTheme" data-theme="${v}" aria-pressed="${theme() === v}">${label}</button>`).join('')}</div>
+            <small>${theme() === 'system' ? 'Follows this device: light by day or dark, whichever the device is set to.' : `Always ${theme()} on this device, whatever the device setting.`} Saved on this device only.</small></section>
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-setting="currency">${currencyOptions(f.currency)}</select></label>
             <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Changing the currency changes how amounts are shown; it does not convert them.</small></section>
@@ -1142,6 +1164,17 @@ const actions = {
         const name = `lifedesk-${report.id}-${period.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.csv`;
         Object.assign(document.createElement('a'), { href: url, download: name }).click();
         URL.revokeObjectURL(url);
+    },
+
+    setTheme(el) {
+        const t = el.dataset.theme;
+        try {
+            t === 'system' ? localStorage.removeItem(THEME_KEY) : localStorage.setItem(THEME_KEY, t);
+        } catch (e) {
+            // private browsing: the choice lasts until the page is closed
+        }
+        applyTheme(t);
+        render();
     },
 
     // account & backup

@@ -23,4 +23,11 @@ with sync_playwright() as p:
             pg.screenshot(path=os.path.join(OUT, f'v_{tag}_insights_{tab.lower()}.png'), full_page=True)
         pg.goto(U + '#reports'); time.sleep(0.3); pg.screenshot(path=os.path.join(OUT, f'v_{tag}_reports.png'))
         pg.locator('[data-model="reports.id"]').select_option('category-by-month'); time.sleep(0.3); pg.screenshot(path=os.path.join(OUT, f'v_{tag}_reports_pivot.png'))
+    # dark theme, chosen in Account
+    pg.set_viewport_size({'width': 1680, 'height': 1000}); pg.goto(U + '#more'); pg.get_by_role('button', name='Dark', exact=True).click(); time.sleep(0.3)
+    pg.screenshot(path=os.path.join(OUT, 'v_dark_more.png'))
+    for r in ['home', 'budget', 'accounts', 'daily', 'reports']:
+        pg.goto(U + '#' + r); time.sleep(0.4); pg.screenshot(path=os.path.join(OUT, f'v_dark_{r}.png'))
+    pg.goto(U + '#insights'); time.sleep(0.3); pg.get_by_role('button', name='Yearly', exact=True).click(); time.sleep(0.3)
+    pg.screenshot(path=os.path.join(OUT, 'v_dark_insights_yearly.png'), full_page=True)
     b.close()

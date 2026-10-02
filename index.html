@@ -11,6 +11,13 @@
     <meta name="apple-mobile-web-app-title" content="LifeDesk">
     <meta name="description" content="LifeDesk: money, budget, people and loans, with more everyday tools to come.">
     <title>LifeDesk</title>
+    <script>
+        // Light / dark chosen in Account: applied before the page is drawn, so there is no flash of the other theme.
+        try {
+            var t = localStorage.getItem('lifedesk-theme');
+            if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {}
+    </script>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-192.png">

@@ -27,6 +27,8 @@ Net balance = bank + cash − credit card owed − money owed to people.
 **Any country:** on first login each user picks their currency (guessed from the device); amounts, number grouping
 and dates follow their region. It can be changed under Account. Changing it does not convert existing amounts.
 
+**Light and dark:** Account → Appearance: System (follows the device), Light or Dark; kept on the device.
+
 **Any screen:** phones get a bottom bar (with space for the iPhone notch and Android gesture bar); from 900px wide
 there is a side menu and pages use two or three columns. Light and dark follow the device setting. Icons are drawn
 (`js/icons.js`), so they look the same on Android, iOS and desktop.

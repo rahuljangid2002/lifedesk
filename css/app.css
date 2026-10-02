@@ -31,8 +31,10 @@
     --warning: #fab219;
     --critical: #d03b3b;
 }
+/* Dark colours: used when the device is dark (unless Light is chosen in Account), or when Dark is chosen. */
 @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme='light']) {
+        color-scheme: dark;
         --bg: #0b0f17;
         --surface: #131926;
         --surface-2: #1b2333;
@@ -57,6 +59,35 @@
         --series-2: #d95926;
         --wash: rgba(57, 135, 229, 0.12);
     }
+}
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg: #0b0f17;
+    --surface: #131926;
+    --surface-2: #1b2333;
+    --border: #283246;
+    --text: #eef1f6;
+    --muted: #98a2b3;
+    --brand: #3b82f6;
+    --brand-ink: #93c5fd;
+    --brand-soft: #172554;
+    --on-brand: #ffffff;
+    --hero-a: #0f172a;
+    --hero-b: #1e3a8a;
+    --green: #47cd89;
+    --orange: #fdb022;
+    --red: #f97066;
+    --warn-bg: #3b2a08;
+    --warn-border: #7a5a12;
+    --warn-text: #fedf89;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-up: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.35);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --wash: rgba(57, 135, 229, 0.12);
+}
+:root[data-theme='light'] {
+    color-scheme: light;
 }
 * {
     box-sizing: border-box;
@@ -608,6 +639,17 @@ select {
     font-weight: 400;
     color: var(--text);
     min-height: 2.75rem;
+}
+select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a94a6' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 1rem;
+    text-overflow: ellipsis;
+    cursor: pointer;
 }
 input[type='checkbox'] {
     width: 1.15rem;
@@ -1594,25 +1636,6 @@ input.code {
 .p-panel .list {
     box-shadow: none;
 }
-/* ---------- daily filters ---------- */
-.filters {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.6rem;
-}
-.filters .seg,
-.filters input {
-    grid-column: 1 / -1;
-}
-.dates {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 0.6rem;
-}
-.dates label {
-    width: 10.5rem;
-}
 @media (min-width: 900px) {
     .grid3 {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1650,17 +1673,6 @@ input.code {
         grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
         gap: 1.5rem;
         padding: 0.5rem 1.1rem 1.25rem;
-    }
-    .filters {
-        grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr);
-        align-items: center;
-    }
-    .filters .seg,
-    .filters input {
-        grid-column: auto;
-    }
-    .filters .seg {
-        min-width: 20rem;
     }
 }
 
@@ -1711,19 +1723,6 @@ input.code {
 }
 .list.inner.flush {
     border-top: 0;
-}
-label.inline {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
-}
-label.inline select,
-label.inline input {
-    width: auto;
-    min-width: 8rem;
-    min-height: 2.6rem;
-    font-size: 0.9rem;
 }
 /* horizontal bars */
 .hbars,
@@ -2002,5 +2001,89 @@ tfoot td {
     }
     .hbar {
         grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) auto;
+    }
+}
+
+/* ---------- filter row: tabs and pickers on one left-aligned line, all the same height ---------- */
+.filterbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+}
+.filterbar .seg {
+    flex: 1 1 100%; /* phone: the tabs take the first line, the pickers share the next */
+}
+.filterbar .seg {
+    height: 2.6rem;
+    align-items: stretch;
+}
+.filterbar .seg button {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.pick.grow {
+    flex-basis: 100%;
+}
+/* a picker: its name sits inside the box, before the value */
+.pick {
+    flex: 1 1 9.5rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    height: 2.6rem;
+    padding: 0 0 0 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    min-width: 0;
+}
+.pick select,
+.pick input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    min-height: 0;
+    height: 100%;
+    border: 0;
+    background-color: transparent;
+    padding-left: 0.2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.pick input {
+    padding-right: 0.6rem;
+}
+.pick select:focus-visible,
+.pick input:focus-visible {
+    outline: none;
+}
+.pick:focus-within {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+}
+.filterbar + .kpis,
+.toolbar + .card {
+    margin-top: 0;
+}
+@media (min-width: 900px) {
+    .filterbar .seg {
+        flex: 0 0 auto;
+    }
+    .pick {
+        flex: 0 0 auto;
+    }
+    .pick.grow {
+        flex: 1 1 14rem;
+        max-width: 26rem;
+    }
+    .pick select {
+        min-width: 7rem;
+        max-width: 13rem;
     }
 }

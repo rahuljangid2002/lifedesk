@@ -222,6 +222,20 @@ with sync_playwright() as p:
     after = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
     check('sample removed: own entries untouched', len(after['entries']) == before and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
 
+    # Appearance: Light / Dark / System
+    bg = lambda: pg.evaluate("getComputedStyle(document.body).backgroundColor")
+    pg.goto(URL + '#more'); light_bg = bg()
+    pg.get_by_role('button', name='Dark', exact=True).click(); time.sleep(0.2)
+    check('theme: Dark turns the page dark', pg.evaluate("document.documentElement.dataset.theme") == 'dark' and bg() != light_bg, bg())
+    dark_bg = bg(); pg.reload(); pg.wait_for_selector('.seg')
+    check('theme: the choice survives a reload', bg() == dark_bg)
+    pg.emulate_media(color_scheme='dark'); pg.get_by_role('button', name='Light', exact=True).click(); time.sleep(0.2)
+    check('theme: Light stays light even when the device is dark', bg() == light_bg, bg())
+    pg.get_by_role('button', name='System', exact=True).click(); time.sleep(0.2)
+    check('theme: System follows the device (dark here)', pg.evaluate("document.documentElement.dataset.theme === undefined") and bg() == dark_bg, bg())
+    pg.emulate_media(color_scheme='light'); time.sleep(0.2)
+    check('theme: System follows the device (light here)', bg() == light_bg, bg())
+
     # Change the currency: amounts follow, nothing is converted
     pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('EUR'); time.sleep(0.4)
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')

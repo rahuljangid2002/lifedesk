@@ -108,8 +108,8 @@ export function columns(labels, series, fmt, tickFmt, width = 640, height = 240)
 /** One line over time with a light wash under it; the last point is labelled. values may hold null (no data yet). */
 export function line(labels, values, name, fmt, tickFmt, width = 640, height = 240) {
     const pts = values.map((v, i) => ({ v, i })).filter((p) => p.v !== null && p.v !== undefined);
-    if (pts.length < 2) {
-        return '<p class="empty">Not enough months yet to draw a trend.</p>';
+    if (pts.length < 2 || pts.every((p) => p.v === 0)) {
+        return '<p class="empty">Not enough data yet to draw a trend.</p>';
     }
     const m = { top: 16, right: 14, bottom: 26, left: 52 };
     const min = Math.min(0, ...pts.map((p) => p.v));
