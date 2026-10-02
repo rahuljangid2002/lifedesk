@@ -6,7 +6,7 @@
 import os, re, sys, time
 from playwright.sync_api import sync_playwright
 
-URL = 'http://localhost:8765/'
+URL = 'http://localhost:8765/?demo=1'
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out')
 os.makedirs(OUT, exist_ok=True)
 checks = []

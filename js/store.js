@@ -11,7 +11,7 @@ const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
-export const isDemo = !firebaseConfig.apiKey;
+export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
 export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [] };
 export let user = null; // { uid, name, contact }
