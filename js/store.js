@@ -1,5 +1,5 @@
 // Data layer for LifeDesk. Each tool keeps its data in its own collections under the user
-// (Money: accounts, categories, entries, people, budgets); a new tool adds its names to COLLECTIONS.
+// (Money: accounts, categories, entries, people, budgets; shared: settings); a new tool adds its names to COLLECTIONS.
 // Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
@@ -7,13 +7,18 @@ import { firebaseConfig, firestoreDatabase, loginMethods } from './config.js';
 import { STARTER_CATEGORIES } from './seed.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
-const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets'];
+const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
-export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [] };
+export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [] };
+
+/** The user's preferences (currency, region); null until they have chosen. */
+export function prefs() {
+    return data.settings.find((x) => x.id === 'prefs') || null;
+}
 export let user = null; // { uid, name, contact }
 
 let listener = () => {};
@@ -208,7 +213,7 @@ function readDemo() {
         COLLECTIONS.forEach((c) => (out[c] = Array.isArray(saved[c]) ? saved[c] : []));
         return out;
     } catch (e) {
-        return { accounts: [], categories: [], entries: [], people: [], budgets: [] };
+        return { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [] };
     }
 }
 function writeDemo() {

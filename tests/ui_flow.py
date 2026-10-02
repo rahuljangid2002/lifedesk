@@ -28,7 +28,10 @@ with sync_playwright() as p:
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
     pg.on('dialog', lambda d: d.accept())
-    pg.goto(URL); pg.wait_for_selector('.tool')
+    pg.goto(URL); pg.wait_for_selector('#welcome-currency')
+    check('first visit asks for the currency', pg.locator('#welcome-currency option').count() > 100, str(pg.locator('#welcome-currency option').count()))
+    pg.locator('#welcome-currency').select_option('USD'); pg.get_by_role('button', name='Continue').click()
+    pg.wait_for_selector('.tool')
     check('start screen lists Money and a coming-soon tool', pg.locator('a.tool', has_text='Money').count() == 1 and pg.locator('.tool.soon').count() == 1)
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
@@ -41,7 +44,7 @@ with sync_playwright() as p:
     pg.get_by_label('Name').fill('Axis Card'); pg.get_by_label('Amount owed at the start').fill('2000')
     pg.get_by_label('Credit limit').fill('50000'); pg.get_by_label('Bill due day (1–31)').fill('15')
     pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
-    check('accounts: net balance 8,000', money(stat('Net balance')) == 8000, stat('Net balance'))
+    check('accounts: net balance 8,000 in dollars', stat('Net balance') == '$8,000', stat('Net balance'))
     shot('1_accounts')
 
     # Add Entry: expense with category suggestion
@@ -115,6 +118,32 @@ with sync_playwright() as p:
     pg.wait_for_selector('.tabbar')
     check('Money tile opens Money home', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1, pg.url)
     pg.goto(URL); pg.wait_for_selector('.tool'); shot('0_hub')
+
+    # Change the currency: amounts follow, nothing is converted
+    pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('EUR'); time.sleep(0.4)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')
+    check('currency change: euro shown', '€' in stat('Net balance') and money(stat('Net balance')) == 7700, stat('Net balance'))
+    pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('INR'); time.sleep(0.4)
+    pg.goto(URL + '#accounts'); pg.get_by_role('button', name='＋ Bank account').click()
+    pg.get_by_label('Name').fill('Savings'); pg.get_by_label('Opening balance').fill('1234567'); pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
+    check('rupees use lakh grouping', '₹12,34,567' in pg.locator('.card', has_text='Savings').inner_text(), pg.locator('.card', has_text='Savings').inner_text()[:60])
+
+    # Desktop width: side menu instead of the bottom bar
+    pg.set_viewport_size({'width': 1366, 'height': 850}); pg.goto(URL + '#home'); pg.wait_for_selector('.side')
+    check('desktop: side menu shown, bottom bar hidden', pg.locator('.side').is_visible() and not pg.locator('.tabbar').is_visible())
+    check('desktop: no sideways scrolling', pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'more', 'hub']:
+        pg.goto(URL + '#' + r); time.sleep(0.3); shot('d_' + r)
+    pg.set_viewport_size({'width': 390, 'height': 844})
+    wide = []
+    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'more']:
+        pg.goto(URL + '#' + r); time.sleep(0.3)
+        if not pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'):
+            wide.append(r)
+        pg.screenshot(path=os.path.join(OUT, 'm_' + r + '.png'))
+    check('phone: no sideways scrolling on any screen', not wide, str(wide))
+    pg.emulate_media(color_scheme='dark'); pg.goto(URL + '#home'); time.sleep(0.3)
+    pg.screenshot(path=os.path.join(OUT, 'm_home_dark.png'))
     check('no console errors', not errors, str(errors[:3]))
     b.close()
 

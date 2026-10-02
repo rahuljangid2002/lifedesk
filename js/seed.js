@@ -21,7 +21,14 @@ export const STARTER_CATEGORIES = [
    "swiggy",
    "dominos",
    "mcdonald",
-   "food"
+   "food",
+   "uber eats",
+   "doordash",
+   "deliveroo",
+   "takeaway",
+   "starbucks",
+   "grubhub",
+   "just eat"
   ]
  },
  {
@@ -42,7 +49,14 @@ export const STARTER_CATEGORIES = [
    "vegetables",
    "fruits",
    "household",
-   "detergent"
+   "detergent",
+   "walmart",
+   "tesco",
+   "costco",
+   "aldi",
+   "lidl",
+   "carrefour",
+   "woolworths"
   ]
  },
  {
@@ -54,7 +68,10 @@ export const STARTER_CATEGORIES = [
    "fuel",
    "cng",
    "car petrol",
-   "bike petrol"
+   "bike petrol",
+   "gas station",
+   "gasoline",
+   "petrol station"
   ]
  },
  {
@@ -76,7 +93,7 @@ export const STARTER_CATEGORIES = [
   ]
  },
  {
-  "name": "EMI & Loan Payments",
+  "name": "Loan & Instalment Payments",
   "type": "expense",
   "keywords": [
    "emi",
@@ -87,7 +104,11 @@ export const STARTER_CATEGORIES = [
    "loan interest",
    "down payment",
    "lic",
-   "insurance premium"
+   "insurance premium",
+   "instalment",
+   "installment",
+   "mortgage",
+   "loan payment"
   ]
  },
  {
@@ -118,7 +139,9 @@ export const STARTER_CATEGORIES = [
    "wifi",
    "broadband",
    "internet",
-   "bill"
+   "bill",
+   "phone bill",
+   "top up"
   ]
  },
  {
@@ -131,7 +154,12 @@ export const STARTER_CATEGORIES = [
    "spotify",
    "youtube premium",
    "youtube music",
-   "subscription"
+   "subscription",
+   "disney",
+   "apple music",
+   "icloud",
+   "prime video",
+   "chatgpt"
   ]
  },
  {
@@ -158,7 +186,9 @@ export const STARTER_CATEGORIES = [
    "lab",
    "gym",
    "protein",
-   "health"
+   "health",
+   "dentist",
+   "clinic"
   ]
  },
  {
@@ -206,7 +236,10 @@ export const STARTER_CATEGORIES = [
    "flight",
    "ticket",
    "hotel",
-   "trip"
+   "trip",
+   "subway",
+   "lyft",
+   "airbnb"
   ]
  },
  {
@@ -224,7 +257,7 @@ export const STARTER_CATEGORIES = [
   ]
  },
  {
-  "name": "Religious & Donations",
+  "name": "Donations & Charity",
   "type": "expense",
   "keywords": [
    "temple",
@@ -289,7 +322,10 @@ export const STARTER_CATEGORIES = [
   "name": "Salary",
   "type": "income",
   "keywords": [
-   "salary"
+   "salary",
+   "paycheck",
+   "wages",
+   "payroll"
   ]
  },
  {

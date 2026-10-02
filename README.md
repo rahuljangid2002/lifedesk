@@ -22,6 +22,13 @@ The start screen lists the tools. Money has these screens:
 
 Net balance = bank + cash − credit card owed − money owed to people.
 
+**Any country:** on first login each user picks their currency (guessed from the device); amounts, number grouping
+and dates follow their region. It can be changed under Account. Changing it does not convert existing amounts.
+
+**Any screen:** phones get a bottom bar (with space for the iPhone notch and Android gesture bar); from 900px wide
+there is a side menu and pages use two or three columns. Light and dark follow the device setting. Icons are drawn
+(`js/icons.js`), so they look the same on Android, iOS and desktop.
+
 Not in version 1 yet (planned next): buying on EMI and EMI plans, assets, "paid by someone", recurring bills,
 charts / dashboards, month-end summary email, receipts.
 
@@ -83,6 +90,7 @@ js/store.js           data layer: demo (browser) or Firebase (login + Firestore)
 js/logic.js           calculations: balances, month summary, budget, people, validation
 js/app.js             start screen (TOOLS), Money screens and navigation
 js/seed.js            starter categories with keywords
+js/icons.js           line icons
 firestore.rules       database security rules (paste into Firebase)
 sw.js, manifest.webmanifest, icons/   install on a phone and open offline
 tests/ui_flow.py      end-to-end check in demo mode
@@ -91,7 +99,7 @@ tests/ui_flow.py      end-to-end check in demo mode
 ## Data layout (Firestore)
 
 Everything a user owns is under `users/{user id}/...`, and the rules give each user access to that area only.
-Money uses `accounts | categories | entries | people | budgets/{YYYY-MM}`. Balances are always calculated from the
+Money uses `accounts | categories | entries | people | budgets/{YYYY-MM}`, plus `settings/prefs` (currency). Balances are always calculated from the
 entries, so editing or deleting an entry can never leave a balance out of date.
 
 ## Adding a tool later (e.g. renewal reminders)

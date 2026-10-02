@@ -1,22 +1,104 @@
 // Pure calculations: no screen and no storage code here, so the same rules can be tested on their own.
 
 export const TYPES = {
-    expense: { label: 'Expense', icon: '🛒', sign: -1 },
-    income: { label: 'Income', icon: '💰', sign: 1 },
-    transfer: { label: 'Transfer', icon: '🔁', sign: 0 },
-    lent: { label: 'Lent / Given', icon: '📤', sign: -1 },
-    gotback: { label: 'Got Back', icon: '📥', sign: 1 },
-    borrowed: { label: 'Borrowed', icon: '🤝', sign: 1 },
-    repaid: { label: 'Repaid', icon: '↩️', sign: -1 }
+    expense: { label: 'Expense', icon: 'cart', sign: -1 },
+    income: { label: 'Income', icon: 'income', sign: 1 },
+    transfer: { label: 'Transfer', icon: 'transfer', sign: 0 },
+    lent: { label: 'Lent / Given', icon: 'lent', sign: -1 },
+    gotback: { label: 'Got Back', icon: 'gotback', sign: 1 },
+    borrowed: { label: 'Borrowed', icon: 'borrowed', sign: 1 },
+    repaid: { label: 'Repaid', icon: 'repaid', sign: -1 }
 };
 export const PERSON_TYPES = ['lent', 'gotback', 'borrowed', 'repaid'];
 export const ACCOUNT_KINDS = { bank: 'Bank', wallet: 'Wallet', cash: 'Cash', card: 'Credit card' };
 
 const num = (v) => Number(v) || 0;
 
-export function inr(value) {
-    const n = Math.round(num(value));
-    return `${n < 0 ? '−' : ''}₹${Math.abs(n).toLocaleString('en-IN')}`;
+// ---------- currency and region (set from the user's preferences) ----------
+const REGION_CURRENCY = {
+    IN: 'INR', US: 'USD', GB: 'GBP', CA: 'CAD', AU: 'AUD', NZ: 'NZD', SG: 'SGD', AE: 'AED', SA: 'SAR', QA: 'QAR', KW: 'KWD',
+    BH: 'BHD', OM: 'OMR', PK: 'PKR', BD: 'BDT', LK: 'LKR', NP: 'NPR', JP: 'JPY', CN: 'CNY', HK: 'HKD', KR: 'KRW', MY: 'MYR',
+    TH: 'THB', ID: 'IDR', PH: 'PHP', VN: 'VND', ZA: 'ZAR', NG: 'NGN', KE: 'KES', EG: 'EGP', BR: 'BRL', MX: 'MXN', AR: 'ARS',
+    CH: 'CHF', SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', HU: 'HUF', TR: 'TRY', RU: 'RUB', IL: 'ILS',
+    DE: 'EUR', FR: 'EUR', IT: 'EUR', ES: 'EUR', NL: 'EUR', BE: 'EUR', IE: 'EUR', PT: 'EUR', AT: 'EUR', FI: 'EUR', GR: 'EUR'
+};
+const ZONE_CURRENCY = { 'Asia/Kolkata': 'INR', 'Asia/Calcutta': 'INR', 'Asia/Dubai': 'AED', 'Europe/London': 'GBP', 'Asia/Singapore': 'SGD' };
+let format = { locale: undefined, currency: 'USD' };
+
+/** The currency this device most likely uses: from the browser's region, then its time zone. */
+export function guessCurrency() {
+    const lang = (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+    const region = (lang.split('-')[1] || '').toUpperCase();
+    if (REGION_CURRENCY[region] && region !== 'US') {
+        return REGION_CURRENCY[region];
+    }
+    try {
+        const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (ZONE_CURRENCY[zone]) {
+            return ZONE_CURRENCY[zone];
+        }
+    } catch (e) {
+        // no time zone information
+    }
+    return REGION_CURRENCY[region] || 'USD';
+}
+
+/** Every currency the browser knows, with its name, for the currency picker. */
+export function currencyList() {
+    let codes = ['USD', 'EUR', 'GBP', 'INR', 'AED', 'AUD', 'CAD', 'SGD', 'JPY', 'CNY'];
+    try {
+        codes = Intl.supportedValuesOf('currency');
+    } catch (e) {
+        // older browser: the short list above
+    }
+    let names = null;
+    try {
+        names = new Intl.DisplayNames(undefined, { type: 'currency' });
+    } catch (e) {
+        // no display names
+    }
+    return codes.map((code) => ({ code, name: names ? names.of(code) : code })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function setFormat(prefs) {
+    const currency = (prefs && prefs.currency) || guessCurrency();
+    let locale = (prefs && prefs.locale) || (typeof navigator !== 'undefined' ? navigator.language : undefined);
+    if (currency === 'INR' && !/-IN$/.test(locale || '')) {
+        locale = 'en-IN'; // lakh / crore grouping for rupees
+    }
+    format = { locale, currency };
+}
+export function currentFormat() {
+    return { ...format };
+}
+
+/** An amount in the user's currency; decimals only when the amount has them. */
+export function money(value) {
+    const n = Math.round(num(value) * 100) / 100;
+    const whole = Number.isInteger(n);
+    try {
+        return new Intl.NumberFormat(format.locale, {
+            style: 'currency',
+            currency: format.currency,
+            currencyDisplay: 'narrowSymbol',
+            minimumFractionDigits: whole ? 0 : 2,
+            maximumFractionDigits: whole ? 0 : 2
+        }).format(n);
+    } catch (e) {
+        return `${format.currency} ${n.toLocaleString()}`;
+    }
+}
+/** The currency symbol on its own (for the amount boxes). */
+export function symbol() {
+    try {
+        const parts = new Intl.NumberFormat(format.locale, { style: 'currency', currency: format.currency, currencyDisplay: 'narrowSymbol' }).formatToParts(0);
+        return (parts.find((x) => x.type === 'currency') || {}).value || format.currency;
+    } catch (e) {
+        return format.currency;
+    }
+}
+export function dateText(iso, options) {
+    return new Date(`${iso}T00:00:00`).toLocaleDateString(format.locale, options);
 }
 export function isoDate(d = new Date()) {
     const p = (n) => String(n).padStart(2, '0');
@@ -32,7 +114,7 @@ export function addMonths(key, n) {
 }
 export function monthLabel(key) {
     const [y, m] = key.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return new Date(y, m - 1, 1).toLocaleDateString(format.locale, { month: 'long', year: 'numeric' });
 }
 export function monthEnd(key) {
     const [y, m] = key.split('-').map(Number);

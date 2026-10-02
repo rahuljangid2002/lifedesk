@@ -4,6 +4,7 @@
 // To add a tool: add it to TOOLS, add its screens to SCREENS, and keep its data in its own collections.
 import * as L from './logic.js';
 import * as S from './store.js';
+import { icon } from './icons.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -24,17 +25,14 @@ const state = {
 // ---------- helpers ----------
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const byId = (list, id) => list.find((x) => x.id === id);
-const shortDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-const longDay = (iso) => {
-    const d = new Date(`${iso}T00:00:00`);
-    const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-    return iso === today() ? `Today · ${shortDate(iso)}` : label;
-};
+const shortDate = (iso) => L.dateText(iso, { day: 'numeric', month: 'short' });
+const longDay = (iso) => (iso === today() ? `Today · ${shortDate(iso)}` : L.dateText(iso, { weekday: 'short', day: 'numeric', month: 'short' }));
 const activeAccounts = () => S.data.accounts.filter((a) => a.active !== false);
 const defaultAccount = () => activeAccounts().find((a) => a.isDefault) || activeAccounts()[0];
 const accountName = (id) => (byId(S.data.accounts, id) || {}).name || '';
 const categoryName = (id) => (byId(S.data.categories, id) || {}).name || '';
 const personName = (id) => (byId(S.data.people, id) || {}).name || '';
+const KIND_ICON = { bank: 'bank', wallet: 'wallet', cash: 'cash', card: 'card' };
 
 function toast(message, kind = 'ok') {
     state.toast = { message, kind };
@@ -85,43 +83,62 @@ function entryMeta(e) {
 }
 function entryAmount(e) {
     const sign = L.TYPES[e.type].sign;
-    return `<span class="amt ${sign > 0 ? 'in' : ''}">${sign > 0 ? '+' : sign < 0 ? '−' : ''}${L.inr(e.amount).replace('−', '')}</span>`;
+    return `<span class="amt ${sign > 0 ? 'in' : ''}">${sign > 0 ? '+' : sign < 0 ? '−' : ''}${L.money(Math.abs(e.amount))}</span>`;
 }
 function entryRow(e, withDate) {
     return `<div class="row">
-        ${withDate ? `<span class="row-date">${shortDate(e.date)}</span>` : ''}
-        <span class="row-text"><b>${esc(e.description || L.TYPES[e.type].label)}</b><small>${esc(entryMeta(e))}</small></span>
+        <span class="row-icon t-${e.type}">${icon(L.TYPES[e.type].icon)}</span>
+        <span class="row-text"><b>${esc(e.description || L.TYPES[e.type].label)}</b><small>${withDate ? `${shortDate(e.date)} · ` : ''}${esc(entryMeta(e))}</small></span>
         ${entryAmount(e)}
-        <button class="icon-btn" data-action="editEntry" data-id="${e.id}" title="Edit" aria-label="Edit">✎</button>
+        <button class="icon-btn" data-action="editEntry" data-id="${e.id}" title="Edit" aria-label="Edit">${icon('edit')}</button>
     </div>`;
 }
 function monthNav(key, action) {
     return `<div class="month-nav">
-        <button class="icon-btn light" data-action="${action}" data-step="-1" aria-label="Previous month">‹</button>
+        <button class="icon-btn light" data-action="${action}" data-step="-1" aria-label="Previous month">${icon('chevLeft')}</button>
         <h1>${L.monthLabel(key)}</h1>
-        <button class="icon-btn light" data-action="${action}" data-step="1" aria-label="Next month">›</button>
+        <button class="icon-btn light" data-action="${action}" data-step="1" aria-label="Next month">${icon('chevRight')}</button>
     </div>`;
 }
-const stat = (label, value) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
+// long amounts get a smaller size instead of breaking across lines
+const stat = (label, value) => {
+    const len = String(value).length;
+    return `<div class="stat"><small>${label}</small><b class="${len > 12 ? 'xlong' : len > 9 ? 'long' : ''}">${value}</b></div>`;
+};
+const currencyOptions = (selected) =>
+    L.currencyList()
+        .map((c) => `<option value="${c.code}" ${c.code === selected ? 'selected' : ''}>${esc(c.name)} (${c.code})</option>`)
+        .join('');
 
 // ---------- screens ----------
 function login() {
     return `<div class="login">
-        <div class="logo">₹</div>
+        <div class="logo">${icon('logo')}</div>
         <h1>LifeDesk</h1>
         <p>Your everyday desk: money, budget, people and loans today, with more tools on the way.</p>
         ${S.methods.google ? `<button class="btn primary wide" data-action="google">Continue with Google</button>` : ''}
         ${S.methods.emailLink ? `<div class="or">or sign in with a link sent to your email</div>
-        <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
+        <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" aria-label="Email">
         <button class="btn wide" data-action="emailLink">Email me a sign-in link</button>` : ''}
         <small>New here? The same buttons create your account. Your data is private to you.</small>
     </div>`;
 }
 
+/** First visit: choose the currency amounts are shown in. */
+function welcome() {
+    return `<div class="login">
+        <div class="logo">${icon('logo')}</div>
+        <h1>Welcome to LifeDesk</h1>
+        <p>Choose the currency you use. Amounts, numbers and dates follow your region; you can change this later under Account.</p>
+        <label class="left">Currency<select id="welcome-currency">${currencyOptions(L.guessCurrency())}</select></label>
+        <button class="btn primary wide" data-action="welcomeSave">Continue</button>
+    </div>`;
+}
+
 /** Tools on the start screen. ready: false shows the tile as coming soon. */
 const TOOLS = [
-    { id: 'money', name: 'Money', icon: '₹', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
-    { id: 'reminders', name: 'Renewal reminders', icon: '🔔', route: null, ready: false, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
+    { id: 'money', name: 'Money', icon: 'coins', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
+    { id: 'reminders', name: 'Renewal reminders', icon: 'bell', route: null, ready: false, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
 ];
 
 function hub() {
@@ -129,18 +146,18 @@ function hub() {
     const m = L.monthSummary(S.data, thisMonth());
     const tiles = TOOLS.map((tool) =>
         tool.ready
-            ? `<a class="tool" href="#${tool.route}"><span class="tool-icon">${tool.icon}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small>${tool.id === 'money' ? `<small class="tool-figure">Net balance ${L.inr(t.net)} · spent ${L.inr(m.expense)} this month</small>` : ''}</span><span class="tool-go">›</span></a>`
-            : `<div class="tool soon"><span class="tool-icon">${tool.icon}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small></span><span class="badge">Coming soon</span></div>`
+            ? `<a class="tool" href="#${tool.route}"><span class="tool-icon">${icon(tool.icon)}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small>${tool.id === 'money' ? `<small class="tool-figure">Net balance ${L.money(t.net)} · spent ${L.money(m.expense)} this month</small>` : ''}</span><span class="tool-go">${icon('chevRight')}</span></a>`
+            : `<div class="tool soon"><span class="tool-icon">${icon(tool.icon)}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small></span><span class="pill">Coming soon</span></div>`
     ).join('');
     return `<header class="hero">
         <small class="eyebrow">LifeDesk</small><h1>Hello, ${esc(S.user.name.split(' ')[0])}</h1>
-        <p class="hero-sub">${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        <p class="hero-sub">${new Date().toLocaleDateString(L.currentFormat().locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
     </header>
     <main>
         ${S.isDemo ? `<div class="notice">Demo mode: your data is saved only in this browser.</div>` : ''}
         <h3>Your tools</h3>
-        ${tiles}
-        <a class="card link" href="#more"><div class="card-head"><span><b>Account &amp; backup</b><small>${esc(S.user.contact)}</small></span><span>›</span></div></a>
+        <div class="cards">${tiles}</div>
+        <a class="card link" href="#more"><div class="card-head"><span><b>Account &amp; backup</b><small>${esc(S.user.contact)}</small></span>${icon('chevRight')}</div></a>
     </main>`;
 }
 
@@ -155,29 +172,33 @@ function home() {
     const accounts = activeAccounts()
         .map((a) => {
             const bal = L.accountBalance(a, S.data.entries);
-            return `<div class="tile"><small>${esc(a.name)}</small><b>${a.kind === 'card' ? `${L.inr(Math.max(0, -bal))} owed` : L.inr(bal)}</b><small>${L.ACCOUNT_KINDS[a.kind]}</small></div>`;
+            return `<div class="tile"><span class="tile-top">${icon(KIND_ICON[a.kind])}<small>${L.ACCOUNT_KINDS[a.kind]}</small></span><small>${esc(a.name)}</small><b>${a.kind === 'card' ? `${L.money(Math.max(0, -bal))} owed` : L.money(bal)}</b></div>`;
         })
         .join('');
+    const recent = [...S.data.entries].sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1)).slice(0, 5);
     return `<header class="hero">
-        <a class="back" href="#hub">‹ LifeDesk</a>
+        <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
         <small class="eyebrow">Money</small><h1>${L.monthLabel(key)}</h1>
-        <div class="stats">${stat('Income', L.inr(m.income))}${stat('Expense', L.inr(m.expense))}${stat('Net balance', L.inr(t.net))}</div>
-        <p class="hero-sub">Money in hand ${L.inr(t.inHand)}${t.cardOwed ? ` · Card owed ${L.inr(t.cardOwed)}` : ''}${t.owedToPeople ? ` · Owed to people ${L.inr(t.owedToPeople)}` : ''}</p>
+        <div class="stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}</div>
+        <p class="hero-sub">Money in hand ${L.money(t.inHand)}${t.cardOwed ? ` · Card owed ${L.money(t.cardOwed)}` : ''}${t.owedToPeople ? ` · Owed to people ${L.money(t.owedToPeople)}` : ''}</p>
     </header>
-    <main>
-        <div class="shortcuts">
-            <a class="shortcut main" href="#add">＋<span>Add Entry</span></a>
-            <a class="shortcut" href="#people">👥<span>People &amp; Loans</span></a>
-            <a class="shortcut" href="#budget">🎯<span>Budget</span></a>
-            <a class="shortcut" href="#daily">📅<span>Daily</span></a>
+    <main class="dash">
+        <div class="shortcuts span">
+            <a class="shortcut main" href="#add">${icon('plus')}<span>Add Entry</span></a>
+            <a class="shortcut" href="#people">${icon('users')}<span>People &amp; Loans</span></a>
+            <a class="shortcut" href="#budget">${icon('target')}<span>Budget</span></a>
+            <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
         </div>
-        ${t.cardOwed > 0 ? `<a class="notice" href="#accounts">Credit card owed ${L.inr(t.cardOwed)} – tap to pay</a>` : ''}
+        ${t.cardOwed > 0 ? `<a class="notice span" href="#accounts">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
-        <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span>${planned ? `${pct}%` : 'Not set'}</span></div>
-            <div class="bar"><i class="${pct >= 100 ? 'red' : pct >= 90 ? 'orange' : ''}" style="width:${pct}%"></i></div>
-            <small>${L.inr(spent)} spent${planned ? ` of ${L.inr(planned)}` : ''}</small></a>
-        <a class="card link" href="#people"><div class="card-head"><h2>People &amp; Loans</h2></div>
-            <div class="tiles">${stat('To receive', L.inr(t.toReceive))}${stat('I owe', L.inr(t.owedToPeople))}</div></a>
+        <div class="stack">
+            <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span class="pill">${planned ? `${pct}%` : 'Not set'}</span></div>
+                <div class="bar"><i class="${pct >= 100 ? 'red' : pct >= 90 ? 'orange' : ''}" style="width:${pct}%"></i></div>
+                <small>${L.money(spent)} spent${planned ? ` of ${L.money(planned)}` : ''}</small></a>
+            <a class="card link" href="#people"><div class="card-head"><h2>People &amp; Loans</h2>${icon('chevRight')}</div>
+                <div class="tiles">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}</div></a>
+        </div>
+        ${recent.length ? `<section class="card span"><div class="card-head"><h2>Latest entries</h2><a href="#daily">See all</a></div><div class="list inner">${recent.map((e) => entryRow(e, true)).join('')}</div></section>` : ''}
     </main>`;
 }
 
@@ -190,14 +211,14 @@ function addEntry() {
     const m = L.monthSummary(S.data, thisMonth());
     const t = L.totals(S.data);
     const tiles = Object.entries(L.TYPES)
-        .map(([k, v]) => `<button class="tile-btn ${f.type === k ? 'on' : ''}" data-action="setType" data-type="${k}"><span>${v.icon}</span>${v.label}</button>`)
+        .map(([k, v]) => `<button class="tile-btn t-${k} ${f.type === k ? 'on' : ''}" data-action="setType" data-type="${k}">${icon(v.icon)}<span>${v.label}</span></button>`)
         .join('');
     const chips = (selected, action, skip) =>
         activeAccounts()
             .filter((a) => a.id !== skip)
             .map((a) => {
                 const bal = L.accountBalance(a, S.data.entries);
-                return `<button class="chip ${a.id === selected ? 'on' : ''}" data-action="${action}" data-id="${a.id}"><b>${esc(a.name)}</b><small>${a.kind === 'card' ? `Owes ${L.inr(Math.max(0, -bal))}` : L.inr(bal)}</small></button>`;
+                return `<button class="chip ${a.id === selected ? 'on' : ''}" data-action="${action}" data-id="${a.id}">${icon(KIND_ICON[a.kind])}<span><b>${esc(a.name)}</b><small>${a.kind === 'card' ? `Owes ${L.money(Math.max(0, -bal))}` : L.money(bal)}</small></span></button>`;
             })
             .join('');
     const needsCategory = f.type === 'expense' || f.type === 'income';
@@ -210,28 +231,30 @@ function addEntry() {
         .slice(0, 15);
     return `<header class="hero">
         <small class="eyebrow">This month</small><h1>${L.monthLabel(thisMonth())}</h1>
-        <div class="stats">${stat('Income', L.inr(m.income))}${stat('Expense', L.inr(m.expense))}${stat('Net balance', L.inr(t.net))}</div>
-        <p class="hero-sub">Bank ${L.inr(t.bank)} · Cash ${L.inr(t.cash)}${t.cardOwed ? ` · Card owed ${L.inr(t.cardOwed)}` : ''}</p>
+        <div class="stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}</div>
+        <p class="hero-sub">Bank ${L.money(t.bank)} · Cash ${L.money(t.cash)}${t.cardOwed ? ` · Card owed ${L.money(t.cardOwed)}` : ''}</p>
     </header>
-    <main>
-        ${editing ? `<div class="banner"><div><b>Editing an entry</b><small>${esc(f.label)}</small></div><button class="btn" data-action="cancelEdit">Cancel</button></div>` : ''}
-        <h3>What kind of entry?</h3>
-        <div class="type-grid">${tiles}</div>
-        <label class="amount"><span>₹</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
-        <div class="grid2">
-            <label>Date<input type="date" max="${today()}" value="${esc(f.date)}" data-model="add.date"></label>
-            <label>Description<input type="text" placeholder="e.g. Petrol, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
+    <main class="two">
+        <div class="pane">
+            ${editing ? `<div class="banner"><div><b>Editing an entry</b><small>${esc(f.label)}</small></div><button class="btn" data-action="cancelEdit">Cancel</button></div>` : ''}
+            <h3>What kind of entry?</h3>
+            <div class="type-grid">${tiles}</div>
+            <label class="amount"><span>${esc(L.symbol())}</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
+            <div class="grid2">
+                <label>Date<input type="date" max="${today()}" value="${esc(f.date)}" data-model="add.date"></label>
+                <label>Description<input type="text" placeholder="e.g. Fuel, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
+            </div>
+            <h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>
+            <div class="chips">${chips(f.accountId, 'setAccount')}</div>
+            ${f.type === 'transfer' ? `<h3>To account</h3><div class="chips">${chips(f.toAccountId, 'setToAccount', f.accountId)}</div>` : ''}
+            ${needsCategory ? `<label>Category<select data-model="add.categoryId" data-then="touchCategory" id="add-category"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
+            ${needsPerson ? `<label>${direction === 'owesMe' ? 'Person (owes you)' : 'Person (you owe)'}<select data-model="add.personId" data-rerender><option value="">Choose a person</option>${people.map((p) => `<option value="${p.id}" ${p.id === f.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.personId === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
+                ${f.personId === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPerson)}" data-model="add.newPerson"></label>` : ''}` : ''}
+            <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
+            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : `Save ${L.TYPES[f.type].label}`}</button>
+            ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
-        <h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>
-        <div class="chips">${chips(f.accountId, 'setAccount')}</div>
-        ${f.type === 'transfer' ? `<h3>To account</h3><div class="chips">${chips(f.toAccountId, 'setToAccount', f.accountId)}</div>` : ''}
-        ${needsCategory ? `<label>Category<select data-model="add.categoryId" data-then="touchCategory" id="add-category"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
-        ${needsPerson ? `<label>${direction === 'owesMe' ? 'Person (owes you)' : 'Person (you owe)'}<select data-model="add.personId" data-rerender><option value="">Choose a person</option>${people.map((p) => `<option value="${p.id}" ${p.id === f.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.personId === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
-            ${f.personId === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPerson)}" data-model="add.newPerson"></label>` : ''}` : ''}
-        <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
-        <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : `Save ${L.TYPES[f.type].label}`}</button>
-        ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">Delete entry</button></div>` : ''}
-        ${!editing && recent.length ? `<h3>Recent entries</h3><section class="list">${recent.map((e) => entryRow(e, true)).join('')}</section>` : ''}
+        ${!editing && recent.length ? `<div class="pane"><h3>Recent entries</h3><section class="list">${recent.map((e) => entryRow(e, true)).join('')}</section></div>` : ''}
     </main>`;
 }
 
@@ -257,10 +280,10 @@ function daily() {
     return `<header class="hero">
         <small class="eyebrow center">Daily Expenses</small>
         ${d.custom ? `<h1 class="center">${from && to ? `${shortDate(from)} – ${shortDate(to)}` : 'Custom dates'}</h1>` : monthNav(d.month, 'dailyMonth')}
-        <div class="stats">${stat(d.view === 'income' ? 'Income' : d.view === 'spend' ? 'Spent' : 'Entries', d.view === 'all' ? count : L.inr(total))}${stat('Per day', d.view === 'all' ? '–' : L.inr(total / span))}${stat('Highest day', top && d.view !== 'all' ? `${shortDate(top.date)} · ${L.inr(top.total)}` : '–')}</div>
+        <div class="stats">${stat(d.view === 'income' ? 'Income' : d.view === 'spend' ? 'Spent' : 'Entries', d.view === 'all' ? count : L.money(total))}${stat('Per day', d.view === 'all' ? '–' : L.money(Math.round(total / span)))}${stat('Highest day', top && d.view !== 'all' ? `${shortDate(top.date)} · ${L.money(top.total)}` : '–')}</div>
     </header>
-    <main>
-        <div class="split"><button class="link-btn" data-action="dailyCustom">${d.custom ? '← Back to months' : '📅 Custom dates'}</button>${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}</div>
+    <main class="narrow">
+        <div class="split"><button class="link-btn" data-action="dailyCustom">${d.custom ? 'Back to months' : `${icon('calendar')} Custom dates`}</button>${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}</div>
         ${d.custom ? `<div class="grid2"><label>From<input type="date" value="${esc(d.from)}" data-model="daily.from" data-rerender></label><label>To<input type="date" value="${esc(d.to)}" data-model="daily.to" data-rerender></label></div>` : ''}
         <div class="seg">${seg('spend', 'Spending')}${seg('income', 'Income')}${seg('all', 'All entries')}</div>
         <div class="grid2">
@@ -279,7 +302,7 @@ function dailyDays(days) {
     return days
         .map((x) => {
             const open = !d.closed.has(x.date);
-            return `<section class="day"><button class="day-head" data-action="dailyToggle" data-date="${x.date}"><span>${open ? '▾' : '▸'}</span><b>${longDay(x.date)}</b><small>${x.entries.length} ${x.entries.length === 1 ? 'entry' : 'entries'}</small><b>${L.inr(x.total)}</b></button>
+            return `<section class="day"><button class="day-head" data-action="dailyToggle" data-date="${x.date}">${icon(open ? 'chevDown' : 'chevRight')}<b>${longDay(x.date)}</b><small>${x.entries.length} ${x.entries.length === 1 ? 'entry' : 'entries'}</small><b>${L.money(x.total)}</b></button>
                 ${open ? x.entries.map((e) => entryRow(e, false)).join('') : ''}</section>`;
         })
         .join('');
@@ -299,21 +322,21 @@ function budget() {
             const colour = plan ? (r.spent > plan ? 'red' : pct >= 90 ? 'orange' : '') : r.spent ? 'red' : '';
             const open = b.open === r.id;
             const entries = open ? S.data.entries.filter((e) => e.type === 'expense' && e.categoryId === r.id && L.monthKey(e.date) === b.month).sort((x, y) => (x.date < y.date ? 1 : -1)) : [];
-            return `<section class="card budget-row ${open ? 'open' : ''}">
-                <div class="card-head"><button class="row-name" data-action="budgetOpen" data-id="${r.id}"><b>${esc(r.name)}</b><small>${r.lastMonth || r.average ? `Last month ${L.inr(r.lastMonth)} · 3-month avg ${L.inr(r.average)}` : 'No recent spend'}</small></button>
-                    <label class="mini">₹<input type="number" inputmode="numeric" min="0" step="1" value="${esc(value(r))}" data-budget="${r.id}" aria-label="Budget for ${esc(r.name)}"></label></div>
-                ${plan || r.spent ? `<div class="bar"><i class="${colour}" style="width:${pct}%"></i></div><small>${L.inr(r.spent)}${plan ? ` of ${L.inr(plan)}` : ''} spent${r.spent ? ` · <button class="link-btn" data-action="budgetOpen" data-id="${r.id}">${open ? 'Hide entries' : 'See entries'}</button>` : ''}</small>` : ''}
-                ${open ? `<div class="list inner">${entries.map((e) => entryRow(e, true)).join('') || '<p class="empty">No expenses yet.</p>'}<div class="row total"><span class="row-text"><b>Total</b></span><span class="amt">${L.inr(r.spent)}</span></div></div>` : ''}
+            return `<section class="card budget-row ${open ? 'open span' : ''}">
+                <div class="card-head"><button class="row-name" data-action="budgetOpen" data-id="${r.id}"><b>${esc(r.name)}</b><small>${r.lastMonth || r.average ? `Last month ${L.money(r.lastMonth)} · 3-month avg ${L.money(r.average)}` : 'No recent spend'}</small></button>
+                    <label class="mini">${esc(L.symbol())}<input type="number" inputmode="numeric" min="0" step="1" value="${esc(value(r))}" data-budget="${r.id}" aria-label="Budget for ${esc(r.name)}"></label></div>
+                ${plan || r.spent ? `<div class="bar"><i class="${colour}" style="width:${pct}%"></i></div><small>${L.money(r.spent)}${plan ? ` of ${L.money(plan)}` : ''} spent${r.spent ? ` · <button class="link-btn" data-action="budgetOpen" data-id="${r.id}">${open ? 'Hide entries' : 'See entries'}</button>` : ''}</small>` : ''}
+                ${open ? `<div class="list inner">${entries.map((e) => entryRow(e, true)).join('') || '<p class="empty">No expenses yet.</p>'}<div class="row total"><span class="row-text"><b>Total</b></span><span class="amt">${L.money(r.spent)}</span></div></div>` : ''}
             </section>`;
         })
         .join('');
     return `<header class="hero">
         <small class="eyebrow center">Budget</small>${monthNav(b.month, 'budgetMonth')}
-        <div class="stats">${stat('Planned', L.inr(planned))}${stat('Spent so far', L.inr(spent))}${stat('Last month income', L.inr(income))}</div>
+        <div class="stats">${stat('Planned', L.money(planned))}${stat('Spent so far', L.money(spent))}${stat('Last month income', L.money(income))}</div>
     </header>
     <main>
-        <div class="split"><button class="btn" data-action="budgetCopy">Copy last month</button><button class="btn" data-action="budgetAverage">Use 3-month average</button></div>
-        ${list}
+        <div class="split wrap"><button class="btn" data-action="budgetCopy">Copy last month</button><button class="btn" data-action="budgetAverage">Use 3-month average</button></div>
+        <div class="cards">${list}</div>
         <div class="sticky"><button class="btn primary wide" data-action="budgetSave" ${b.edits ? '' : 'disabled'}>${b.edits ? 'Save budget' : 'Budget saved'}</button></div>
     </main>`;
 }
@@ -333,35 +356,35 @@ function people() {
             const history = open ? S.data.entries.filter((e) => e.personId === p.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
             const quick = p.direction === 'owesMe' ? [['gotback', 'Got money back'], ['lent', 'Gave more']] : [['repaid', 'Paid back'], ['borrowed', 'Borrowed more']];
             const form = open && s.form;
-            return `<section class="card person ${open ? 'open' : ''}">
-                <button class="card-head row-name" data-action="personOpen" data-id="${p.id}"><span><b>${esc(p.name)}</b><small>${p.direction === 'owesMe' ? 'Owes you' : 'You owe'} · <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span></small></span><b class="big">${L.inr(p.out)}</b></button>
+            return `<section class="card person ${open ? 'open span' : ''}">
+                <button class="card-head row-name" data-action="personOpen" data-id="${p.id}"><span><b>${esc(p.name)}</b><small>${p.direction === 'owesMe' ? 'Owes you' : 'You owe'} · <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span></small></span><b class="big">${L.money(p.out)}</b></button>
                 ${open ? `<div class="split wrap">${quick.map(([k, label]) => `<button class="btn ${k === quick[0][0] ? 'primary' : ''}" data-action="personForm" data-type="${k}">${label}</button>`).join('')}</div>
                     ${form ? `<div class="form"><h3>${esc(form.label)}</h3>
-                        <label class="amount small"><span>₹</span><input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(form.amount)}" data-model="people.form.amount" aria-label="Amount"></label>
+                        <label class="amount small"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(form.amount)}" data-model="people.form.amount" aria-label="Amount"></label>
                         <label>Date<input type="date" max="${today()}" value="${esc(form.date)}" data-model="people.form.date"></label>
-                        <label>${L.TYPES[form.type].sign > 0 ? 'Received into' : 'Paid from'}<select data-model="people.form.accountId">${activeAccounts().filter((a) => a.kind !== 'card').map((a) => `<option value="${a.id}" ${a.id === form.accountId ? 'selected' : ''}>${esc(a.name)} (${L.inr(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label>
+                        <label>${L.TYPES[form.type].sign > 0 ? 'Received into' : 'Paid from'}<select data-model="people.form.accountId">${activeAccounts().filter((a) => a.kind !== 'card').map((a) => `<option value="${a.id}" ${a.id === form.accountId ? 'selected' : ''}>${esc(a.name)} (${L.money(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label>
                         <div class="split"><button class="btn" data-action="personFormCancel">Cancel</button><button class="btn primary" data-action="personFormSave">Save</button></div></div>` : ''}
                     <h3>Status</h3><div class="split wrap">${['Active', 'Settled', 'Bad Debt'].map((x) => `<button class="btn ${x === status ? 'on' : ''}" data-action="personStatus" data-status="${x}" ${x === status ? 'disabled' : ''}>${x}</button>`).join('')}</div>
-                    <label>Phone<input type="tel" value="${esc(p.phone || '')}" data-person-field="phone" data-id="${p.id}"></label>
-                    <label>Notes<input type="text" value="${esc(p.notes || '')}" data-person-field="notes" data-id="${p.id}"></label>
-                    <h3>History</h3><div class="list inner">${history.map((e) => entryRow(e, true)).join('') || `<p class="empty">No entries yet.${p.opening ? ` Balance comes from the opening amount of ${L.inr(p.opening)}.` : ''}</p>`}</div>
-                    ${history.length ? '' : `<button class="btn danger" data-action="personDelete" data-id="${p.id}">Delete person</button>`}` : ''}
+                    <div class="grid2"><label>Phone<input type="tel" value="${esc(p.phone || '')}" data-person-field="phone" data-id="${p.id}"></label>
+                    <label>Notes<input type="text" value="${esc(p.notes || '')}" data-person-field="notes" data-id="${p.id}"></label></div>
+                    <h3>History</h3><div class="list inner">${history.map((e) => entryRow(e, true)).join('') || `<p class="empty">No entries yet.${p.opening ? ` Balance comes from the opening amount of ${L.money(p.opening)}.` : ''}</p>`}</div>
+                    ${history.length ? '' : `<button class="btn danger" data-action="personDelete" data-id="${p.id}">${icon('trash')} Delete person</button>`}` : ''}
             </section>`;
         })
         .join('');
     return `<header class="hero">
         <small class="eyebrow">People &amp; Loans</small><h1>Who owes whom</h1>
-        <div class="stats">${stat('To receive', L.inr(t.toReceive))}${stat('I owe', L.inr(t.owedToPeople))}${stat('People', S.data.people.length)}</div>
+        <div class="stats">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}${stat('People', S.data.people.length)}</div>
     </header>
     <main>
-        <div class="seg">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}</div>
+        <div class="toolbar"><div class="seg">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}</div>
+        ${s.adding ? '' : `<button class="btn" data-action="personAddToggle">${icon('plus')} Add person</button>`}</div>
         ${s.adding ? `<section class="card form"><h3>Add person</h3>
             <label>Name<input type="text" id="np-name"></label>
             <label>${s.view === 'owesMe' ? 'They already owe you (optional)' : 'You already owe them (optional)'}<input type="number" inputmode="decimal" min="0" id="np-opening" placeholder="0"></label>
             <label>Phone (optional)<input type="tel" id="np-phone"></label>
-            <div class="split"><button class="btn" data-action="personAddToggle">Cancel</button><button class="btn primary" data-action="personAddSave">Add</button></div></section>`
-            : `<button class="btn wide" data-action="personAddToggle">＋ Add person</button>`}
-        ${cards || '<p class="empty">Nobody here yet.</p>'}
+            <div class="split"><button class="btn" data-action="personAddToggle">Cancel</button><button class="btn primary" data-action="personAddSave">Add</button></div></section>` : ''}
+        <div class="cards">${cards || '<p class="empty span">Nobody here yet.</p>'}</div>
     </main>`;
 }
 
@@ -375,25 +398,26 @@ function accounts() {
             const owed = Math.max(0, -bal);
             const used = a.kind === 'card' && a.limit ? Math.min(100, Math.round((owed / a.limit) * 100)) : 0;
             const meta = [L.ACCOUNT_KINDS[a.kind], a.last4 ? `•••• ${esc(a.last4)}` : '', a.kind === 'card' && a.dueDay ? `Bill due on ${a.dueDay}` : '', a.isDefault ? 'Default' : '', a.active === false ? 'Closed' : ''].filter(Boolean).join(' · ');
-            return `<section class="card">
-                <div class="card-head"><span><b>${esc(a.name)}</b><small>${meta}</small></span><b class="big">${a.kind === 'card' ? `${L.inr(owed)} owed` : L.inr(bal)}</b></div>
-                ${a.kind === 'card' && a.limit ? `<div class="bar"><i class="${used >= 90 ? 'red' : used >= 70 ? 'orange' : ''}" style="width:${used}%"></i></div><small>${L.inr(a.limit - owed)} left of ${L.inr(a.limit)}</small>` : ''}
+            const paying = s.pay && s.pay.cardId === a.id;
+            return `<section class="card ${paying ? 'open span' : ''}">
+                <div class="card-head"><span class="with-icon"><span class="row-icon">${icon(KIND_ICON[a.kind])}</span><span><b>${esc(a.name)}</b><small>${meta}</small></span></span><b class="big">${a.kind === 'card' ? `${L.money(owed)} owed` : L.money(bal)}</b></div>
+                ${a.kind === 'card' && a.limit ? `<div class="bar"><i class="${used >= 90 ? 'red' : used >= 70 ? 'orange' : ''}" style="width:${used}%"></i></div><small>${L.money(a.limit - owed)} left of ${L.money(a.limit)}</small>` : ''}
                 <div class="split wrap">
                     ${a.kind === 'card' && owed > 0 && a.active !== false ? `<button class="btn primary" data-action="payOpen" data-id="${a.id}">Pay bill</button>` : ''}
                     <button class="btn" data-action="accountEdit" data-id="${a.id}">Edit</button>
                     ${a.active === false ? `<button class="btn" data-action="accountReopen" data-id="${a.id}">Reopen</button>` : a.kind === 'cash' ? '' : `<button class="btn danger" data-action="accountRemove" data-id="${a.id}">Remove</button>`}
                 </div>
-                ${s.pay && s.pay.cardId === a.id ? payForm(a, owed) : ''}
+                ${paying ? payForm(a, owed) : ''}
             </section>`;
         })
         .join('');
     return `<header class="hero">
         <small class="eyebrow">My accounts</small><h1>Banks, cash and credit cards</h1>
-        <div class="stats">${stat('Bank + cash', L.inr(t.inHand))}${stat('Card owed', L.inr(t.cardOwed))}${stat('Net balance', L.inr(t.net))}</div>
+        <div class="stats">${stat('Bank + cash', L.money(t.inHand))}${stat('Card owed', L.money(t.cardOwed))}${stat('Net balance', L.money(t.net))}</div>
     </header>
     <main>
         ${s.form ? accountForm() : `<div class="split wrap"><button class="btn primary" data-action="accountNew" data-kind="bank">＋ Bank account</button><button class="btn" data-action="accountNew" data-kind="card">＋ Credit card</button><button class="btn" data-action="accountNew" data-kind="wallet">＋ Wallet</button></div>`}
-        ${cards}
+        <div class="cards">${cards}</div>
         ${S.data.accounts.some((a) => a.active === false) ? `<button class="link-btn" data-action="accountsClosed">${s.showClosed ? 'Hide closed accounts' : 'Show closed accounts'}</button>` : ''}
     </main>`;
 }
@@ -401,7 +425,7 @@ function accountForm() {
     const f = state.accounts.form;
     const card = f.kind === 'card';
     return `<section class="card form"><h3>${f.id ? 'Edit' : 'Add'} ${L.ACCOUNT_KINDS[f.kind].toLowerCase()}</h3>
-        <label>Name<input type="text" value="${esc(f.name)}" data-model="accounts.form.name" placeholder="${card ? 'e.g. HDFC Credit Card' : 'e.g. HDFC Bank'}"></label>
+        <label>Name<input type="text" value="${esc(f.name)}" data-model="accounts.form.name" placeholder="${card ? 'e.g. Visa card' : 'e.g. Main bank'}"></label>
         <div class="grid2">
             <label>${card ? 'Amount owed at the start' : 'Opening balance'}<input type="number" inputmode="decimal" min="0" value="${esc(f.opening)}" data-model="accounts.form.opening" placeholder="0"></label>
             <label>As of date<input type="date" max="${today()}" value="${esc(f.openingDate || '')}" data-model="accounts.form.openingDate"></label>
@@ -415,39 +439,55 @@ function payForm(card, owed) {
     const p = state.accounts.pay;
     const sources = activeAccounts().filter((a) => a.kind !== 'card');
     return `<div class="form"><h3>Pay ${esc(card.name)} bill</h3>
-        <div class="seg"><button class="${p.mode === 'full' ? 'on' : ''}" data-action="payMode" data-mode="full">Full ${L.inr(owed)}</button><button class="${p.mode === 'part' ? 'on' : ''}" data-action="payMode" data-mode="part">Partial</button></div>
+        <div class="seg"><button class="${p.mode === 'full' ? 'on' : ''}" data-action="payMode" data-mode="full">Full ${L.money(owed)}</button><button class="${p.mode === 'part' ? 'on' : ''}" data-action="payMode" data-mode="part">Partial</button></div>
         ${p.mode === 'part' ? `<label>Amount<input type="number" inputmode="decimal" min="0" max="${owed}" value="${esc(p.amount)}" data-model="accounts.pay.amount"></label>` : ''}
-        <label>Pay from<select data-model="accounts.pay.fromId">${sources.map((a) => `<option value="${a.id}" ${a.id === p.fromId ? 'selected' : ''}>${esc(a.name)} (${L.inr(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label>
+        <label>Pay from<select data-model="accounts.pay.fromId">${sources.map((a) => `<option value="${a.id}" ${a.id === p.fromId ? 'selected' : ''}>${esc(a.name)} (${L.money(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label>
         <div class="split"><button class="btn" data-action="payCancel">Cancel</button><button class="btn primary" data-action="paySave">Pay</button></div></div>`;
 }
 
 function more() {
-    return `<header class="hero"><a class="back" href="#hub">‹ LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
-    <main>
-        ${S.isDemo ? `<div class="notice">Demo mode: your data is saved only in this browser. Add the Firebase settings in js/config.js to turn on login and cloud storage.</div>` : ''}
+    const f = L.currentFormat();
+    return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
+    <main class="dash">
+        ${S.isDemo ? `<div class="notice span">Demo mode: your data is saved only in this browser.</div>` : ''}
+        <section class="card"><div class="card-head"><h2>Region</h2></div>
+            <label>Currency<select data-setting="currency">${currencyOptions(f.currency)}</select></label>
+            <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Changing the currency changes how amounts are shown; it does not convert them.</small></section>
         <section class="card"><div class="card-head"><h2>Money</h2></div>
-            <a class="row nav-row" href="#home">Money home <span>›</span></a><a class="row nav-row" href="#people">People &amp; Loans <span>›</span></a><a class="row nav-row" href="#accounts">My Accounts <span>›</span></a></section>
+            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a></section>
         <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
-            ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. petrol, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
+            ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
             <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
         <section class="card"><div class="card-head"><h2>Backup</h2></div>
             <div class="split wrap"><button class="btn" data-action="exportData">Download my data</button><label class="btn file">Restore from file<input type="file" accept="application/json" data-file="import" hidden></label></div>
             <small>${S.data.entries.length} entries · ${S.data.accounts.length} accounts · ${S.data.people.length} people</small></section>
-        ${S.isDemo ? `<button class="btn danger wide" data-action="demoReset">Erase demo data</button>` : `<button class="btn wide" data-action="signOut">Sign out</button>`}
+        <div class="span">${S.isDemo ? `<button class="btn danger wide" data-action="demoReset">Erase demo data</button>` : `<button class="btn wide" data-action="signOut">${icon('logout')} Sign out</button>`}</div>
     </main>`;
 }
 
 const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, more };
 const NO_TABS = ['hub'];
-const NAV = [['home', '🏠', 'Home'], ['daily', '📅', 'Daily'], ['add', '＋', 'Add'], ['budget', '🎯', 'Budget'], ['more', '☰', 'More']];
+// phone: bottom bar
+const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
+// wide screens: side menu
+const SIDE = [
+    ['LifeDesk', [['hub', 'grid', 'All tools']]],
+    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts']]],
+    ['You', [['more', 'user', 'Account & backup']]]
+];
 
 function render() {
     if (state.status === 'loading') {
-        app.innerHTML = '<div class="loading"><div class="logo">₹</div><p>Loading…</p></div>';
+        app.innerHTML = `<div class="loading"><div class="logo">${icon('logo')}</div><p>Loading…</p></div>`;
         return;
     }
     if (state.status === 'signedOut') {
         app.innerHTML = login() + toastHtml();
+        return;
+    }
+    L.setFormat(S.prefs());
+    if (!S.prefs()) {
+        app.innerHTML = welcome() + toastHtml();
         return;
     }
     if (!SCREENS[state.route]) {
@@ -455,8 +495,12 @@ function render() {
     }
     const screen = SCREENS[state.route];
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
-    app.innerHTML = `<div class="shell">${screen()}</div>
-        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, icon, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon}</span>${label}</a>`).join('')}</nav>`}${toastHtml()}`;
+    const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`).join('')}`).join('');
+    app.innerHTML = `<div class="app">
+        <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
+        <div class="shell">${screen()}</div>
+        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon(ic)}</span>${label}</a>`).join('')}</nav>`}
+    </div>${toastHtml()}`;
     if (focus) {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {
@@ -471,7 +515,7 @@ const toastHtml = () => (state.toast ? `<div class="toast ${state.toast.kind}" r
 
 // ---------- actions ----------
 const actions = {
-    // login
+    // login and first visit
     async google() {
         await S.signInGoogle();
     },
@@ -485,6 +529,9 @@ const actions = {
     },
     async signOut() {
         await S.signOut();
+    },
+    async welcomeSave() {
+        await S.save('settings', { id: 'prefs', currency: document.getElementById('welcome-currency').value });
     },
 
     // add entry
@@ -543,7 +590,7 @@ const actions = {
         const back = f.back;
         state.add = blankEntry(f.id ? null : f);
         await S.saveMany(pairs);
-        toast(f.id ? 'Changes saved.' : `${entry.description} · ${L.inr(entry.amount)} saved.`);
+        toast(f.id ? 'Changes saved.' : `${entry.description} · ${L.money(entry.amount)} saved.`);
         if (back) {
             go(back);
         }
@@ -553,7 +600,7 @@ const actions = {
         if (!e) {
             return;
         }
-        state.add = { ...blankEntry(), ...e, amount: String(e.amount), categoryTouched: true, newPerson: '', notes: e.notes || '', label: `${e.description} · ${L.inr(e.amount)} · ${shortDate(e.date)}`, back: state.route === 'add' ? null : state.route };
+        state.add = { ...blankEntry(), ...e, amount: String(e.amount), categoryTouched: true, newPerson: '', notes: e.notes || '', label: `${e.description} · ${L.money(e.amount)} · ${shortDate(e.date)}`, back: state.route === 'add' ? null : state.route };
         if (state.route === 'add') {
             render();
             window.scrollTo(0, 0);
@@ -606,11 +653,7 @@ const actions = {
     },
     dailyToggleAll() {
         const d = state.daily;
-        if (d.closed.size) {
-            d.closed = new Set();
-        } else {
-            d.closed = new Set(S.data.entries.map((e) => e.date));
-        }
+        d.closed = d.closed.size ? new Set() : new Set(S.data.entries.map((e) => e.date));
         render();
     },
 
@@ -692,7 +735,7 @@ const actions = {
         const type = el.dataset.type;
         const out = L.personOutstanding(p, S.data.entries);
         const acc = activeAccounts().filter((a) => a.kind !== 'card');
-        state.people.form = { type, label: el.textContent, amount: (type === 'gotback' || type === 'repaid') && out > 0 ? String(out) : '', date: today(), accountId: (acc.find((a) => a.isDefault) || acc[0] || {}).id };
+        state.people.form = { type, label: el.textContent.trim(), amount: (type === 'gotback' || type === 'repaid') && out > 0 ? String(out) : '', date: today(), accountId: (acc.find((a) => a.isDefault) || acc[0] || {}).id };
         render();
     },
     personFormCancel() {
@@ -709,7 +752,7 @@ const actions = {
         }
         state.people.form = null;
         await S.save('entries', entry);
-        toast(`${p.name}: ${L.inr(L.personOutstanding(p, S.data.entries))} ${p.direction === 'owesMe' ? 'still owed to you' : 'still to pay'}.`);
+        toast(`${p.name}: ${L.money(L.personOutstanding(p, S.data.entries))} ${p.direction === 'owesMe' ? 'still owed to you' : 'still to pay'}.`);
     },
     async personStatus(el) {
         const p = byId(S.data.people, state.people.selected);
@@ -772,8 +815,8 @@ const actions = {
             }
             return;
         }
-        if (Math.round(bal) !== 0) {
-            return toast(`${a.name} still has ${a.kind === 'card' ? 'an amount owed' : 'a balance'} of ${L.inr(Math.abs(bal))}. Move or pay it first.`, 'warn');
+        if (Math.round(bal * 100) !== 0) {
+            return toast(`${a.name} still has ${a.kind === 'card' ? 'an amount owed' : 'a balance'} of ${L.money(Math.abs(bal))}. Move or pay it first.`, 'warn');
         }
         if (window.confirm(`Close ${a.name}? Its history is kept and you can reopen it.`)) {
             await S.save('accounts', { ...a, active: false, isDefault: false });
@@ -809,17 +852,17 @@ const actions = {
             return toast('Enter the amount to pay.', 'warn');
         }
         if (amount > owed + 0.005) {
-            return toast(`That is more than the ${L.inr(owed)} owed.`, 'warn');
+            return toast(`That is more than the ${L.money(owed)} owed.`, 'warn');
         }
         if (!p.fromId) {
             return toast('Add a bank account or use Cash to pay from.', 'warn');
         }
         state.accounts.pay = null;
         await S.save('entries', { id: S.newId(), type: 'transfer', amount, date: today(), description: `Card bill ${amount >= owed ? 'paid in full' : 'part payment'} – ${card.name}`, accountId: p.fromId, toAccountId: card.id, categoryId: null, personId: null, notes: '', createdAt: Date.now() });
-        toast(`${L.inr(amount)} paid to ${card.name}.`);
+        toast(`${L.money(amount)} paid to ${card.name}.`);
     },
 
-    // more
+    // account & backup
     categoryToggle() {
         state.more.addingCategory = !state.more.addingCategory;
         render();
@@ -874,7 +917,7 @@ app.addEventListener('click', async (event) => {
     }
 });
 
-function onInput(event) {
+app.addEventListener('input', (event) => {
     const el = event.target;
     if (el.dataset.model) {
         setPath(el.dataset.model, el.type === 'checkbox' ? el.checked : el.value);
@@ -891,11 +934,9 @@ function onInput(event) {
         }
         if ('rerenderSoft' in el.dataset) {
             // keep the keyboard open while typing a search: only the list is redrawn
-            const d = state.daily;
             const tmp = document.createElement('div');
             tmp.innerHTML = daily();
             document.getElementById('daily-days').innerHTML = tmp.querySelector('#daily-days').innerHTML;
-            void d;
         }
     }
     if (el.dataset.budget) {
@@ -908,25 +949,29 @@ function onInput(event) {
             btn.textContent = 'Save budget';
         }
     }
-}
-app.addEventListener('input', onInput);
+});
 app.addEventListener('change', async (event) => {
     const el = event.target;
-    if (el.dataset.model && 'rerender' in el.dataset) {
-        setPath(el.dataset.model, el.value);
-        render();
-    }
-    if (el.dataset.personField) {
-        const p = byId(S.data.people, el.dataset.id);
-        await S.save('people', { ...p, [el.dataset.personField]: el.value.trim() });
-    }
-    if (el.dataset.file === 'import' && el.files[0]) {
-        try {
+    try {
+        if (el.dataset.model && 'rerender' in el.dataset) {
+            setPath(el.dataset.model, el.value);
+            render();
+        }
+        if (el.dataset.personField) {
+            const p = byId(S.data.people, el.dataset.id);
+            await S.save('people', { ...p, [el.dataset.personField]: el.value.trim() });
+        }
+        if (el.dataset.setting) {
+            await S.save('settings', { ...(S.prefs() || { id: 'prefs' }), [el.dataset.setting]: el.value });
+            toast('Saved.');
+        }
+        if (el.dataset.file === 'import' && el.files[0]) {
             const n = await S.importJson(await el.files[0].text());
             toast(`${n} records restored.`);
-        } catch (e) {
-            toast(e.message, 'warn');
         }
+    } catch (e) {
+        console.error(e);
+        toast(e.message || 'Something went wrong.', 'warn');
     }
 });
 
