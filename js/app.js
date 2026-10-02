@@ -375,15 +375,18 @@ function daily() {
         ${d.custom ? `<h1 class="center">${from && to ? `${shortDate(from)} – ${shortDate(to)}` : 'Custom dates'}</h1>` : monthNav(d.month, 'dailyMonth')}
         <div class="stats">${stat(d.view === 'income' ? 'Income' : d.view === 'spend' ? 'Spent' : 'Entries', d.view === 'all' ? count : L.money(total))}${stat('Per day', d.view === 'all' ? '–' : L.money(Math.round(total / span)))}${stat('Highest day', top && d.view !== 'all' ? `${shortDate(top.date)} · ${L.money(top.total)}` : '–')}</div>
     </header>
-    <main class="narrow">
-        <div class="split"><button class="link-btn" data-action="dailyCustom">${d.custom ? 'Back to months' : `${icon('calendar')} Custom dates`}</button>${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}</div>
-        ${d.custom ? `<div class="grid2"><label>From<input type="date" value="${esc(d.from)}" data-model="daily.from" data-rerender></label><label>To<input type="date" value="${esc(d.to)}" data-model="daily.to" data-rerender></label></div>` : ''}
-        <div class="seg">${seg('spend', 'Spending')}${seg('income', 'Income')}${seg('all', 'All entries')}</div>
-        <div class="grid2">
+    <main>
+        <div class="filters">
+            <div class="seg">${seg('spend', 'Spending')}${seg('income', 'Income')}${seg('all', 'All entries')}</div>
             <select data-model="daily.category" data-rerender aria-label="Category"><option value="">All categories</option>${cats.map((c) => `<option value="${c.id}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
             <select data-model="daily.account" data-rerender aria-label="Account"><option value="">All accounts</option>${sortedAccounts().map((a) => `<option value="${a.id}" ${a.id === d.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+            <input type="search" placeholder="Search description…" value="${esc(d.search)}" data-model="daily.search" data-rerender-soft aria-label="Search">
         </div>
-        <input type="search" placeholder="Search description…" value="${esc(d.search)}" data-model="daily.search" data-rerender-soft aria-label="Search">
+        <div class="toolbar">
+            ${d.custom ? `<div class="dates"><label>From<input type="date" value="${esc(d.from)}" data-model="daily.from" data-rerender></label><label>To<input type="date" value="${esc(d.to)}" data-model="daily.to" data-rerender></label><button class="link-btn" data-action="dailyCustom">Back to months</button></div>`
+                : `<button class="link-btn" data-action="dailyCustom">${icon('calendar')} Custom dates</button>`}
+            ${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}
+        </div>
         <div id="daily-days">${dailyDays(days)}</div>
     </main>`;
 }
@@ -448,29 +451,39 @@ function people() {
     const list = S.data.people
         .filter((p) => p.direction === s.view)
         .map((p) => ({ ...p, out: L.personOutstanding(p, S.data.entries) }))
-        .sort((a, b) => b.out - a.out);
+        .sort((a, b) => b.out - a.out || a.name.localeCompare(b.name));
     const seg = (v, label) => `<button class="${s.view === v ? 'on' : ''}" data-action="peopleView" data-view="${v}">${label}</button>`;
-    const cards = list
+    const initials = (name) => name.split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+    const rows = list
         .map((p) => {
             const open = s.selected === p.id;
             const status = p.status || 'Active';
             const history = open ? S.data.entries.filter((e) => e.personId === p.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
             const quick = p.direction === 'owesMe' ? [['gotback', 'Got money back'], ['lent', 'Gave more']] : [['repaid', 'Paid back'], ['borrowed', 'Borrowed more']];
             const form = open && s.form;
-            return `<section class="card person ${open ? 'open span' : ''}">
-                <button class="card-head row-name" data-action="personOpen" data-id="${p.id}"><span><b>${esc(p.name)}</b><small>${p.direction === 'owesMe' ? 'Owes you' : 'You owe'} · <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span></small></span><b class="big">${L.money(p.out)}</b></button>
-                ${open ? `<div class="split wrap">${quick.map(([k, label]) => `<button class="btn ${k === quick[0][0] ? 'primary' : ''}" data-action="personForm" data-type="${k}">${label}</button>`).join('')}</div>
-                    ${form ? `<div class="form"><h3>${esc(form.label)}</h3>
-                        <label class="amount small"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(form.amount)}" data-model="people.form.amount" aria-label="Amount"></label>
-                        <label>Date<input type="date" max="${today()}" value="${esc(form.date)}" data-model="people.form.date"></label>
-                        <label>${L.TYPES[form.type].sign > 0 ? 'Received into' : 'Paid from'}<select data-model="people.form.accountId">${activeAccounts().filter((a) => a.kind !== 'card').map((a) => `<option value="${a.id}" ${a.id === form.accountId ? 'selected' : ''}>${esc(a.name)} (${L.money(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label>
-                        <div class="split"><button class="btn" data-action="personFormCancel">Cancel</button><button class="btn primary" data-action="personFormSave">Save</button></div></div>` : ''}
-                    <h3>Status</h3><div class="split wrap">${['Active', 'Settled', 'Bad Debt'].map((x) => `<button class="btn ${x === status ? 'on' : ''}" data-action="personStatus" data-status="${x}" ${x === status ? 'disabled' : ''}>${x}</button>`).join('')}</div>
-                    <div class="grid2"><label>Phone<input type="tel" value="${esc(p.phone || '')}" data-person-field="phone" data-id="${p.id}"></label>
-                    <label>Notes<input type="text" value="${esc(p.notes || '')}" data-person-field="notes" data-id="${p.id}"></label></div>
-                    <h3>History</h3><div class="list inner">${history.map((e) => entryRow(e, true)).join('') || `<p class="empty">No entries yet.${p.opening ? ` Balance comes from the opening amount of ${L.money(p.opening)}.` : ''}</p>`}</div>
-                    ${history.length ? '' : `<button class="btn danger" data-action="personDelete" data-id="${p.id}">${icon('trash')} Delete person</button>`}` : ''}
-            </section>`;
+            return `<div class="person ${open ? 'open' : ''}">
+                <button class="card-head p-head" data-action="personOpen" data-id="${p.id}" aria-expanded="${open}">
+                    <span class="avatar">${esc(initials(p.name))}</span>
+                    <span class="p-name"><b>${esc(p.name)}</b><small>${p.direction === 'owesMe' ? 'Owes you' : 'You owe'}</small></span>
+                    <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span>
+                    <b class="big">${L.money(p.out)}</b>${icon(open ? 'chevDown' : 'chevRight')}
+                </button>
+                ${open ? `<div class="p-panel">
+                    <div class="pane">
+                        <div class="split wrap">${quick.map(([k, label]) => `<button class="btn ${k === quick[0][0] ? 'primary' : ''}" data-action="personForm" data-type="${k}">${label}</button>`).join('')}</div>
+                        ${form ? `<div class="form"><h3>${esc(form.label)}</h3>
+                            <label class="amount small"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(form.amount)}" data-model="people.form.amount" aria-label="Amount"></label>
+                            <div class="grid2"><label>Date<input type="date" max="${today()}" value="${esc(form.date)}" data-model="people.form.date"></label>
+                            <label>${L.TYPES[form.type].sign > 0 ? 'Received into' : 'Paid from'}<select data-model="people.form.accountId">${activeAccounts().filter((a) => a.kind !== 'card').map((a) => `<option value="${a.id}" ${a.id === form.accountId ? 'selected' : ''}>${esc(a.name)} (${L.money(L.accountBalance(a, S.data.entries))})</option>`).join('')}</select></label></div>
+                            <div class="split"><button class="btn" data-action="personFormCancel">Cancel</button><button class="btn primary" data-action="personFormSave">Save</button></div></div>` : ''}
+                        <h3>Status</h3><div class="seg fit">${['Active', 'Settled', 'Bad Debt'].map((x) => `<button class="${x === status ? 'on' : ''}" data-action="personStatus" data-status="${x}">${x}</button>`).join('')}</div>
+                        <div class="grid2"><label>Phone<input type="tel" value="${esc(p.phone || '')}" data-person-field="phone" data-id="${p.id}"></label>
+                        <label>Notes<input type="text" value="${esc(p.notes || '')}" data-person-field="notes" data-id="${p.id}"></label></div>
+                        ${history.length ? '' : `<div><button class="btn ghost danger" data-action="personDelete" data-id="${p.id}">${icon('trash')} Delete person</button></div>`}
+                    </div>
+                    <div class="pane"><h3>History</h3><div class="list">${history.map((e) => entryRow(e, true)).join('') || `<p class="empty">No entries yet.${p.opening ? ` Balance comes from the opening amount of ${L.money(p.opening)}.` : ''}</p>`}</div></div>
+                </div>` : ''}
+            </div>`;
         })
         .join('');
     return `<header class="hero">
@@ -478,14 +491,15 @@ function people() {
         <div class="stats">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}${stat('People', S.data.people.length)}</div>
     </header>
     <main>
-        <div class="toolbar"><div class="seg">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}</div>
-        ${s.adding ? '' : `<button class="btn" data-action="personAddToggle">${icon('plus')} Add person</button>`}</div>
+        <div class="toolbar"><div class="seg fit">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}</div>
+        ${s.adding ? '' : `<button class="btn primary" data-action="personAddToggle">${icon('plus')} Add person</button>`}</div>
         ${s.adding ? `<section class="card form"><h3>Add person</h3>
-            <label>Name<input type="text" id="np-name"></label>
+            <div class="grid3"><label>Name<input type="text" id="np-name"></label>
             <label>${s.view === 'owesMe' ? 'They already owe you (optional)' : 'You already owe them (optional)'}<input type="number" inputmode="decimal" min="0" id="np-opening" placeholder="0"></label>
-            <label>Phone (optional)<input type="tel" id="np-phone"></label>
+            <label>Phone (optional)<input type="tel" id="np-phone"></label></div>
             <div class="split"><button class="btn" data-action="personAddToggle">Cancel</button><button class="btn primary" data-action="personAddSave">Add</button></div></section>` : ''}
-        <div class="cards">${cards || '<p class="empty span">Nobody here yet.</p>'}</div>
+        ${rows ? `<section class="list ptable">${rows}</section>`
+            : `<div class="empty-state">${icon('users')}<b>${s.view === 'owesMe' ? 'Nobody owes you' : 'You owe nobody'}</b><small>Add a person, or record a Lent or Borrowed entry, and they appear here.</small></div>`}
     </main>`;
 }
 
@@ -493,33 +507,39 @@ function accounts() {
     const s = state.accounts;
     const t = L.totals(S.data);
     const list = sortedAccounts().filter((a) => s.showClosed || a.active !== false);
-    const cards = list
-        .map((a) => {
-            const bal = L.accountBalance(a, S.data.entries);
-            const owed = Math.max(0, -bal);
-            const used = a.kind === 'card' && a.limit ? Math.min(100, Math.round((owed / a.limit) * 100)) : 0;
-            const meta = [L.ACCOUNT_KINDS[a.kind], a.last4 ? `•••• ${esc(a.last4)}` : '', a.kind === 'card' && a.dueDay ? `Bill due on ${a.dueDay}` : '', a.isDefault ? 'Default' : '', a.active === false ? 'Closed' : ''].filter(Boolean).join(' · ');
-            const paying = s.pay && s.pay.cardId === a.id;
-            return `<section class="card ${paying ? 'open span' : ''}">
-                <div class="card-head"><span class="with-icon"><span class="row-icon">${icon(KIND_ICON[a.kind])}</span><span><b>${esc(a.name)}</b><small>${meta}</small></span></span><b class="big">${a.kind === 'card' ? `${L.money(owed)} owed` : L.money(bal)}</b></div>
-                ${a.kind === 'card' && a.limit ? `<div class="bar"><i class="${used >= 90 ? 'red' : used >= 70 ? 'orange' : ''}" style="width:${used}%"></i></div><small>${L.money(a.limit - owed)} left of ${L.money(a.limit)}</small>` : ''}
-                <div class="split wrap">
-                    ${a.kind === 'card' && owed > 0 && a.active !== false ? `<button class="btn primary" data-action="payOpen" data-id="${a.id}">Pay bill</button>` : ''}
-                    <button class="btn" data-action="accountEdit" data-id="${a.id}">Edit</button>
-                    ${a.active === false ? `<button class="btn" data-action="accountReopen" data-id="${a.id}">Reopen</button>` : a.kind === 'cash' ? '' : `<button class="btn danger" data-action="accountRemove" data-id="${a.id}">Remove</button>`}
-                </div>
-                ${paying ? payForm(a, owed) : ''}
-            </section>`;
-        })
-        .join('');
+    const row = (a) => {
+        const bal = L.accountBalance(a, S.data.entries);
+        const owed = Math.max(0, -bal);
+        const isCard = a.kind === 'card';
+        const used = isCard && a.limit ? Math.min(100, Math.round((owed / a.limit) * 100)) : 0;
+        const meta = [a.last4 ? `•••• ${esc(a.last4)}` : '', isCard && a.dueDay ? `Bill due on ${a.dueDay}` : '', a.isDefault ? 'Default' : '', a.active === false ? 'Closed' : ''].filter(Boolean).join(' · ') || L.ACCOUNT_KINDS[a.kind];
+        const paying = s.pay && s.pay.cardId === a.id;
+        return `<div class="acct-row ${paying ? 'open' : ''}">
+            <div class="a-name"><span class="row-icon">${icon(KIND_ICON[a.kind])}</span><span><b>${esc(a.name)}</b><small>${meta}</small></span></div>
+            <div class="a-detail">${isCard && a.limit ? `<div class="bar"><i class="${used >= 90 ? 'red' : used >= 70 ? 'orange' : ''}" style="width:${used}%"></i></div><small>${L.money(a.limit - owed)} left of ${L.money(a.limit)}</small>` : ''}</div>
+            <div class="a-bal"><b class="big">${L.money(isCard ? owed : bal)}</b><small>${isCard ? 'owed' : 'balance'}</small></div>
+            <div class="a-actions">
+                ${isCard && owed > 0 && a.active !== false ? `<button class="btn primary" data-action="payOpen" data-id="${a.id}">Pay bill</button>` : ''}
+                <button class="btn" data-action="accountEdit" data-id="${a.id}">Edit</button>
+                ${a.active === false ? `<button class="btn" data-action="accountReopen" data-id="${a.id}">Reopen</button>` : a.kind === 'cash' ? '' : `<button class="btn ghost danger" data-action="accountRemove" data-id="${a.id}">Remove</button>`}
+            </div>
+            ${paying ? `<div class="a-panel">${payForm(a, owed)}</div>` : ''}
+        </div>`;
+    };
+    const group = (title, kinds) => {
+        const items = list.filter((a) => kinds.includes(a.kind));
+        return items.length ? `<h3>${title}</h3><section class="list atable">${items.map(row).join('')}</section>` : '';
+    };
     return `<header class="hero">
         <small class="eyebrow">My accounts</small><h1>Banks, cash and credit cards</h1>
         <div class="stats">${stat('Bank + cash', L.money(t.inHand))}${stat('Card owed', L.money(t.cardOwed))}${stat('Net balance', L.money(t.net))}</div>
     </header>
     <main>
-        ${s.form ? accountForm() : `<div class="split wrap"><button class="btn primary" data-action="accountNew" data-kind="bank">＋ Bank account</button><button class="btn" data-action="accountNew" data-kind="card">＋ Credit card</button><button class="btn" data-action="accountNew" data-kind="wallet">＋ Wallet</button></div>`}
-        <div class="cards">${cards}</div>
-        ${S.data.accounts.some((a) => a.active === false) ? `<button class="link-btn" data-action="accountsClosed">${s.showClosed ? 'Hide closed accounts' : 'Show closed accounts'}</button>` : ''}
+        ${s.form ? accountForm() : `<div class="toolbar"><div class="split wrap"><button class="btn primary" data-action="accountNew" data-kind="bank">＋ Bank account</button><button class="btn" data-action="accountNew" data-kind="card">＋ Credit card</button><button class="btn" data-action="accountNew" data-kind="wallet">＋ Wallet</button></div>
+            ${S.data.accounts.some((a) => a.active === false) ? `<button class="link-btn" data-action="accountsClosed">${s.showClosed ? 'Hide closed accounts' : 'Show closed accounts'}</button>` : ''}</div>`}
+        ${group('Cash and bank', ['cash', 'bank'])}
+        ${group('Wallets', ['wallet'])}
+        ${group('Credit cards', ['card'])}
     </main>`;
 }
 function accountForm() {

@@ -75,7 +75,7 @@ with sync_playwright() as p:
     check('people: to receive 500', money(stat('To receive')) == 500, stat('To receive'))
     pg.locator('.person', has_text='Friend A').locator('.card-head').click()
     pg.get_by_role('button', name='Got money back').click()
-    pg.locator('.person input[type=number]').fill('200'); pg.locator('.person').get_by_role('button', name='Save').click(); time.sleep(0.3)
+    pg.locator('.person .amount input').fill('200'); pg.locator('.person').get_by_role('button', name='Save').click(); time.sleep(0.3)
     check('people: to receive 300', money(stat('To receive')) == 300, stat('To receive'))
     shot('3_people')
 
@@ -175,7 +175,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('INR'); time.sleep(0.4)
     pg.goto(URL + '#accounts'); pg.get_by_role('button', name='＋ Bank account').click()
     pg.get_by_label('Name').fill('Savings'); pg.get_by_label('Opening balance').fill('1234567'); pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
-    check('rupees use lakh grouping', '₹12,34,567' in pg.locator('.card', has_text='Savings').inner_text(), pg.locator('.card', has_text='Savings').inner_text()[:60])
+    check('rupees use lakh grouping', '₹12,34,567' in pg.locator('.acct-row', has_text='Savings').inner_text(), pg.locator('.acct-row', has_text='Savings').inner_text()[:60])
 
     # Desktop width: side menu instead of the bottom bar
     pg.set_viewport_size({'width': 1680, 'height': 950}); pg.goto(URL + '#add'); time.sleep(0.3); shot('w_add')

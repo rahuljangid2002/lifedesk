@@ -1,49 +1,51 @@
 /* LifeDesk. Phone first; from 900px a side menu and multi-column pages. Light and dark follow the device. */
 :root {
     color-scheme: light dark;
-    --bg: #f3f5fb;
+    --bg: #f4f5f7;
     --surface: #ffffff;
-    --surface-2: #f1f4fa;
-    --border: #e2e7f0;
-    --text: #0f172a;
-    --muted: #5b6780;
-    --brand: #4f46e5;
-    --brand-ink: #4338ca;
-    --brand-soft: #eef0ff;
+    --surface-2: #f2f4f7;
+    --border: #e3e6eb;
+    --text: #101828;
+    --muted: #667085;
+    --brand: #2563eb;
+    --brand-ink: #1d4ed8;
+    --brand-soft: #eaf1ff;
     --on-brand: #ffffff;
-    --hero-a: #312e81;
-    --hero-b: #4f46e5;
-    --green: #15803d;
-    --orange: #c2410c;
-    --red: #b91c1c;
-    --warn-bg: #fff7e0;
-    --warn-border: #f1d58a;
-    --warn-text: #6b4a00;
-    --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
-    --radius: 1rem;
+    --hero-a: #0b1324;
+    --hero-b: #1b2a4a;
+    --green: #067647;
+    --orange: #b54708;
+    --red: #b42318;
+    --warn-bg: #fffaeb;
+    --warn-border: #fedf89;
+    --warn-text: #7a2e0e;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+    --shadow-up: 0 1px 3px rgba(16, 24, 40, 0.08), 0 8px 20px rgba(16, 24, 40, 0.06);
+    --radius: 0.875rem;
     --tab-h: 4rem;
 }
 @media (prefers-color-scheme: dark) {
     :root {
-        --bg: #0b1020;
-        --surface: #141a2e;
-        --surface-2: #1c2440;
-        --border: #2a3558;
-        --text: #e9edf9;
-        --muted: #a3aecb;
-        --brand: #8b93ff;
-        --brand-ink: #a9afff;
-        --brand-soft: #232b55;
-        --on-brand: #0b1020;
-        --hero-a: #1e1b4b;
-        --hero-b: #4338ca;
-        --green: #4ade80;
-        --orange: #fb923c;
-        --red: #f87171;
-        --warn-bg: #3a2e0c;
-        --warn-border: #6b5413;
-        --warn-text: #fde9a8;
-        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+        --bg: #0b0f17;
+        --surface: #131926;
+        --surface-2: #1b2333;
+        --border: #283246;
+        --text: #eef1f6;
+        --muted: #98a2b3;
+        --brand: #3b82f6;
+        --brand-ink: #93c5fd;
+        --brand-soft: #172554;
+        --on-brand: #ffffff;
+        --hero-a: #0f172a;
+        --hero-b: #1e3a8a;
+        --green: #47cd89;
+        --orange: #fdb022;
+        --red: #f97066;
+        --warn-bg: #3b2a08;
+        --warn-border: #7a5a12;
+        --warn-text: #fedf89;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        --shadow-up: 0 1px 3px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.35);
     }
 }
 * {
@@ -215,6 +217,10 @@ main {
     background: var(--surface);
     color: inherit;
     box-shadow: var(--shadow);
+}
+.card.link:hover,
+.tool:hover {
+    box-shadow: var(--shadow-up);
 }
 .card.open {
     border-color: var(--brand);
@@ -429,7 +435,7 @@ button.card-head {
     width: 3rem;
     height: 3rem;
     border-radius: 0.9rem;
-    background: linear-gradient(135deg, var(--hero-a), var(--hero-b));
+    background: linear-gradient(135deg, var(--hero-b), var(--brand));
     color: #fff;
     display: flex;
     align-items: center;
@@ -805,8 +811,12 @@ input[type='number']::-webkit-outer-spin-button {
 }
 .seg button.on {
     background: var(--surface);
-    color: var(--brand-ink);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+.seg.fit {
+    display: inline-grid;
+    align-self: flex-start;
 }
 .toolbar {
     display: flex;
@@ -819,6 +829,10 @@ input[type='number']::-webkit-outer-spin-button {
     flex: 1;
     min-width: 12rem;
 }
+.toolbar .seg.fit {
+    flex: none;
+    min-width: 14rem;
+}
 
 /* ---------- buttons ---------- */
 .btn {
@@ -830,11 +844,11 @@ input[type='number']::-webkit-outer-spin-button {
     border-radius: 0.8rem;
     background: var(--surface);
     padding: 0.55rem 0.95rem;
-    font-weight: 700;
+    font-weight: 600;
     font-size: 0.86rem;
-    color: var(--brand-ink);
+    color: var(--text);
     cursor: pointer;
-    min-height: 2.75rem; /* comfortable touch target */
+    min-height: 2.6rem; /* comfortable touch target */
     transition: transform 0.08s ease, background 0.15s ease;
 }
 .btn:active,
@@ -855,8 +869,18 @@ input[type='number']::-webkit-outer-spin-button {
     border-color: var(--brand);
     color: var(--on-brand);
 }
+.btn:hover {
+    background: var(--surface-2);
+}
+.btn.primary:hover {
+    background: var(--brand-ink);
+}
 .btn.danger {
     color: var(--red);
+}
+.btn.ghost {
+    border-color: transparent;
+    background: transparent;
 }
 .btn.on,
 .btn:disabled {
@@ -1031,7 +1055,7 @@ input[type='number']::-webkit-outer-spin-button {
     height: 2.9rem;
     border-radius: 50%;
     margin-top: -1.45rem;
-    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
 }
 
 /* ---------- toast, login ---------- */
@@ -1075,12 +1099,12 @@ input[type='number']::-webkit-outer-spin-button {
     width: 4.5rem;
     height: 4.5rem;
     border-radius: 1.3rem;
-    background: linear-gradient(135deg, var(--hero-a), var(--hero-b));
+    background: linear-gradient(135deg, var(--hero-b), var(--brand));
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 30px rgba(79, 70, 229, 0.35);
+    box-shadow: 0 10px 30px rgba(16, 24, 40, 0.25);
 }
 .logo .ic {
     width: 2.4rem;
@@ -1234,13 +1258,18 @@ input[type='number']::-webkit-outer-spin-button {
         padding: 1.25rem 0 0;
         gap: 1rem;
     }
-    main.narrow {
-        max-width: 52rem;
-    }
     main.dash {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: start;
+        align-items: stretch;
+    }
+    main.dash > .card,
+    main.dash > .stack > .card {
+        height: 100%;
+    }
+    main.dash > .stack {
+        display: grid;
+        grid-auto-rows: 1fr;
     }
     main.two {
         display: grid;
@@ -1427,4 +1456,200 @@ input.code {
 .login.limit-hit .btn[data-action='google'] {
     border-color: var(--brand);
     box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* ---------- aligned lists: accounts and people ---------- */
+.grid3 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.6rem;
+}
+.acct-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name bal' 'detail detail' 'actions actions' 'panel panel';
+    gap: 0.6rem 0.75rem;
+    align-items: center;
+    padding: 0.85rem 0.9rem;
+    border-top: 1px solid var(--border);
+}
+.acct-row:first-child,
+.person:first-child {
+    border-top: 0;
+}
+.a-name {
+    grid-area: name;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+}
+.a-name > span:last-child,
+.p-name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    text-align: left;
+}
+.a-name b,
+.p-name b {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.a-detail {
+    grid-area: detail;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+}
+.a-detail:empty {
+    display: none;
+}
+.a-bal {
+    grid-area: bal;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+.a-actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.a-panel {
+    grid-area: panel;
+}
+.acct-row.open,
+.person.open {
+    background: var(--surface-2);
+}
+.person {
+    border-top: 1px solid var(--border);
+}
+.p-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'avatar name amount chev' 'avatar status amount chev';
+    align-items: center;
+    column-gap: 0.75rem;
+    width: 100%;
+    padding: 0.8rem 0.9rem;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+    text-align: left;
+}
+.p-head .avatar {
+    grid-area: avatar;
+}
+.p-head .p-name {
+    grid-area: name;
+}
+.p-head .badge {
+    grid-area: status;
+    font-size: 0.74rem;
+}
+.p-head .p-name small {
+    display: none;
+}
+.p-head .big {
+    grid-area: amount;
+}
+.p-head > .ic {
+    grid-area: chev;
+    color: var(--muted);
+}
+.avatar {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.p-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.25rem 0.9rem 1rem;
+}
+.p-panel .list {
+    box-shadow: none;
+}
+/* ---------- daily filters ---------- */
+.filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+.filters .seg,
+.filters input {
+    grid-column: 1 / -1;
+}
+.dates {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.6rem;
+}
+.dates label {
+    width: 10.5rem;
+}
+@media (min-width: 900px) {
+    .grid3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .acct-row {
+        grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(8rem, 2fr) 17rem;
+        grid-template-areas: 'name detail bal actions' 'panel panel panel panel';
+        gap: 0.75rem 1.5rem;
+        padding: 0.85rem 1.1rem;
+        min-height: 4.4rem;
+    }
+    .a-detail:empty {
+        display: block;
+    }
+    .a-actions {
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+    }
+    .a-panel {
+        max-width: 32rem;
+    }
+    .p-head {
+        grid-template-columns: auto minmax(0, 4fr) minmax(0, 3fr) minmax(8rem, 2fr) auto;
+        grid-template-areas: 'avatar name status amount chev';
+        column-gap: 1.25rem;
+        padding: 0.85rem 1.1rem;
+    }
+    .p-head .p-name small {
+        display: block;
+    }
+    .p-head .big {
+        text-align: right;
+    }
+    .p-panel {
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        gap: 1.5rem;
+        padding: 0.5rem 1.1rem 1.25rem;
+    }
+    .filters {
+        grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr);
+        align-items: center;
+    }
+    .filters .seg,
+    .filters input {
+        grid-column: auto;
+    }
+    .filters .seg {
+        min-width: 20rem;
+    }
 }

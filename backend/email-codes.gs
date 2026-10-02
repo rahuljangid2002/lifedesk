@@ -25,7 +25,7 @@ const EMAIL_TEXT = {
   safety: 'If you did not ask for this code, you can ignore this email. Nobody can create the account without it. Never share this code with anyone; {app} will never ask you for it.',
   footer: '{app} – your everyday desk for money, budget and reminders.'
 };
-const EMAIL_COLOURS = { brandDark: '#312e81', brand: '#4f46e5', text: '#0f172a', muted: '#5b6780', codeBg: '#eef0ff', page: '#f3f5fb' };
+const EMAIL_COLOURS = { brandDark: '#0b1324', brand: '#1b2a4a', text: '#101828', muted: '#667085', codeBg: '#eaf1ff', page: '#f4f5f7' };
 
 const CODE_MINUTES = 10; // a code works for this long
 const MAX_TRIES = 5; // wrong guesses before a new code is needed
