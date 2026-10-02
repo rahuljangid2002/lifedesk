@@ -34,6 +34,25 @@ const categoryName = (id) => (byId(S.data.categories, id) || {}).name || '';
 const personName = (id) => (byId(S.data.people, id) || {}).name || '';
 const KIND_ICON = { bank: 'bank', wallet: 'wallet', cash: 'cash', card: 'card' };
 
+/** Plain words for the sign-in errors people can actually hit. */
+const AUTH_ERRORS = {
+    'auth/operation-not-allowed': 'This sign-in method is not switched on yet. Please use the other one, or tell the app owner.',
+    'auth/unauthorized-domain': 'Sign-in is not allowed from this web address yet. The app owner needs to add it in Firebase.',
+    'auth/unauthorized-continue-uri': 'Sign-in is not allowed from this web address yet. The app owner needs to add it in Firebase.',
+    'auth/invalid-email': 'That email address does not look right. Please check it.',
+    'auth/popup-blocked': 'The browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
+    'auth/popup-closed-by-user': 'The Google sign-in window was closed before finishing. Try again.',
+    'auth/cancelled-popup-request': 'The Google sign-in window was closed before finishing. Try again.',
+    'auth/network-request-failed': 'No internet connection. Check your network and try again.',
+    'auth/too-many-requests': 'Too many attempts. Wait a few minutes and try again.',
+    'auth/quota-exceeded': 'Today\'s limit for sign-in emails is used up. Use Google sign-in, or try tomorrow.',
+    'permission-denied': 'You do not have access to this data. Sign out and sign in again.',
+    unavailable: 'Cannot reach the server. Your changes are kept and will be sent when you are back online.'
+};
+function errorText(e) {
+    return AUTH_ERRORS[e && e.code] || (e && e.message) || 'Something went wrong.';
+}
+
 function toast(message, kind = 'ok') {
     state.toast = { message, kind };
     render();
@@ -913,7 +932,7 @@ app.addEventListener('click', async (event) => {
         await actions[el.dataset.action](el, event);
     } catch (e) {
         console.error(e);
-        toast(e.message || 'Something went wrong.', 'warn');
+        toast(errorText(e), 'warn');
     }
 });
 
@@ -971,7 +990,7 @@ app.addEventListener('change', async (event) => {
         }
     } catch (e) {
         console.error(e);
-        toast(e.message || 'Something went wrong.', 'warn');
+        toast(errorText(e), 'warn');
     }
 });
 
