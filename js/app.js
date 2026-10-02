@@ -1227,6 +1227,12 @@ window.addEventListener('hashchange', () => {
 state.route = window.location.hash.slice(1) || 'hub';
 render();
 S.init((status) => {
+    // Signed out (or not yet verified): forget the screen that was open, so the next sign-in starts on All tools.
+    // A page reload while signed in never passes through here, so it stays on the screen it was on.
+    if ((status === 'signedOut' || status === 'unverified') && state.route !== 'hub') {
+        state.route = 'hub';
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
     state.status = status;
     render();
 }).catch((e) => {

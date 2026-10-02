@@ -60,7 +60,7 @@ with sync_playwright() as p:
     check('daily limit: notice stays on the form and points to Google', 'test version' in text and 'Continue with Google' in text and lp.locator('input.code').count() == 0, text[:60])
     lp.screenshot(path='tests/out/12_limit.png'); lim.close()
 
-    pg.goto(URL); pg.wait_for_selector('.login-form')
+    pg.goto(URL + '#more'); pg.wait_for_selector('.login-form')  # as if the user had signed out from the Account screen
 
     pg.get_by_label('Email').fill(EMAIL); pg.locator('[data-model="login.password"]').fill('wrong-password')
     pg.get_by_role('button', name='Sign in', exact=True).click(); pg.wait_for_selector('.toast.warn', timeout=20000)
@@ -85,6 +85,7 @@ with sync_playwright() as p:
     check('unverified account lands on "Verify your email", not in the app', pg.locator('.tool').count() == 0 and EMAIL in pg.locator('.login-form').inner_text())
     pg.screenshot(path='tests/out/11_verify.png')
 
+    check('address reset: the next sign-in starts on All tools', '#' not in pg.url, pg.url)
     answers.append('DELETE')
     pg.get_by_role('button', name='Delete this account').click()
     pg.wait_for_selector('h2:has-text("Sign in")', timeout=30000)
