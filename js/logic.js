@@ -7,8 +7,10 @@ export const TYPES = {
     lent: { label: 'Lent / Given', short: 'Lent', icon: 'lent', sign: -1, hint: 'Money you gave to someone who will pay it back.' },
     gotback: { label: 'Got Back', short: 'Got back', icon: 'gotback', sign: 1, hint: 'Someone returned money they owed you.' },
     borrowed: { label: 'Borrowed', short: 'Borrowed', icon: 'borrowed', sign: 1, hint: 'Money you took from someone and will pay back.' },
-    repaid: { label: 'Repaid', short: 'Repaid', icon: 'repaid', sign: -1, hint: 'You paid back someone you owe.' }
+    repaid: { label: 'Repaid', short: 'Repaid', icon: 'repaid', sign: -1, hint: 'You paid back someone you owe.' },
+    asset: { label: 'Asset purchase', short: 'Asset', icon: 'asset', sign: -1, hint: 'Something valuable you bought: a vehicle, gadget, gold or property. It is added to My assets.' }
 };
+export const ASSET_TYPES = ['Vehicle', 'Electronics', 'Property', 'Gold & Jewellery', 'Furniture & Appliances', 'Investment', 'Other'];
 export const PERSON_TYPES = ['lent', 'gotback', 'borrowed', 'repaid'];
 export const ACCOUNT_KINDS = { bank: 'Bank', wallet: 'Wallet', cash: 'Cash', card: 'Credit card' };
 
@@ -177,7 +179,17 @@ export function loanStatus(loan, entries, today) {
         }
         due.push({ number: k + 1, date });
     }
-    return { paid, left, months, outstanding: left * num(loan.emi), next: left ? addMonthsToDate(loan.firstDate, paid) : null, due };
+    // Split of what was paid into principal and interest, from the loan's own schedule (reducing balance).
+    const emi = num(loan.emi);
+    const financed = num(loan.financed);
+    const totalInterest = Math.max(0, emi * months - financed);
+    const r = impliedRate(financed, emi, months) / 1200;
+    const k = Math.min(paid, months);
+    const principalLeft = left === 0 ? 0 : r > 0 ? Math.max(0, financed * (1 + r) ** k - (emi * ((1 + r) ** k - 1)) / r) : Math.max(0, financed - emi * k);
+    const interestPaid = Math.min(totalInterest, Math.max(0, Math.round((emi * k - (financed - principalLeft)) * 100) / 100));
+    return { paid, left, months, outstanding: left * emi, next: left ? addMonthsToDate(loan.firstDate, paid) : null, due,
+        principalLeft: Math.round(principalLeft * 100) / 100, principalPaid: Math.round((financed - principalLeft) * 100) / 100,
+        interestPaid, interestLeft: Math.round((totalInterest - interestPaid) * 100) / 100, totalInterest };
 }
 
 /** How an entry moves one account: + money in, − money out, 0 not involved. */

@@ -38,7 +38,11 @@ there is a side menu and pages use two or three columns. Light and dark follow t
 rate calculated when left empty). Loans are listed under People & Loans → Loans; EMIs due this month appear on
 Add Entry and Money home with a Pay button. Collection `loans`.
 
-Not built yet: changing an EMI plan, assets and the Loans / Assets dashboards,
+**Assets:** Add Entry → Asset creates the asset (optionally on EMI, which links its loan); My assets lists price paid,
+worth now, loan left, interest paid and still to pay. Dashboards → Loans & assets; reports Asset register, Loan summary,
+EMI payments. Collection `assets`.
+
+Not built yet: changing an EMI plan,
 "paid by someone", recurring bills, month-end summary email, receipts.
 
 ## Two modes

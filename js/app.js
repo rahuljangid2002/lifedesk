@@ -23,6 +23,7 @@ const state = {
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
+    assets: { form: null },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
     login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
@@ -122,7 +123,10 @@ function blankEntry(keep) {
         emiFirst: L.addMonthsToDate(today(), 1),
         emiDown: '',
         emiRate: '',
-        emiLender: ''
+        emiRateTouched: false,
+        emiLender: '',
+        assetType: 'Electronics',
+        assetValue: ''
     };
 }
 
@@ -138,7 +142,7 @@ function emiSums(f) {
     const months = Math.round(Number(f.emiMonths) || 0);
     const financed = price - down;
     const calculated = L.impliedRate(financed, emi, months);
-    const typed = f.emiRate !== '' && f.emiRate !== null;
+    const typed = !!f.emiRateTouched && f.emiRate !== '' && f.emiRate !== null;
     return { price, down, emi, months, financed, total: down + emi * months, interest: emi * months - financed, calculated, typed, rate: typed ? Number(f.emiRate) : calculated };
 }
 function dueList() {
@@ -162,16 +166,19 @@ function emiSummary(f) {
     return `<div class="banner"><div><b>Financed ${L.money(s.financed)} · ${s.months} × ${L.money(s.emi)}</b><small>Total to pay ${L.money(s.total)} · interest ${L.money(Math.max(0, s.interest))} · ${s.rate}% a year${s.typed ? '' : ' (calculated)'}</small></div></div>`;
 }
 function emiBlock(f) {
-    if (f.type !== 'expense' || f.id) {
+    if ((f.type !== 'expense' && f.type !== 'asset') || f.id) {
         return '';
     }
+    const m = emiSums(f);
+    const ready = m.price > 0 && m.emi > 0 && m.months > 0;
     const field = (label, model, attrs) => `<label>${label}<input ${attrs} value="${esc(f[model])}" data-model="add.${model}" data-then="emi"></label>`;
     return `<label class="check"><input type="checkbox" data-action="emiToggle" ${f.onEmi ? 'checked' : ''}> Bought on EMI / finance</label>
         ${f.onEmi ? `<div class="form"><small>Enter the full price above. Only the down payment is spent today; each EMI is recorded when you pay it.</small>
             <div class="grid2">${field('EMI per month', 'emiAmount', 'type="number" inputmode="decimal" min="0" step="0.01"')}${field('Number of EMIs', 'emiMonths', 'type="number" inputmode="numeric" min="1" step="1"')}</div>
             <div class="grid2">${field('First EMI date', 'emiFirst', 'type="date"')}${field('Down payment (optional)', 'emiDown', 'type="number" inputmode="decimal" min="0" step="0.01" placeholder="0"')}</div>
-            <div class="grid2">${field('Interest rate, % a year', 'emiRate', 'type="number" inputmode="decimal" min="0" step="0.01" placeholder="calculated if empty"')}${field('Financed by (optional)', 'emiLender', 'type="text" placeholder="e.g. bank or store"')}</div>
-            <small>Leave the rate empty and it is worked out from the price, down payment, EMI and number of EMIs (reducing-balance method: financed = EMI × (1 − (1 + r)<sup>−n</sup>) ÷ r, r per month). A flat rate quoted by a store is lower than this.</small>
+            <div class="grid2"><label><span>Interest rate, % a year <span class="pill" id="emi-rate-pill" ${m.typed ? 'hidden' : ''}>Calculated</span></span><input id="emi-rate" type="number" inputmode="decimal" min="0" step="0.01" placeholder="fills in as you type" value="${esc(m.typed ? f.emiRate : ready ? m.calculated : '')}" data-model="add.emiRate" data-then="emi"></label>
+            ${field('Financed by (optional)', 'emiLender', 'type="text" placeholder="e.g. bank or store"')}</div>
+            <small>The rate is worked out as you type, from the price, down payment, EMI and number of EMIs (reducing-balance method: financed = EMI × (1 − (1 + r)<sup>−n</sup>) ÷ r, r per month). Type over it to use your own; clear it to go back to the calculated one. A flat rate quoted by a store is lower than this.</small>
             <div id="emi-summary">${emiSummary(f)}</div>
         </div>` : ''}`;
 }
@@ -425,9 +432,12 @@ function addEntry() {
             ${needsCategory ? `<label>Category<select data-model="add.categoryId" data-then="touchCategory" id="add-category"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
             ${needsPerson ? `<label>${direction === 'owesMe' ? 'Person (owes you)' : 'Person (you owe)'}<select data-model="add.personId" data-rerender><option value="">Choose a person</option>${people.map((p) => `<option value="${p.id}" ${p.id === f.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.personId === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
                 ${f.personId === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPerson)}" data-model="add.newPerson"></label>` : ''}` : ''}
+            ${f.type === 'asset' && !editing ? `<div class="grid2"><label>Kind of asset<select data-model="add.assetType">${L.ASSET_TYPES.map((x) => `<option ${x === f.assetType ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+                <label>What it is worth now (optional)<input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(f.assetValue)}" data-model="add.assetValue" placeholder="same as the price"></label></div>
+                <small>The description is used as the asset's name in My assets.</small>` : ''}
             ${emiBlock(f)}
             <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
-            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && f.type === 'expense' ? 'Save EMI purchase' : `Save ${L.TYPES[f.type].label}`}</button>
+            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && (f.type === 'expense' || f.type === 'asset') ? 'Save EMI purchase' : `Save ${L.TYPES[f.type].label}`}</button>
             ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
         ${editing ? '' : `<div class="pane"><h3>Recent entries</h3>${recent.length
@@ -530,12 +540,48 @@ function budget() {
     </main>`;
 }
 
+/** My assets: what you own, what it cost, what it is worth, and the loan on it. */
+function assetsView() {
+    const st = state.assets;
+    const rows = S.data.assets.map((a) => {
+        const loan = a.loanId ? loanRows().find((l) => l.id === a.loanId) : null;
+        return { ...a, loan, net: Number(a.value) - (loan ? loan.principalLeft : 0) };
+    }).sort((x, y) => Number(y.value) - Number(x.value));
+    const owned = rows.filter((a) => a.status !== 'Sold');
+    const sum = (list, fn) => list.reduce((t, x) => t + fn(x), 0);
+    const f = st.form;
+    const list = rows.map((a) => `<div class="acct-row">
+        <div class="a-name"><span class="row-icon">${icon('asset')}</span><span><b>${esc(a.name)}</b><small>${[esc(a.type), a.boughtOn ? `bought ${longDate(a.boughtOn)}` : '', a.status === 'Sold' ? 'Sold' : ''].filter(Boolean).join(' · ')}</small></span></div>
+        <div class="a-detail"><small>Price paid ${L.money(a.price)}${a.loan ? ` · loan left ${L.money(a.loan.principalLeft)} (${a.loan.left} EMIs)` : ' · no loan'}</small>
+            ${a.loan ? `<small>Interest paid ${L.money(a.loan.interestPaid)} · interest still to pay ${L.money(a.loan.interestLeft)}</small>` : ''}</div>
+        <div class="a-bal"><b class="big">${L.money(a.value)}</b><small>worth now</small></div>
+        <div class="a-actions"><button class="btn" data-action="assetEdit" data-id="${a.id}">Edit</button><button class="btn ghost danger" data-action="assetDelete" data-id="${a.id}">Delete</button></div>
+    </div>`).join('');
+    return `<header class="hero">
+        <small class="eyebrow">My assets</small><h1>What you own</h1>
+        <div class="stats">${stat('Worth now', L.money(sum(owned, (a) => Number(a.value))))}${stat('Loans on assets', L.money(sum(owned, (a) => (a.loan ? a.loan.principalLeft : 0))))}${stat('Net value', L.money(sum(owned, (a) => a.net)))}</div>
+    </header>
+    <main>
+        ${f ? `<section class="card form"><h3>${f.id ? 'Edit asset' : 'Add an asset you already own'}</h3>
+            <div class="grid3"><label>Name<input type="text" value="${esc(f.name)}" data-model="assets.form.name"></label>
+            <label>Kind<select data-model="assets.form.type">${L.ASSET_TYPES.map((x) => `<option ${x === f.type ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+            <label>Status<select data-model="assets.form.status">${['Owned', 'Sold'].map((x) => `<option ${x === f.status ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+            <label>Price paid<input type="number" inputmode="decimal" min="0" value="${esc(f.price)}" data-model="assets.form.price"></label>
+            <label>Worth now<input type="number" inputmode="decimal" min="0" value="${esc(f.value)}" data-model="assets.form.value"></label>
+            <label>Bought on<input type="date" max="${today()}" value="${esc(f.boughtOn || '')}" data-model="assets.form.boughtOn"></label></div>
+            <small>Adding an asset here does not take money from an account. To record a purchase, use Add Entry → Asset.</small>
+            <div class="split"><button class="btn" data-action="assetCancel">Cancel</button><button class="btn primary" data-action="assetSave">Save</button></div></section>`
+            : `<div class="toolbar"><div class="split wrap"><a class="btn primary" href="#add">${icon('plus')} Buy an asset</a><button class="btn" data-action="assetNew">Add one I already own</button></div></div>`}
+        ${list ? `<section class="list atable">${list}</section>` : `<div class="empty-state">${icon('asset')}<b>No assets yet</b><small>On Add Entry choose Asset to record a purchase, or add something you already own.</small></div>`}
+    </main>`;
+}
+
 function loansView() {
     const s = state.people;
     const loans = loanRows().sort((a, b) => b.outstanding - a.outstanding);
     const seg = (v, label) => `<button class="${s.view === v ? 'on' : ''}" data-action="peopleView" data-view="${v}">${label}</button>`;
     const rows = loans.map((l) => `<div class="acct-row">
-        <div class="a-name"><span class="row-icon">${icon('repaid')}</span><span><b>${esc(l.name)}</b><small>${[l.lender ? esc(l.lender) : '', `${l.rate}% a year${l.rateCalculated ? ' (calculated)' : ''}`, `financed ${L.money(l.financed)}`].filter(Boolean).join(' · ')}</small></span></div>
+        <div class="a-name"><span class="row-icon">${icon('repaid')}</span><span><b>${esc(l.name)}</b><small>${[l.lender ? esc(l.lender) : '', `${l.rate}% a year${l.rateCalculated ? ' (calculated)' : ''}`, `financed ${L.money(l.financed)}`, `interest paid ${L.money(l.interestPaid)}, to pay ${L.money(l.interestLeft)}`].filter(Boolean).join(' · ')}</small></span></div>
         <div class="a-detail"><div class="bar"><i style="width:${Math.round((l.paid / l.months) * 100)}%"></i></div><small>${l.paid} of ${l.months} EMIs paid · ${l.left ? `next ${longDate(l.next)}` : 'fully paid'}</small></div>
         <div class="a-bal"><b class="big">${L.money(l.outstanding)}</b><small>${l.left} × ${L.money(l.emi)} to pay</small></div>
         <div class="a-actions">${l.left ? `<button class="btn primary" data-action="payEmi" data-id="${l.id}">Pay EMI</button>` : ''}<button class="btn ghost danger" data-action="loanDelete" data-id="${l.id}">Delete</button></div>
@@ -701,7 +747,7 @@ function more() {
             ${currencyChange(f.currency)}
             <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Pick another currency to convert your amounts at today's rate, or to change only the symbol.</small></section>
         <section class="card"><div class="card-head"><h2>Money</h2></div>
-            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a></section>
+            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a><a class="row nav-row" href="#assets">My assets ${icon('chevRight')}</a></section>
         <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
             <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
@@ -720,14 +766,14 @@ function more() {
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub'];
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts']]],
+    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
 
@@ -941,6 +987,36 @@ const actions = {
         state.add.toAccountId = el.dataset.id;
         render();
     },
+    assetNew() {
+        state.assets.form = { id: null, name: '', type: 'Vehicle', status: 'Owned', price: '', value: '', boughtOn: '' };
+        render();
+    },
+    assetEdit(el) {
+        state.assets.form = { ...byId(S.data.assets, el.dataset.id) };
+        render();
+        window.scrollTo(0, 0);
+    },
+    assetCancel() {
+        state.assets.form = null;
+        render();
+    },
+    async assetSave() {
+        const f = state.assets.form;
+        if (!String(f.name).trim()) {
+            return toast('Enter a name.', 'warn');
+        }
+        const price = Number(f.price) || 0;
+        const doc = { ...f, id: f.id || S.newId(), name: String(f.name).trim(), price, value: f.value === '' ? price : Number(f.value) || 0, boughtOn: f.boughtOn || null, loanId: f.loanId || null, createdAt: f.createdAt || Date.now() };
+        state.assets.form = null;
+        await S.save('assets', doc);
+        toast(`${doc.name} saved.`);
+    },
+    async assetDelete(el) {
+        const a = byId(S.data.assets, el.dataset.id);
+        if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
+            await S.remove('assets', a.id);
+        }
+    },
     emiToggle() {
         state.add.onEmi = !state.add.onEmi;
         render();
@@ -951,7 +1027,8 @@ const actions = {
         const problem = !(s.price > 0) ? 'Enter the full price.'
             : !f.accountId ? 'Choose the account the EMIs are paid from.'
             : byId(S.data.accounts, f.accountId).kind === 'card' ? 'Choose a bank, wallet or cash account for the EMIs.'
-            : !f.categoryId ? 'Choose a category.'
+            : f.type === 'expense' && !f.categoryId ? 'Choose a category.'
+            : f.type === 'asset' && !f.description.trim() ? 'Enter what you bought in Description: it becomes the asset name.'
             : !(s.emi > 0) ? 'Enter the EMI per month.'
             : !(s.months >= 1) ? 'Enter the number of EMIs.'
             : !f.emiFirst ? 'Choose the first EMI date.'
@@ -963,11 +1040,15 @@ const actions = {
         }
         const name = f.description.trim() || 'Purchase on EMI';
         const loan = { id: S.newId(), name, lender: f.emiLender.trim(), price: s.price, downPayment: s.down, financed: s.financed, emi: s.emi, months: s.months,
-            firstDate: f.emiFirst, rate: s.rate, rateCalculated: !s.typed, accountId: f.accountId, categoryId: f.categoryId, boughtOn: f.date, createdAt: Date.now() };
+            firstDate: f.emiFirst, rate: s.rate, rateCalculated: !s.typed, accountId: f.accountId, categoryId: f.type === 'expense' ? f.categoryId : null, boughtOn: f.date, assetId: null, createdAt: Date.now() };
         const pairs = [['loans', loan]];
+        if (f.type === 'asset') {
+            loan.assetId = S.newId();
+            pairs.push(['assets', { id: loan.assetId, name, type: f.assetType, price: s.price, value: Number(f.assetValue) || s.price, boughtOn: f.date, loanId: loan.id, status: 'Owned', createdAt: Date.now() }]);
+        }
         if (s.down > 0) {
-            pairs.push(['entries', { id: S.newId(), type: 'expense', amount: s.down, date: f.date, description: `${name} – down payment`, accountId: f.accountId, toAccountId: null,
-                categoryId: f.categoryId, personId: null, notes: f.notes.trim(), loanDown: loan.id, createdAt: Date.now() }]);
+            pairs.push(['entries', { id: S.newId(), type: f.type, amount: s.down, date: f.date, description: `${name} – down payment`, accountId: f.accountId, toAccountId: null,
+                categoryId: loan.categoryId, personId: null, notes: f.notes.trim(), loanDown: loan.id, assetId: loan.assetId, createdAt: Date.now() }]);
         }
         state.add = blankEntry();
         await S.saveMany(pairs);
@@ -993,7 +1074,7 @@ const actions = {
     },
     async saveEntry() {
         const f = state.add;
-        if (f.onEmi && f.type === 'expense' && !f.id) {
+        if (f.onEmi && (f.type === 'expense' || f.type === 'asset') && !f.id) {
             return actions.saveEmi();
         }
         let personId = f.personId;
@@ -1017,8 +1098,19 @@ const actions = {
             categoryId: f.type === 'expense' || f.type === 'income' ? f.categoryId || null : null,
             personId: L.PERSON_TYPES.includes(f.type) ? personId : null,
             notes: f.notes.trim(),
-            createdAt: existing ? existing.createdAt : Date.now()
+            createdAt: existing ? existing.createdAt : Date.now(),
+            // links an edit must keep
+            loanId: existing ? existing.loanId || null : null,
+            loanDown: existing ? existing.loanDown || null : null,
+            assetId: existing ? existing.assetId || null : null
         };
+        if (f.type === 'asset' && !f.id) {
+            if (!f.description.trim()) {
+                return toast('Enter what you bought in Description: it becomes the asset name.', 'warn');
+            }
+            entry.assetId = S.newId();
+            pairs.push(['assets', { id: entry.assetId, name: f.description.trim(), type: f.assetType, price: entry.amount, value: Number(f.assetValue) || entry.amount, boughtOn: f.date, loanId: null, status: 'Owned', createdAt: Date.now() }]);
+        }
         const problem = L.validateEntry(entry, { people: [...S.data.people, ...pairs.map((p) => p[1])] });
         if (problem) {
             return toast(problem, 'warn');
@@ -1479,7 +1571,17 @@ app.addEventListener('input', (event) => {
         }
         const emiBox = document.getElementById('emi-summary');
         if (emiBox && (el.dataset.then === 'emi' || el.dataset.model === 'add.amount')) {
-            emiBox.innerHTML = emiSummary(state.add);
+            const f = state.add;
+            const rateBox = document.getElementById('emi-rate');
+            if (el === rateBox) {
+                f.emiRateTouched = el.value !== ''; // cleared: back to the calculated rate
+            }
+            const m = emiSums(f);
+            if (!m.typed && el !== rateBox) {
+                rateBox.value = m.price > 0 && m.emi > 0 && m.months > 0 ? m.calculated : '';
+            }
+            document.getElementById('emi-rate-pill').hidden = m.typed;
+            emiBox.innerHTML = emiSummary(f);
         }
         if (el.dataset.then === 'touchCategory') {
             state.add.categoryTouched = true;

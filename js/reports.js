@@ -1,5 +1,5 @@
 // Figures for the dashboards and reports. Pure calculations over the user's data: no screen code here.
-import { TYPES, accountBalance, addMonths, budgetRows, isoDate, monthEnd, monthKey, monthLabel, monthSummary, personOutstanding, totals } from './logic.js';
+import { TYPES, accountBalance, addMonths, budgetRows, isoDate, loanStatus, monthEnd, monthKey, monthLabel, monthSummary, personOutstanding, totals } from './logic.js';
 
 const num = (v) => Number(v) || 0;
 const inRange = (e, from, to) => e.date >= from && e.date <= to;
@@ -100,6 +100,19 @@ export function accountRows(data) {
             const bal = accountBalance(a, data.entries);
             return { id: a.id, label: a.name, kind: a.kind, value: a.kind === 'card' ? Math.max(0, -bal) : bal, limit: num(a.limit) };
         });
+}
+
+/** Every loan with where it stands today. */
+export function loanRows(data, today) {
+    return (data.loans || []).map((l) => ({ ...l, ...loanStatus(l, data.entries, today) }));
+}
+/** Every asset with its loan (if any) and its value net of the loan principal still owed. */
+export function assetRows(data, today) {
+    const loans = loanRows(data, today);
+    return (data.assets || []).map((a) => {
+        const loan = loans.find((l) => l.id === a.loanId) || null;
+        return { ...a, price: num(a.price), value: num(a.value), loan, loanLeft: loan ? loan.principalLeft : 0, net: num(a.value) - (loan ? loan.principalLeft : 0) };
+    });
 }
 
 // ---------- reports ----------
@@ -235,6 +248,32 @@ export const REPORTS = [
         }
     },
     {
+        id: 'asset-register', name: 'Asset register', period: 'none', about: 'Everything you own: price paid, what it is worth now, the loan on it and the interest.',
+        build(data, p) {
+            const rows = assetRows(data, p.today).sort((a, b) => b.value - a.value)
+                .map((a) => [a.name, a.type, a.status || 'Owned', a.boughtOn || null, a.price, a.value, a.value - a.price, a.loanLeft, a.net, a.loan ? a.loan.interestPaid : null, a.loan ? a.loan.interestLeft : null]);
+            return { columns: [text('Asset'), text('Kind'), text('Status'), { label: 'Bought', kind: 'date' }, money('Price paid'), money('Worth now'), money('Gain / loss'), money('Loan left'), money('Net value'), money('Interest paid'), money('Interest to pay')],
+                rows, total: ['Total', '', '', null, sumCol(rows, 4), sumCol(rows, 5), sumCol(rows, 6), sumCol(rows, 7), sumCol(rows, 8), sumCol(rows, 9), sumCol(rows, 10)] };
+        }
+    },
+    {
+        id: 'loan-summary', name: 'Loan summary', period: 'none', about: 'Every EMI loan: what was financed, what is paid, and the principal and interest still to pay.',
+        build(data, p) {
+            const rows = loanRows(data, p.today).sort((a, b) => b.outstanding - a.outstanding)
+                .map((l) => [l.name, l.lender || '', l.rate / 100, num(l.financed), num(l.emi), `${l.paid} of ${l.months}`, l.principalPaid, l.interestPaid, l.principalLeft, l.interestLeft, l.outstanding]);
+            return { columns: [text('Loan'), text('Financed by'), { label: 'Rate a year', kind: 'rate' }, money('Financed'), money('EMI'), text('EMIs paid'), money('Principal paid'), money('Interest paid'), money('Principal left'), money('Interest to pay'), money('Still to pay')],
+                rows, total: ['Total', '', null, sumCol(rows, 3), sumCol(rows, 4), '', sumCol(rows, 6), sumCol(rows, 7), sumCol(rows, 8), sumCol(rows, 9), sumCol(rows, 10)] };
+        }
+    },
+    {
+        id: 'emi-payments', name: 'EMI payments', period: 'range', about: 'Every EMI paid in the period, by loan.',
+        build(data, p) {
+            const rows = data.entries.filter((e) => e.loanId && inRange(e, p.from, p.to)).sort((a, b) => (a.date < b.date ? 1 : -1))
+                .map((e) => [e.date, nameOf(data.loans || [], e.loanId, 'Deleted loan'), e.description, nameOf(data.accounts, e.accountId, ''), num(e.amount)]);
+            return { columns: [{ label: 'Date', kind: 'date' }, text('Loan'), text('Description'), text('Account'), money('Amount')], rows, total: ['Total', '', '', '', sumCol(rows, 4)] };
+        }
+    },
+    {
         id: 'all-entries', name: 'All entries', period: 'range', about: 'Every entry in the period, newest first: the full ledger, for checking or exporting.',
         build(data, p) {
             const rows = data.entries.filter((e) => inRange(e, p.from, p.to)).sort((a, b) => (a.date === b.date ? num(b.createdAt) - num(a.createdAt) : a.date < b.date ? 1 : -1))
@@ -250,7 +289,7 @@ export function toCsv(table) {
         if (v === null || v === undefined) {
             return '';
         }
-        const s = kind === 'percent' ? (Math.round(v * 1000) / 10).toString() + '%' : typeof v === 'number' ? String(Math.round(v * 100) / 100) : String(v);
+        const s = kind === 'percent' || kind === 'rate' ? (Math.round(v * 10000) / 100).toString() + '%' : typeof v === 'number' ? String(Math.round(v * 100) / 100) : String(v);
         // quoted when needed; a leading = + - @ is neutralised so a spreadsheet never runs it as a formula
         const safe = typeof v === 'string' && /^[=+\-@]/.test(s) ? `'${s}` : s;
         return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;

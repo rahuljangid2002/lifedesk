@@ -1404,7 +1404,7 @@ input[type='number']::-webkit-outer-spin-button {
         grid-template-columns: repeat(6, minmax(0, 1fr));
     }
     .type-grid {
-        grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-template-columns: repeat(8, minmax(0, 1fr));
         gap: 0.4rem;
     }
     .tile-btn {
@@ -2086,4 +2086,17 @@ tfoot td {
         min-width: 7rem;
         max-width: 13rem;
     }
+}
+
+label > span {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+label > span .pill {
+    font-size: 0.66rem;
+    padding: 0.05rem 0.45rem;
+}
+.pill[hidden] {
+    display: none;
 }

@@ -132,7 +132,40 @@ function balances(st, h) {
     };
 }
 
-const TABS = [['monthly', 'Monthly', monthly], ['yearly', 'Yearly', yearly], ['balances', 'Balances', balances]];
+function loansAssets(st, h) {
+    const today = h.today();
+    const loans = R.loanRows(S.data, today);
+    const assets = R.assetRows(S.data, today).filter((a) => a.status !== 'Sold');
+    const sum = (list, fn) => list.reduce((t, x) => t + fn(x), 0);
+    const sz = size();
+    const months = Array.from({ length: 12 }, (_, i) => L.addMonths(L.monthKey(today), i - 11));
+    const paidIn = (k) => S.data.entries.filter((e) => e.loanId && L.monthKey(e.date) === k).reduce((t, e) => t + Number(e.amount), 0);
+    const byType = {};
+    assets.forEach((a) => (byType[a.type] = (byType[a.type] || 0) + a.value));
+    const withLoan = assets.filter((a) => a.loan).sort((a, b) => b.value - a.value).slice(0, 8);
+    return {
+        hero: `<h1>Loans and assets</h1>
+            <div class="stats">${h.stat('Assets worth', L.money(sum(assets, (a) => a.value)))}${h.stat('Loans to pay', L.money(sum(loans, (l) => l.outstanding)))}${h.stat('Net asset value', L.money(sum(assets, (a) => a.net)))}</div>`,
+        body: `<div class="kpis">
+                ${kpi('Price paid for assets', L.money(sum(assets, (a) => a.price)))}
+                ${kpi('Principal still owed', L.money(sum(loans, (l) => l.principalLeft)))}
+                ${kpi('Interest paid', L.money(sum(loans, (l) => l.interestPaid)))}
+                ${kpi('Interest still to pay', L.money(sum(loans, (l) => l.interestLeft)))}
+                ${kpi('EMI per month', L.money(sum(loans.filter((l) => l.left), (l) => Number(l.emi))))}
+                ${kpi('EMIs left', sum(loans, (l) => l.left))}
+            </div>
+            <div class="cards two">
+                ${card('Still to pay by loan', 'EMIs left × EMI', hbars(loans.filter((l) => l.outstanding > 0).sort((a, b) => b.outstanding - a.outstanding).map((l) => ({ label: l.name, value: l.outstanding })), L.money, 'No loans to pay.'))}
+                ${card('Assets by kind', 'What they are worth now', hbars(Object.entries(byType).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value), L.money, 'No assets yet.'))}
+                ${card('Value against loan, by asset', 'Assets bought on a loan', withLoan.length ? columns(withLoan.map((a) => ({ short: a.name.slice(0, 12), full: a.name })), [{ name: 'Worth now', slot: 1, values: withLoan.map((a) => a.value) }, { name: 'Loan principal left', slot: 2, values: withLoan.map((a) => a.loanLeft) }], L.money, L.compact, sz.half, sz.h) : '<p class="empty">No asset has a loan.</p>')}
+                ${card('EMIs paid by month', 'Last 12 months', columns(months.map((k) => ({ short: L.monthLabel(k).slice(0, 3), full: L.monthLabel(k) })), [{ name: 'EMIs paid', slot: 1, values: months.map(paidIn) }], L.money, L.compact, sz.half, sz.h))}
+                ${card('Loans', 'Principal and interest', table(R.REPORTS.find((r) => r.id === 'loan-summary').build(S.data, { today })), true)}
+                ${card('Assets', 'Price, value, loan and interest', table(R.REPORTS.find((r) => r.id === 'asset-register').build(S.data, { today })), true)}
+            </div>`
+    };
+}
+
+const TABS = [['monthly', 'Monthly', monthly], ['yearly', 'Yearly', yearly], ['balances', 'Balances', balances], ['loans', 'Loans & assets', loansAssets]];
 
 export function dashboards(st, h) {
     const tab = TABS.find((t) => t[0] === st.tab) || TABS[0];
@@ -156,12 +189,15 @@ function cell(v, kind) {
     if (kind === 'percent') {
         return `${Math.round(v * 100)}%`;
     }
+    if (kind === 'rate') {
+        return `${Math.round(v * 10000) / 100}%`;
+    }
     if (kind === 'date') {
         return L.dateText(v, { day: 'numeric', month: 'short', year: 'numeric' });
     }
     return String(v);
 }
-const numeric = (kind) => kind === 'money' || kind === 'number' || kind === 'percent';
+const numeric = (kind) => kind === 'money' || kind === 'number' || kind === 'percent' || kind === 'rate';
 
 function table(t, limit = 500) {
     if (!t.rows.length) {
