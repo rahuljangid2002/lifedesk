@@ -16,4 +16,11 @@ with sync_playwright() as p:
             if r == 'people':
                 pg.locator('.p-head').first.click(); time.sleep(0.3)
             pg.screenshot(path=os.path.join(OUT, f'v_{tag}_{r}.png'))
+        for tab in ['Monthly', 'Yearly', 'Balances']:
+            pg.goto(U + '#insights'); time.sleep(0.3); pg.get_by_role('button', name=tab, exact=True).click(); time.sleep(0.3)
+            if tab == 'Monthly':
+                pg.get_by_role('button', name='Previous month').click(); time.sleep(0.3)
+            pg.screenshot(path=os.path.join(OUT, f'v_{tag}_insights_{tab.lower()}.png'), full_page=True)
+        pg.goto(U + '#reports'); time.sleep(0.3); pg.screenshot(path=os.path.join(OUT, f'v_{tag}_reports.png'))
+        pg.locator('[data-model="reports.id"]').select_option('category-by-month'); time.sleep(0.3); pg.screenshot(path=os.path.join(OUT, f'v_{tag}_reports_pivot.png'))
     b.close()

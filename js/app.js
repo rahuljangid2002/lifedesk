@@ -6,6 +6,8 @@ import * as L from './logic.js';
 import * as S from './store.js';
 import { icon } from './icons.js';
 import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
+import { currentReport, dashboards, reports } from './insights.js';
+import { toCsv } from './reports.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -21,6 +23,8 @@ const state = {
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false },
+    insights: { tab: 'monthly', month: thisMonth(), year: null },
+    reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
     login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
 };
 
@@ -279,6 +283,8 @@ function home() {
             <a class="shortcut" href="#people">${icon('users')}<span>People &amp; Loans</span></a>
             <a class="shortcut" href="#budget">${icon('target')}<span>Budget</span></a>
             <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
+            <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
+            <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
         </div>
         ${t.cardOwed > 0 ? `<a class="notice span" href="#accounts">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
@@ -575,7 +581,7 @@ function more() {
             <label>Currency<select data-setting="currency">${currencyOptions(f.currency)}</select></label>
             <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Changing the currency changes how amounts are shown; it does not convert them.</small></section>
         <section class="card"><div class="card-head"><h2>Money</h2></div>
-            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a></section>
+            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a></section>
         <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
             <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
@@ -592,14 +598,16 @@ function more() {
     </main>`;
 }
 
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, more };
+// helpers the dashboard and report screens share with the rest
+const kit = { today, icon, stat, monthNav, entryRow };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub'];
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts']]],
+    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
 
@@ -1118,6 +1126,24 @@ const actions = {
         toast(`${L.money(amount)} paid to ${card.name}.`);
     },
 
+    // dashboards and reports
+    insTab(el) {
+        state.insights.tab = el.dataset.tab;
+        render();
+    },
+    insMonth(el) {
+        state.insights.month = L.addMonths(state.insights.month, Number(el.dataset.step));
+        render();
+    },
+    reportDownload() {
+        const { report, period, table } = currentReport(state.reports, today());
+        // the BOM lets spreadsheet programs read currency symbols and non-English names correctly
+        const url = URL.createObjectURL(new Blob(['\ufeff' + toCsv(table)], { type: 'text/csv;charset=utf-8' }));
+        const name = `lifedesk-${report.id}-${period.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.csv`;
+        Object.assign(document.createElement('a'), { href: url, download: name }).click();
+        URL.revokeObjectURL(url);
+    },
+
     // account & backup
     categoryToggle() {
         state.more.addingCategory = !state.more.addingCategory;
@@ -1289,9 +1315,67 @@ app.addEventListener('change', async (event) => {
     }
 });
 
+// ---------- chart tooltips: the same on hover and on keyboard focus ----------
+const tipBox = document.createElement('div');
+tipBox.className = 'tip';
+tipBox.hidden = true;
+document.body.appendChild(tipBox);
+function showTip(el, x, y) {
+    tipBox.textContent = ''; // built with text nodes: names come from the user's data
+    const title = document.createElement('small');
+    title.textContent = el.dataset.tip;
+    tipBox.appendChild(title);
+    for (const row of JSON.parse(el.dataset.tipRows || '[]')) {
+        const line = document.createElement('div');
+        if (row.slot) {
+            const key = document.createElement('i');
+            key.className = `key s${row.slot}`;
+            line.appendChild(key);
+        }
+        const value = document.createElement('b');
+        value.textContent = row.value;
+        const name = document.createElement('span');
+        name.textContent = row.name;
+        line.append(value, name);
+        tipBox.appendChild(line);
+    }
+    tipBox.hidden = false;
+    const w = tipBox.offsetWidth;
+    const h = tipBox.offsetHeight;
+    tipBox.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x - w / 2))}px`;
+    tipBox.style.top = `${y - h - 12 < 8 ? y + 16 : y - h - 12}px`;
+}
+app.addEventListener('pointermove', (event) => {
+    const el = event.target.closest ? event.target.closest('[data-tip]') : null;
+    if (el) {
+        showTip(el, event.clientX, event.clientY);
+    } else {
+        tipBox.hidden = true;
+    }
+});
+app.addEventListener('pointerleave', () => (tipBox.hidden = true));
+app.addEventListener('focusin', (event) => {
+    const el = event.target.closest ? event.target.closest('[data-tip]') : null;
+    if (el) {
+        const r = el.getBoundingClientRect();
+        showTip(el, r.left + r.width / 2, r.top);
+    }
+});
+app.addEventListener('focusout', () => (tipBox.hidden = true));
+// charts are drawn for the current width: redraw when the window changes between phone and desktop size
+let wasWide = window.innerWidth >= 900;
+window.addEventListener('resize', () => {
+    const wide = window.innerWidth >= 900;
+    if (wide !== wasWide && (state.route === 'insights' || state.route === 'reports')) {
+        render();
+    }
+    wasWide = wide;
+});
+
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
     window.scrollTo(0, 0);
+    tipBox.hidden = true;
     render();
 });
 

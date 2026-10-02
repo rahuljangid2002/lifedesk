@@ -88,6 +88,14 @@ export function money(value) {
         return `${format.currency} ${n.toLocaleString()}`;
     }
 }
+/** Short amounts for chart axes: 1.2K, 3.5M (lakh and crore for rupees). No currency symbol. */
+export function compact(value) {
+    try {
+        return new Intl.NumberFormat(format.locale, { notation: 'compact', maximumFractionDigits: 1 }).format(num(value));
+    } catch (e) {
+        return String(Math.round(num(value)));
+    }
+}
 /** The currency symbol on its own (for the amount boxes). */
 export function symbol() {
     try {

@@ -16,6 +16,8 @@ The start screen lists the tools. Money has these screens:
 | Add Entry | Expense, Income, Transfer, Lent, Got Back, Borrowed, Repaid; category suggested from the description; recent entries with edit and delete |
 | Daily Expenses | Every entry date by date with the day's total; a month or custom dates; filters and search |
 | Budget | Amount per category per month; last month and 3-month average; copy last month; tap a category to see its expenses |
+| Dashboards | Monthly (opening and closing balance, income, expense, savings, spend by category, budget vs actual, daily spend, spend by account, top 10 expenses), Yearly (income vs expense by month, net balance trend, top categories, income by source; the year can start in any month) and Balances (by account, by card, by person) |
+| Reports | 15 reports as tables with totals and CSV download: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, all entries |
 | People & Loans | Who owes you and whom you owe; history; quick "got back / gave more / paid back / borrowed more"; status |
 | My Accounts | Banks, wallets and credit cards with limits; close or delete; pay a card bill in full or in part |
 | Account | Currency; add categories; download or restore a backup file; **load or remove sample data** (made-up history from 1 March 2025 to today); sign out; delete my account |
@@ -29,8 +31,8 @@ and dates follow their region. It can be changed under Account. Changing it does
 there is a side menu and pages use two or three columns. Light and dark follow the device setting. Icons are drawn
 (`js/icons.js`), so they look the same on Android, iOS and desktop.
 
-Not in version 1 yet (planned next): buying on EMI and EMI plans, assets, "paid by someone", recurring bills,
-charts / dashboards, month-end summary email, receipts.
+Not built yet: buying on EMI and EMI plans, assets (so there are no Loans and Assets dashboards yet),
+"paid by someone", recurring bills, month-end summary email, receipts.
 
 ## Two modes
 
@@ -93,6 +95,9 @@ js/logic.js           calculations: balances, month summary, budget, people, val
 js/app.js             start screen (TOOLS), Money screens and navigation
 js/seed.js            starter categories with keywords
 js/icons.js           line icons
+js/reports.js         figures for dashboards and reports (pure calculations), CSV
+js/charts.js          small chart kit (bars, columns, line, meters; table twin and tooltip for each)
+js/insights.js        Dashboards and Reports screens
 js/sample.js          sample data generator (ids start with "sample-")
 firestore.rules       database security rules (paste into Firebase)
 backend/              Google Apps Script that emails and checks the sign-up codes
