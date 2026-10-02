@@ -24,6 +24,7 @@ const PATHS = {
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
     trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+    google: '<path d="M20.5 12.2c0-.6-.1-1.2-.2-1.7H12v3.3h4.8a4.1 4.1 0 0 1-1.8 2.7M12 21a9 9 0 1 1 5.9-15.8l-2.5 2.4A5.4 5.4 0 1 0 12 17.5c1.2 0 2.2-.3 3-.9l2.8 2.2A8.9 8.9 0 0 1 12 21z"/>',
     chevLeft: '<path d="m15 5-7 7 7 7"/>',
     chevRight: '<path d="m9 5 7 7-7 7"/>',
     chevDown: '<path d="m5 9 7 7 7-7"/>'

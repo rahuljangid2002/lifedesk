@@ -160,6 +160,26 @@ export async function signInGoogle() {
     await fb.auth.signInWithPopup(fb.handle, provider);
 }
 
+/** Email + password. The email is the user name. */
+export async function signInPassword(email, password) {
+    await fb.auth.signInWithEmailAndPassword(fb.handle, email, password);
+}
+
+export async function signUpPassword(name, email, password) {
+    const cred = await fb.auth.createUserWithEmailAndPassword(fb.handle, email, password);
+    if (name) {
+        await fb.auth.updateProfile(cred.user, { displayName: name });
+        if (user) {
+            user.name = name; // the sign-in event fired before the name was stored
+            listener(loaded.size === COLLECTIONS.length ? 'ready' : 'loading');
+        }
+    }
+}
+
+export async function resetPassword(email) {
+    await fb.auth.sendPasswordResetEmail(fb.handle, email);
+}
+
 export async function sendEmailLink(email) {
     await fb.auth.sendSignInLinkToEmail(fb.handle, email, {
         url: window.location.origin + window.location.pathname,
@@ -172,6 +192,25 @@ export async function signOut() {
     if (!isDemo) {
         await fb.auth.signOut(fb.handle);
     }
+}
+
+/** Removes everything the user stored, then the login itself. */
+export async function deleteAccount() {
+    const current = fb.handle.currentUser;
+    const pairs = [];
+    for (const c of COLLECTIONS) {
+        for (const doc of data[c]) {
+            pairs.push([c, doc.id]);
+        }
+    }
+    for (let i = 0; i < pairs.length; i += 400) {
+        const batch = fb.fs.writeBatch(fb.db);
+        pairs.slice(i, i + 400).forEach(([c, id]) => batch.delete(fb.fs.doc(fb.db, 'users', current.uid, c, id)));
+        await batch.commit();
+    }
+    unsubscribe.forEach((fn) => fn());
+    unsubscribe = [];
+    await fb.auth.deleteUser(current);
 }
 
 // ---------- backup ----------

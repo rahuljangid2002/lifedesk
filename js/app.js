@@ -19,7 +19,8 @@ const state = {
     budget: { month: thisMonth(), edits: null, open: null },
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
-    more: { addingCategory: false }
+    more: { addingCategory: false },
+    login: { mode: 'signin', name: '', email: '', password: '', show: false, busy: false }
 };
 
 // ---------- helpers ----------
@@ -36,6 +37,16 @@ const KIND_ICON = { bank: 'bank', wallet: 'wallet', cash: 'cash', card: 'card' }
 
 /** Plain words for the sign-in errors people can actually hit. */
 const AUTH_ERRORS = {
+    'auth/requires-recent-login': 'For safety, sign out, sign in again, and then delete the account.',
+    'auth/invalid-credential': 'Email or password is not right. Check them, or use "Forgot password?".',
+    'auth/wrong-password': 'Email or password is not right. Check them, or use "Forgot password?".',
+    'auth/user-not-found': 'No account with this email yet. Use "Create an account".',
+    'auth/invalid-login-credentials': 'Email or password is not right. Check them, or use "Forgot password?".',
+    'auth/email-already-in-use': 'This email already has an account. Sign in, or use "Forgot password?".',
+    'auth/weak-password': 'That password is too easy to guess. Use at least 8 characters.',
+    'auth/missing-password': 'Enter your password.',
+    'auth/account-exists-with-different-credential': 'This email is already registered with Google sign-in. Use "Continue with Google".',
+    'auth/user-disabled': 'This account has been switched off. Contact the app owner.',
     'auth/operation-not-allowed': 'This sign-in method is not switched on yet. Please use the other one, or tell the app owner.',
     'auth/unauthorized-domain': 'Sign-in is not allowed from this web address yet. The app owner needs to add it in Firebase.',
     'auth/unauthorized-continue-uri': 'Sign-in is not allowed from this web address yet. The app owner needs to add it in Firebase.',
@@ -135,12 +146,42 @@ function login() {
         <div class="logo">${icon('logo')}</div>
         <h1>LifeDesk</h1>
         <p>Your everyday desk: money, budget, people and loans today, with more tools on the way.</p>
-        ${S.methods.google ? `<button class="btn primary wide" data-action="google">Continue with Google</button>` : ''}
-        ${S.methods.emailLink ? `<div class="or">or sign in with a link sent to your email</div>
+        ${S.methods.password ? passwordForm() : ''}
+        ${S.methods.google ? `${S.methods.password ? '<div class="or"><span>or</span></div>' : ''}<button class="btn wide" data-action="google">${icon('google')} Continue with Google</button>` : ''}
+        ${S.methods.emailLink ? `<div class="or"><span>or sign in with a link sent to your email</span></div>
         <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email" aria-label="Email">
         <button class="btn wide" data-action="emailLink">Email me a sign-in link</button>` : ''}
-        <small>New here? The same buttons create your account. Your data is private to you.</small>
+        <small>Your data is private to you.</small>
     </div>`;
+}
+
+/** Email + password: sign in, create an account, or ask for a password reset email. */
+function passwordForm() {
+    const f = state.login;
+    const email = `<label class="left">Email<input type="email" value="${esc(f.email)}" data-model="login.email" placeholder="you@example.com" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email"></label>`;
+    const password = (label, auto) => `<label class="left">${label}<span class="pw"><input type="${f.show ? 'text' : 'password'}" value="${esc(f.password)}" data-model="login.password" autocomplete="${auto}" autocapitalize="none" spellcheck="false" data-enter="loginSubmit"><button type="button" class="link-btn" data-action="loginShow">${f.show ? 'Hide' : 'Show'}</button></span></label>`;
+    const busy = f.busy ? 'disabled' : '';
+    if (f.mode === 'reset') {
+        return `<form class="login-form" data-form="loginSubmit"><h2>Reset your password</h2>
+            <small>Enter your email and we will send you a link to set a new password.</small>
+            ${email}
+            <button class="btn primary wide" data-action="loginSubmit" ${busy}>Send reset email</button>
+            <button type="button" class="link-btn" data-action="loginMode" data-mode="signin">Back to sign in</button></form>`;
+    }
+    if (f.mode === 'signup') {
+        return `<form class="login-form" data-form="loginSubmit"><h2>Create your account</h2>
+            <label class="left">Your name<input type="text" value="${esc(f.name)}" data-model="login.name" autocomplete="name"></label>
+            ${email}
+            ${password('Password (at least 8 characters)', 'new-password')}
+            <button class="btn primary wide" data-action="loginSubmit" ${busy}>Create account</button>
+            <small>Already have an account? <button type="button" class="link-btn" data-action="loginMode" data-mode="signin">Sign in</button></small></form>`;
+    }
+    return `<form class="login-form" data-form="loginSubmit"><h2>Sign in</h2>
+        ${email}
+        ${password('Password', 'current-password')}
+        <button type="button" class="link-btn right" data-action="loginMode" data-mode="reset">Forgot password?</button>
+        <button class="btn primary wide" data-action="loginSubmit" ${busy}>Sign in</button>
+        <small>New here? <button type="button" class="link-btn" data-action="loginMode" data-mode="signup">Create an account</button></small></form>`;
 }
 
 /** First visit: choose the currency amounts are shown in. */
@@ -480,7 +521,7 @@ function more() {
         <section class="card"><div class="card-head"><h2>Backup</h2></div>
             <div class="split wrap"><button class="btn" data-action="exportData">Download my data</button><label class="btn file">Restore from file<input type="file" accept="application/json" data-file="import" hidden></label></div>
             <small>${S.data.entries.length} entries · ${S.data.accounts.length} accounts · ${S.data.people.length} people</small></section>
-        <div class="span">${S.isDemo ? `<button class="btn danger wide" data-action="demoReset">Erase demo data</button>` : `<button class="btn wide" data-action="signOut">${icon('logout')} Sign out</button>`}</div>
+        <div class="span split wrap">${S.isDemo ? `<button class="btn danger" data-action="demoReset">Erase demo data</button>` : `<button class="btn" data-action="signOut">${icon('logout')} Sign out</button><button class="btn danger" data-action="deleteAccount">${icon('trash')} Delete my account and data</button>`}</div>
     </main>`;
 }
 
@@ -547,7 +588,50 @@ const actions = {
         toast(`Sign-in link sent to ${email}. Open it on this device.`);
     },
     async signOut() {
+        state.login = { mode: 'signin', name: '', email: '', password: '', show: false, busy: false };
         await S.signOut();
+    },
+    loginMode(el) {
+        state.login.mode = el.dataset.mode;
+        state.login.password = '';
+        render();
+    },
+    loginShow() {
+        state.login.show = !state.login.show;
+        render();
+    },
+    async loginSubmit() {
+        const f = state.login;
+        if (f.busy) {
+            return;
+        }
+        const email = f.email.trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+            return toast('Enter your email address.', 'warn');
+        }
+        if (f.mode !== 'reset' && !f.password) {
+            return toast('Enter your password.', 'warn');
+        }
+        if (f.mode === 'signup' && f.password.length < 8) {
+            return toast('Choose a password with at least 8 characters.', 'warn');
+        }
+        f.busy = true;
+        render();
+        try {
+            if (f.mode === 'reset') {
+                await S.resetPassword(email);
+                f.mode = 'signin';
+                toast(`If ${email} has an account, a reset email is on its way. Check spam too.`);
+            } else if (f.mode === 'signup') {
+                await S.signUpPassword(f.name.trim(), email, f.password);
+            } else {
+                await S.signInPassword(email, f.password);
+            }
+            f.password = '';
+        } finally {
+            f.busy = false;
+            render();
+        }
     },
     async welcomeSave() {
         await S.save('settings', { id: 'prefs', currency: document.getElementById('welcome-currency').value });
@@ -902,6 +986,16 @@ const actions = {
         a.click();
         URL.revokeObjectURL(url);
     },
+    async deleteAccount() {
+        if (!window.confirm('Delete your LifeDesk account and ALL your data?\nThis cannot be undone. Download a backup first if you may want it.')) {
+            return;
+        }
+        if (window.prompt('Type DELETE to confirm.') !== 'DELETE') {
+            return toast('Nothing was deleted.');
+        }
+        await S.deleteAccount();
+        toast('Your account and data were deleted.');
+    },
     async demoReset() {
         if (window.confirm('Erase all demo data in this browser?')) {
             await S.clearDemo();
@@ -966,6 +1060,19 @@ app.addEventListener('input', (event) => {
         if (btn) {
             btn.disabled = false;
             btn.textContent = 'Save budget';
+        }
+    }
+});
+// Enter in the sign-in form submits it (and the browser never reloads the page for the form)
+app.addEventListener('submit', (event) => event.preventDefault());
+app.addEventListener('keydown', async (event) => {
+    if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.closest('[data-form]')) {
+        event.preventDefault();
+        try {
+            await actions[event.target.closest('[data-form]').dataset.form]();
+        } catch (e) {
+            console.error(e);
+            toast(errorText(e), 'warn');
         }
     }
 });

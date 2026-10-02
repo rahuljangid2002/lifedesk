@@ -35,8 +35,9 @@ charts / dashboards, month-end summary email, receipts.
 ## Two modes
 
 - **Demo mode** (now): `js/config.js` has no Firebase settings. No login; data is saved only in the browser you use.
-- **Live mode**: after you paste your Firebase settings into `js/config.js`. Users sign in with Google or a link sent to
-  their email, and each user's data is stored in the cloud, private to them, and shared across their devices.
+- **Live mode** (now on): users sign in with **email + password** (create account, forgot password) or **Google**.
+  Each user's data is stored in the cloud, private to them, and shared across their devices. Account → "Delete my
+  account and data" removes everything.
 
 ## Try it on this Mac
 
@@ -49,8 +50,8 @@ Then open http://localhost:8765 (make the browser window narrow, or use your pho
 ## Turn on login and cloud storage (Firebase, free "Spark" plan)
 
 1. https://console.firebase.google.com → **Add project**, name `lifedesk` (the project ID cannot be changed later). Analytics is not needed.
-2. **Build → Authentication → Get started → Sign-in method**: enable **Google**, and **Email/Password** with
-   **Email link (passwordless sign-in)** switched on.
+2. **Build → Authentication → Get started → Sign-in method**: enable **Google** and **Email/Password**
+   (the "Email link" toggle is only needed if `emailLink` is switched on in `js/config.js`).
 3. **Build → Firestore Database → Create database** (production mode; pick a location such as `asia-south1` Mumbai).
 4. Firestore → **Rules**: paste the contents of `firestore.rules` and **Publish**. This is what keeps each user's data private.
 5. **Project settings (gear) → Your apps → Web (`</>`)** → register an app → copy `apiKey`, `authDomain`, `projectId`
@@ -113,5 +114,6 @@ No database rule change is needed: the rules already cover everything under the 
 
 ```bash
 python3 -m http.server 8765 &
-../3-Demo/demo/.venv/bin/python tests/ui_flow.py
+../3-Demo/demo/.venv/bin/python tests/ui_flow.py      # demo mode, every screen
+../3-Demo/demo/.venv/bin/python tests/live_login.py   # real Firebase: sign up, save, sign in again, delete the test account
 ```

@@ -22,6 +22,7 @@ export const firestoreDatabase = 'default';
 // Sign-in methods shown on the login screen (enable the same ones in Firebase console → Authentication).
 export const loginMethods = {
     google: true,
-    emailLink: true,
+    password: true, // email + password, with "Create account" and "Forgot password?"
+    emailLink: false, // one-time sign-in link by email (the free plan sends only a few a day)
     phoneOtp: false // needs the Firebase Blaze plan (SMS is charged); switch on later
 };
