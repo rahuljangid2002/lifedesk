@@ -328,9 +328,24 @@ export function budgetRows(data, key) {
         });
 }
 
-/** The category whose keyword appears in the description (longest keyword wins). */
-export function suggestCategory(categories, description, type) {
-    const text = ` ${(description || '').toLowerCase()} `;
+/**
+ * The category for a description, in this order: the one you used last time for the same description; the category
+ * whose keyword appears in it (longest keyword wins); the one you used for an earlier description sharing a word;
+ * a category whose own name appears in it.
+ */
+export function suggestCategory(categories, description, type, entries = []) {
+    const clean = (description || '').trim().toLowerCase();
+    if (!clean) {
+        return null;
+    }
+    const ok = new Set(categories.filter((c) => c.type === type).map((c) => c.id));
+    const past = entries.filter((e) => e.type === type && e.categoryId && ok.has(e.categoryId) && e.description)
+        .sort((x, y) => (x.date === y.date ? (y.createdAt || 0) - (x.createdAt || 0) : x.date < y.date ? 1 : -1));
+    const same = past.find((e) => e.description.trim().toLowerCase() === clean);
+    if (same) {
+        return same.categoryId;
+    }
+    const text = ` ${clean} `;
     let best = null;
     let bestLen = 0;
     for (const c of categories) {
@@ -344,7 +359,16 @@ export function suggestCategory(categories, description, type) {
             }
         }
     }
-    return best;
+    if (best) {
+        return best;
+    }
+    const words = clean.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);
+    const similar = past.find((e) => words.some((w) => e.description.toLowerCase().split(/[^\p{L}\p{N}]+/u).includes(w)));
+    if (similar) {
+        return similar.categoryId;
+    }
+    const named = categories.find((c) => c.type === type && c.name.toLowerCase().split(/[^\p{L}\p{N}]+/u).some((w) => w.length >= 4 && words.includes(w)));
+    return named ? named.id : null;
 }
 
 /** Entries between two dates (inclusive), newest first, grouped by day with a total. */

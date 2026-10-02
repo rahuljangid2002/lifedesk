@@ -16,6 +16,7 @@ The start screen lists the tools. Money has these screens:
 | Add Entry | Expense, Income, Transfer, Lent, Got Back, Borrowed, Repaid; category suggested from the description; recent entries with edit and delete |
 | Daily Expenses | Every entry date by date with the day's total; a month or custom dates; filters and search |
 | Budget | Amount per category per month; last month and 3-month average; copy last month; tap a category to see its expenses |
+| Payments | EMIs (due, overdue, pay early) and credit card bills (full or part) in one place, with what was paid recently. An EMI paid is an expense; a card bill is a transfer |
 | Dashboards | Monthly (opening and closing balance, income, expense, savings, spend by category, budget vs actual, daily spend, spend by account, top 10 expenses), Yearly (income vs expense by month, net balance trend, top categories, income by source; the year can start in any month) and Balances (by account, by card, by person) |
 | Reports | 15 reports as tables with totals and CSV download: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, all entries |
 | People & Loans | Who owes you and whom you owe; history; quick "got back / gave more / paid back / borrowed more"; status |

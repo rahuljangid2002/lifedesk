@@ -118,6 +118,7 @@ function balances(st, h) {
         hero: `<h1>Balances and people</h1>
             <div class="stats">${h.stat('In accounts', L.money(t.inHand))}${h.stat('Card owed', L.money(t.cardOwed))}${h.stat('Net balance', L.money(t.net))}</div>`,
         body: `<div class="kpis">
+                ${kpi('Net worth', L.money(R.netWorth(S.data, h.today()).worth))}
                 ${kpi('Credit available', L.money(credit))}
                 ${kpi('To receive', L.money(t.toReceive))}
                 ${kpi('Owed to people', L.money(t.owedToPeople))}
@@ -147,6 +148,7 @@ function loansAssets(st, h) {
         hero: `<h1>Loans and assets</h1>
             <div class="stats">${h.stat('Assets worth', L.money(sum(assets, (a) => a.value)))}${h.stat('Loans to pay', L.money(sum(loans, (l) => l.outstanding)))}${h.stat('Net asset value', L.money(sum(assets, (a) => a.net)))}</div>`,
         body: `<div class="kpis">
+                ${kpi('Net worth', L.money(R.netWorth(S.data, today).worth))}
                 ${kpi('Price paid for assets', L.money(sum(assets, (a) => a.price)))}
                 ${kpi('Principal still owed', L.money(sum(loans, (l) => l.principalLeft)))}
                 ${kpi('Interest paid', L.money(sum(loans, (l) => l.interestPaid)))}

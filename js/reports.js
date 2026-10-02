@@ -115,6 +115,14 @@ export function assetRows(data, today) {
     });
 }
 
+/** Net worth = net balance + money owed to you + what your assets are worth - loan principal still owed. */
+export function netWorth(data, today) {
+    const t = totals(data);
+    const assets = assetRows(data, today).filter((a) => a.status !== 'Sold').reduce((s, a) => s + a.value, 0);
+    const loans = loanRows(data, today).reduce((s, l) => s + l.principalLeft, 0);
+    return { net: t.net, toReceive: t.toReceive, assets, loans, worth: Math.round((t.net + t.toReceive + assets - loans) * 100) / 100 };
+}
+
 // ---------- reports ----------
 // Each report: id, name, about, period ('range' | 'month' | 'year' | 'none') and build(data, p) ->
 // { columns: [{ label, kind }], rows: [[...]], total: [...] | null }. kind: text | money | number | date | percent.

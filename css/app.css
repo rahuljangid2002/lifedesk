@@ -1401,7 +1401,7 @@ input[type='number']::-webkit-outer-spin-button {
         grid-column: 1 / -1;
     }
     .shortcuts {
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
     .type-grid {
         grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -2099,4 +2099,12 @@ label > span .pill {
 }
 .pill[hidden] {
     display: none;
+}
+
+.worth .big {
+    font-size: 1.5rem;
+}
+.worth-parts {
+    align-items: flex-end;
+    text-align: right;
 }

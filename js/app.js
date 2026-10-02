@@ -7,7 +7,7 @@ import * as S from './store.js';
 import { icon } from './icons.js';
 import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 import { currentReport, dashboards, reports } from './insights.js';
-import { toCsv } from './reports.js';
+import { netWorth, toCsv } from './reports.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -365,12 +365,15 @@ function home() {
             <a class="shortcut main" href="#add">${icon('plus')}<span>Add Entry</span></a>
             <a class="shortcut" href="#people">${icon('users')}<span>People &amp; Loans</span></a>
             <a class="shortcut" href="#budget">${icon('target')}<span>Budget</span></a>
+            <a class="shortcut" href="#pay">${icon('card')}<span>Payments</span></a>
             <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
             <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
             <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
         </div>
-        ${dueEmis().length ? `<a class="notice span" href="#add">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
-        ${t.cardOwed > 0 ? `<a class="notice span" href="#accounts">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
+        ${dueEmis().length ? `<a class="notice span" href="#pay">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
+        ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
+        ${(() => { const w = netWorth(S.data, today()); return `<a class="card link span worth" href="#insights"><div class="card-head"><span><small>Net worth</small><b class="big">${L.money(w.worth)}</b></span>
+            <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small><small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
         <div class="stack">
             <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span class="pill">${planned ? `${pct}%` : 'Not set'}</span></div>
@@ -576,6 +579,48 @@ function assetsView() {
     </main>`;
 }
 
+/** Payments: EMIs and credit card bills in one place, with what was paid recently. */
+function payView() {
+    const loans = loanRows().filter((l) => l.left).sort((a, b) => (a.next < b.next ? -1 : 1));
+    const cards = activeAccounts().filter((a) => a.kind === 'card').map((a) => ({ ...a, owed: Math.max(0, -L.accountBalance(a, S.data.entries)) }));
+    const isCardPay = (e) => e.type === 'transfer' && (byId(S.data.accounts, e.toAccountId) || {}).kind === 'card';
+    const paid = S.data.entries.filter((e) => e.loanId || isCardPay(e)).sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1));
+    const month = thisMonth();
+    const dueNow = dueEmis();
+    const sum = (list, fn) => list.reduce((t, x) => t + fn(x), 0);
+    const p = state.accounts.pay;
+    const loanList = loans.map((l) => {
+        const due = l.due.length;
+        return `<div class="acct-row">
+            <div class="a-name"><span class="row-icon">${icon('repaid')}</span><span><b>${esc(l.name)}</b><small>EMI ${l.paid + 1} of ${l.months} · from ${esc(accountName(l.accountId))}</small></span></div>
+            <div class="a-detail"><small>${l.next < today() ? `<span class="over">${due > 1 ? `${due} EMIs overdue` : 'Overdue'}</span> · was due ${longDate(l.next)}` : due ? `Due this month · ${longDate(l.next)}` : `Next ${longDate(l.next)}`}</small><small>${L.money(l.outstanding)} still to pay</small></div>
+            <div class="a-bal"><b class="big">${L.money(l.emi)}</b><small>EMI</small></div>
+            <div class="a-actions"><button class="btn ${due ? 'primary' : ''}" data-action="payEmi" data-id="${l.id}">${due ? 'Pay EMI' : 'Pay early'}</button></div>
+        </div>`;
+    }).join('');
+    const cardList = cards.map((a) => `<div class="acct-row ${p && p.cardId === a.id ? 'open' : ''}">
+            <div class="a-name"><span class="row-icon">${icon('card')}</span><span><b>${esc(a.name)}</b><small>${a.dueDay ? `Bill due on ${a.dueDay}` : 'Credit card'}</small></span></div>
+            <div class="a-detail">${a.limit ? `<small>${L.money(a.limit - a.owed)} left of ${L.money(a.limit)}</small>` : ''}</div>
+            <div class="a-bal"><b class="big">${L.money(a.owed)}</b><small>owed</small></div>
+            <div class="a-actions">${a.owed > 0 ? `<button class="btn primary" data-action="payOpen" data-id="${a.id}">Pay bill</button>` : '<small>Nothing owed</small>'}</div>
+            ${p && p.cardId === a.id ? `<div class="a-panel">${payForm(a, a.owed)}</div>` : ''}
+        </div>`).join('');
+    return `<header class="hero">
+        <small class="eyebrow">Payments</small><h1>EMIs and card bills</h1>
+        <div class="stats">${stat('EMIs due now', L.money(sum(dueNow, (d) => Number(d.loan.emi))))}${stat('Card owed', L.money(sum(cards, (a) => a.owed)))}${stat('Paid this month', L.money(sum(paid.filter((e) => L.monthKey(e.date) === month), (e) => Number(e.amount))))}</div>
+    </header>
+    <main>
+        <h3>EMIs</h3>
+        ${loanList ? `<section class="list atable">${loanList}</section>` : `<div class="empty-state">${icon('repaid')}<b>No EMIs to pay</b><small>Loans appear here when you buy something on EMI from Add Entry.</small></div>`}
+        <small>An EMI you pay is recorded as an expense under loan payments, so it shows in your spending and budget.</small>
+        <h3>Credit card bills</h3>
+        ${cardList ? `<section class="list atable">${cardList}</section>` : `<div class="empty-state">${icon('card')}<b>No credit cards</b><small>Add a card under My accounts.</small></div>`}
+        <small>Paying a card bill moves money from your account to the card. It is not counted as a new expense, because what you bought with the card was already counted on the day you bought it.</small>
+        <h3>Paid recently</h3>
+        ${paid.length ? `<section class="list">${paid.slice(0, 15).map((e) => entryRow(e, true)).join('')}</section>` : '<p class="empty">Nothing paid yet.</p>'}
+    </main>`;
+}
+
 function loansView() {
     const s = state.people;
     const loans = loanRows().sort((a, b) => b.outstanding - a.outstanding);
@@ -748,7 +793,7 @@ function more() {
             ${currencyChange(f.currency)}
             <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Pick another currency to convert your amounts at today's rate, or to change only the symbol.</small></section>
         <section class="card"><div class="card-head"><h2>Money</h2></div>
-            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a><a class="row nav-row" href="#assets">My assets ${icon('chevRight')}</a></section>
+            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#pay">Payments ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a><a class="row nav-row" href="#assets">My assets ${icon('chevRight')}</a></section>
         <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
             <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
@@ -767,14 +812,14 @@ function more() {
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub'];
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
+    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
 
@@ -969,7 +1014,7 @@ const actions = {
     setType(el) {
         const f = state.add;
         f.type = el.dataset.type;
-        f.categoryId = f.categoryTouched ? null : L.suggestCategory(S.data.categories, f.description, f.type);
+        f.categoryId = f.categoryTouched ? null : L.suggestCategory(S.data.categories, f.description, f.type, S.data.entries);
         f.categoryTouched = false;
         f.personId = null;
         if (f.type !== 'transfer') {
@@ -1569,7 +1614,7 @@ app.addEventListener('input', (event) => {
     if (el.dataset.model) {
         setPath(el.dataset.model, el.type === 'checkbox' ? el.checked : el.value);
         if (el.dataset.then === 'suggest' && !state.add.categoryTouched) {
-            const id = L.suggestCategory(S.data.categories, state.add.description, state.add.type);
+            const id = L.suggestCategory(S.data.categories, state.add.description, state.add.type, S.data.entries);
             state.add.categoryId = id;
             const select = document.getElementById('add-category');
             if (select) {
