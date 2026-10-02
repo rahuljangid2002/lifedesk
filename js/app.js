@@ -24,6 +24,7 @@ const state = {
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
+    vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
     login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
@@ -300,6 +301,42 @@ function unverified() {
         </form>
         <div class="split wrap"><button class="btn" data-action="signOut">${icon('logout')} Sign out</button><button class="btn danger" data-action="deleteAccount">${icon('trash')} Delete this account</button></div>
     </div>`;
+}
+
+/** Encryption: set the passphrase (first time), save the recovery code, or unlock a device that has no key yet. */
+function vaultScreen() {
+    const v = state.vault;
+    const busy = v.busy ? 'disabled' : '';
+    const pw = (label, model, auto) => `<label class="left">${label}<input type="password" value="${esc(v[model])}" data-model="vault.${model}" autocomplete="${auto}" autocapitalize="none" spellcheck="false"></label>`;
+    let body;
+    if (v.code) {
+        body = `<form class="login-form" data-form="vaultEnter"><h2>Save your recovery code</h2>
+            <small class="left-text">If you ever forget your passphrase, this code is the <b>only</b> way back to your data. Write it down or keep it in a password manager. It is shown once.</small>
+            <div class="recovery" id="recovery-code">${esc(v.code)}</div>
+            <button type="button" class="btn" data-action="vaultCopy">Copy the code</button>
+            <label class="check"><input type="checkbox" data-action="vaultSaved" ${v.saved ? 'checked' : ''}> I have saved this code somewhere safe</label>
+            <button class="btn primary wide" data-action="vaultEnter" ${v.saved ? '' : 'disabled'}>Continue</button></form>`;
+    } else if (state.status === 'needPassphrase') {
+        body = `<form class="login-form" data-form="vaultCreate"><h2>Protect your data</h2>
+            <small class="left-text">Your data is encrypted on your device before it is saved, so nobody else can read it: not other users, and not the people who run LifeDesk. Choose a passphrase for it. It is separate from your sign-in password and is asked once on each device.</small>
+            ${pw('Data passphrase (at least 8 characters)', 'pass', 'new-password')}${pw('Type it again', 'pass2', 'new-password')}
+            <div class="notice stacked"><b>Nobody can reset this for you.</b><span>If you forget the passphrase and lose the recovery code shown next, your data cannot be recovered.</span></div>
+            <button class="btn primary wide" data-action="vaultCreate" ${busy}>${v.busy ? 'Setting up…' : 'Set passphrase'}</button></form>`;
+    } else if (v.mode === 'recovery') {
+        body = `<form class="login-form" data-form="vaultRecover"><h2>Use your recovery code</h2>
+            <label class="left">Recovery code<input type="text" value="${esc(v.recovery)}" data-model="vault.recovery" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"></label>
+            ${pw('New data passphrase (at least 8 characters)', 'pass', 'new-password')}${pw('Type it again', 'pass2', 'new-password')}
+            <button class="btn primary wide" data-action="vaultRecover" ${busy}>${v.busy ? 'Checking…' : 'Unlock and set new passphrase'}</button>
+            <button type="button" class="link-btn" data-action="vaultMode" data-mode="pass">I remember my passphrase</button></form>`;
+    } else {
+        body = `<form class="login-form" data-form="vaultUnlock"><h2>Unlock your data</h2>
+            <small class="left-text">Your data is encrypted. Enter your data passphrase to open it on this device. You will not be asked again here.</small>
+            ${pw('Data passphrase', 'pass', 'current-password')}
+            <button class="btn primary wide" data-action="vaultUnlock" ${busy}>${v.busy ? 'Unlocking…' : 'Unlock'}</button>
+            <button type="button" class="link-btn" data-action="vaultMode" data-mode="recovery">Forgot it? Use your recovery code</button></form>`;
+    }
+    return `<div class="login"><div class="logo">${icon('logo')}</div><h1>LifeDesk</h1>${body}
+        <button class="link-btn" data-action="signOut">${icon('logout')} Sign out (${esc(S.user.contact)})</button></div>`;
 }
 
 /** First visit: choose the currency amounts are shown in. */
@@ -788,6 +825,9 @@ function more() {
         <section class="card"><div class="card-head"><h2>Appearance</h2></div>
             <div class="seg">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, label]) => `<button class="${theme() === v ? 'on' : ''}" data-action="setTheme" data-theme="${v}" aria-pressed="${theme() === v}">${label}</button>`).join('')}</div>
             <small>${theme() === 'system' ? 'Follows this device: light by day or dark, whichever the device is set to.' : `Always ${theme()} on this device, whatever the device setting.`} Saved on this device only.</small></section>
+        ${S.isDemo ? '' : `<section class="card"><div class="card-head"><h2>Privacy</h2><span class="pill">Encrypted</span></div>
+            <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
+            <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
@@ -826,6 +866,15 @@ const SIDE = [
 function render() {
     if (state.status === 'loading') {
         app.innerHTML = `<div class="loading"><div class="logo">${icon('logo')}</div><p>Loading…</p></div>`;
+        return;
+    }
+    if (state.status === 'needPassphrase' || state.status === 'locked' || state.vault.code) {
+        const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
+        app.innerHTML = vaultScreen() + toastHtml();
+        const el = focus && app.querySelector(`[data-model="${focus}"]`);
+        if (el) {
+            el.focus();
+        }
         return;
     }
     if (state.status === 'signedOut' || state.status === 'unverified') {
@@ -880,6 +929,7 @@ const actions = {
         toast(`Sign-in link sent to ${email}. Open it on this device.`);
     },
     async signOut() {
+        state.vault = { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false };
         state.login = { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false };
         await S.signOut();
     },
@@ -1004,6 +1054,86 @@ const actions = {
         } finally {
             f.busy = false;
             render();
+        }
+    },
+    // encryption
+    async vaultRun(work) {
+        const v = state.vault;
+        if (v.busy) {
+            return;
+        }
+        v.busy = true;
+        render();
+        try {
+            await work(v);
+        } finally {
+            v.busy = false;
+            render();
+        }
+    },
+    newPassProblem(v) {
+        return v.pass.length < 8 ? 'Choose a passphrase with at least 8 characters.' : v.pass !== v.pass2 ? 'The two passphrases are not the same.' : null;
+    },
+    async vaultCreate() {
+        const problem = actions.newPassProblem(state.vault);
+        if (problem) {
+            return toast(problem, 'warn');
+        }
+        await actions.vaultRun(async (v) => {
+            v.code = await S.createPassphrase(v.pass);
+            v.pass = v.pass2 = '';
+        });
+    },
+    vaultSaved() {
+        state.vault.saved = !state.vault.saved;
+        render();
+    },
+    async vaultCopy() {
+        try {
+            await navigator.clipboard.writeText(state.vault.code);
+            toast('Recovery code copied.');
+        } catch (e) {
+            toast('Could not copy. Select the code and copy it by hand.', 'warn');
+        }
+    },
+    vaultEnter() {
+        if (!state.vault.saved) {
+            return toast('Tick the box once you have saved the code.', 'warn');
+        }
+        state.vault = { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false };
+        S.enterData();
+    },
+    vaultMode(el) {
+        state.vault.mode = el.dataset.mode;
+        state.vault.pass = state.vault.pass2 = '';
+        render();
+    },
+    async vaultUnlock() {
+        await actions.vaultRun(async (v) => {
+            if (await S.unlock(v.pass)) {
+                v.pass = '';
+            } else {
+                toast('That passphrase is not right.', 'warn');
+            }
+        });
+    },
+    async vaultRecover() {
+        const problem = actions.newPassProblem(state.vault);
+        if (problem) {
+            return toast(problem, 'warn');
+        }
+        await actions.vaultRun(async (v) => {
+            if (await S.unlockWithRecovery(v.recovery, v.pass)) {
+                state.vault = { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false };
+                toast('Unlocked. Your new passphrase is set.');
+            } else {
+                toast('That recovery code is not right.', 'warn');
+            }
+        });
+    },
+    lockDevice() {
+        if (window.confirm('Lock this device? Your data passphrase will be asked the next time. Nothing is deleted.')) {
+            S.lockDevice();
         }
     },
     async welcomeSave() {
@@ -1791,7 +1921,7 @@ render();
 S.init((status) => {
     // Signed out (or not yet verified): forget the screen that was open, so the next sign-in starts on All tools.
     // A page reload while signed in never passes through here, so it stays on the screen it was on.
-    if ((status === 'signedOut' || status === 'unverified') && state.route !== 'hub') {
+    if (['signedOut', 'unverified', 'needPassphrase', 'locked'].includes(status) && state.route !== 'hub') {
         state.route = 'hub';
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }

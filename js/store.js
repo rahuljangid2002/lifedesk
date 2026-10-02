@@ -5,6 +5,7 @@
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
 import { firebaseConfig, firestoreDatabase, loginMethods, otpEndpoint } from './config.js';
 import { STARTER_CATEGORIES } from './seed.js';
+import * as V from './vault.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
 const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets'];
@@ -25,6 +26,12 @@ let listener = () => {};
 let fb = null; // firebase modules and handles
 let unsubscribe = [];
 let loaded = new Set();
+let dek = null; // the data key, once this device is unlocked
+let vaultDoc = null; // the wrapped data key as stored in the database
+const keySlot = () => `lifedesk-key-${user.uid}`;
+// On this computer only, a test may skip the email check to reach the screens behind it. The real check is in the
+// database rules, which this does not touch.
+const TEST_VERIFIED = window.location.hostname === 'localhost' && localStorage.getItem('lifedesk-test-verified') === '1';
 let confirming = false; // sign-up in progress: the account exists but its email is being marked verified
 
 // On this computer only, tests may point the email-code calls somewhere else.
@@ -35,7 +42,7 @@ export function newId() {
     return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** cb(state): 'loading' | 'signedOut' | 'unverified' (email not confirmed yet) | 'ready' (data changed). */
+/** cb(state): 'loading' | 'signedOut' | 'unverified' (email not confirmed) | 'needPassphrase' (first time) | 'locked' (this device has no key yet) | 'ready'. */
 export async function init(cb) {
     listener = cb;
     if (isDemo) {
@@ -78,20 +85,105 @@ export async function init(cb) {
             return;
         }
         user = { uid: u.uid, name: u.displayName || u.email || u.phoneNumber || 'You', contact: u.email || u.phoneNumber || '' };
-        if (!isVerified(u)) {
-            // the database refuses unverified email + password accounts, so do not even ask it
-            listener(confirming ? 'loading' : 'unverified');
+        dek = null;
+        vaultDoc = null;
+        if (confirming) {
+            listener('loading'); // sign-up in progress: it opens the data itself when the email is confirmed
             return;
         }
-        subscribe(u);
+        if (!isVerified(u)) {
+            // the database refuses unverified email + password accounts, so do not even ask it
+            listener('unverified');
+            return;
+        }
+        openData();
     });
 }
 
 /** Google accounts are verified by Google; email + password accounts by the one-time code. */
 function isVerified(u) {
-    return u.emailVerified || !u.providerData.some((p) => p.providerId === 'password');
+    return TEST_VERIFIED || u.emailVerified || !u.providerData.some((p) => p.providerId === 'password');
 }
 
+// ---------- encryption: passphrase, recovery code, this device's key ----------
+const vaultRef = () => fb.fs.doc(fb.db, 'users', user.uid, 'vault', 'key');
+
+/** After sign-in: finds out whether a passphrase exists and whether this device already holds the key. */
+async function openData() {
+    listener('loading');
+    const saved = localStorage.getItem(keySlot());
+    try {
+        const snap = await fb.fs.getDoc(vaultRef());
+        vaultDoc = snap.exists() ? snap.data() : null;
+    } catch (e) {
+        if (e.code === 'permission-denied') {
+            return listener('unverified');
+        }
+        if (!saved) {
+            throw e; // offline on a device that was never unlocked: nothing can be shown
+        }
+        vaultDoc = {};
+    }
+    if (!vaultDoc) {
+        return listener('needPassphrase');
+    }
+    if (!saved) {
+        return listener('locked');
+    }
+    dek = await V.importKey(V.keyFromText(saved));
+    subscribe(fb.handle.currentUser);
+}
+
+async function useKey(raw) {
+    localStorage.setItem(keySlot(), V.keyToText(raw)); // this device is not asked again
+    dek = await V.importKey(raw);
+}
+
+/** First time: sets the passphrase. Returns the recovery code to show once; call enterData() after it is saved. */
+export async function createPassphrase(passphrase) {
+    const made = await V.createVault(passphrase);
+    await fb.fs.setDoc(vaultRef(), made.doc);
+    vaultDoc = made.doc;
+    await useKey(made.raw);
+    return made.recovery;
+}
+export function enterData() {
+    subscribe(fb.handle.currentUser);
+}
+/** A device that has no key yet. False when the passphrase is wrong. */
+export async function unlock(passphrase) {
+    const raw = await V.openVault(vaultDoc, passphrase);
+    if (!raw) {
+        return false;
+    }
+    await useKey(raw);
+    subscribe(fb.handle.currentUser);
+    return true;
+}
+/** Forgotten passphrase: the recovery code opens the data and a new passphrase is set. False when the code is wrong. */
+export async function unlockWithRecovery(code, newPassphrase) {
+    const raw = await V.openWithRecovery(vaultDoc, code);
+    if (!raw) {
+        return false;
+    }
+    vaultDoc = await V.changePassphrase(vaultDoc, raw, newPassphrase);
+    await fb.fs.setDoc(vaultRef(), vaultDoc);
+    await useKey(raw);
+    subscribe(fb.handle.currentUser);
+    return true;
+}
+/** Forgets the key on this device: the passphrase is asked again. */
+export function lockDevice() {
+    localStorage.removeItem(keySlot());
+    dek = null;
+    unsubscribe.forEach((fn) => fn());
+    unsubscribe = [];
+    loaded = new Set();
+    COLLECTIONS.forEach((c) => (data[c] = []));
+    listener('locked');
+}
+
+const turns = {};
 function subscribe(u) {
     listener('loading');
     for (const c of COLLECTIONS) {
@@ -99,8 +191,29 @@ function subscribe(u) {
             fb.fs.onSnapshot(
                 fb.fs.collection(fb.db, 'users', u.uid, c),
                 async (snap) => {
-                    data[c] = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+                    const turn = (turns[c] = (turns[c] || 0) + 1);
+                    const key = dek;
+                    const rows = [];
+                    const plain = [];
+                    for (const d of snap.docs) {
+                        try {
+                            const got = await V.decryptDoc(key, d.data());
+                            rows.push({ ...got.fields, id: d.id });
+                            if (got.plain) {
+                                plain.push([c, { ...got.fields, id: d.id }]);
+                            }
+                        } catch (e) {
+                            console.error('could not read', c, d.id); // saved with another key: left alone, not shown
+                        }
+                    }
+                    if (turn !== turns[c] || key !== dek) {
+                        return; // a newer update, or the device was locked, while this one was being read
+                    }
+                    data[c] = rows;
                     loaded.add(c);
+                    if (plain.length) {
+                        saveAll(plain).catch((e) => console.error('could not encrypt older data', e.code)); // saved before encryption: encrypt it now
+                    }
                     if (loaded.size === COLLECTIONS.length) {
                         await seedIfNew();
                         listener('ready');
@@ -162,7 +275,7 @@ export async function confirmVerified() {
     await otpCall({ action: 'confirm', idToken: await u.getIdToken() });
     await u.reload();
     await u.getIdToken(true); // the database reads "verified" from a fresh token
-    subscribe(fb.handle.currentUser);
+    await openData();
 }
 
 /** A new user starts with the starter categories and a Cash account. */
@@ -206,7 +319,7 @@ export async function saveMany(pairs) {
     const batch = fb.fs.writeBatch(fb.db);
     for (const [c, doc] of pairs) {
         const { id, ...rest } = doc;
-        batch.set(fb.fs.doc(fb.db, 'users', user.uid, c, id), clean(rest));
+        batch.set(fb.fs.doc(fb.db, 'users', user.uid, c, id), await V.encryptDoc(dek, clean(rest)));
     }
     await batch.commit();
 }
@@ -321,6 +434,8 @@ export async function deleteAccount() {
     }
     unsubscribe.forEach((fn) => fn());
     unsubscribe = [];
+    await fb.fs.deleteDoc(vaultRef()).catch(() => {});
+    localStorage.removeItem(keySlot());
     await fb.auth.deleteUser(current);
 }
 

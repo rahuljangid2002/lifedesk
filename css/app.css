@@ -2108,3 +2108,20 @@ label > span .pill {
     align-items: flex-end;
     text-align: right;
 }
+
+.recovery {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-align: center;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 0.75rem;
+    padding: 0.9rem 0.5rem;
+    user-select: all;
+    overflow-wrap: anywhere;
+}
+.login-form .check {
+    text-align: left;
+}

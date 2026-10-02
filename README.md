@@ -25,6 +25,13 @@ The start screen lists the tools. Money has these screens:
 
 Net balance = bank + cash − credit card owed − money owed to people.
 
+**Encrypted:** after signing in, each user sets a data passphrase (and is shown a recovery code once). Every document
+is encrypted on the device (AES-GCM, key wrapped with PBKDF2 from the passphrase and from the recovery code; see
+`js/vault.js`) before it is saved, so the database holds only unreadable text, also for the project owner. Asked once
+per device; Account → Lock this device. Still visible to the owner: sign-in email, document ids (budget ids are months),
+collection names, how many documents there are and when they changed. A forgotten passphrase with a lost recovery code
+cannot be recovered. The downloaded backup file is not encrypted.
+
 **Any country:** on first login each user picks their currency (guessed from the device); amounts, number grouping
 and dates follow their region. Changing it under Account offers two choices: convert every saved amount at an exchange rate
 (today's rate from open.er-api.com, editable; a backup is downloaded first), or keep the numbers and change only the symbol.
@@ -136,4 +143,5 @@ No database rule change is needed: the rules already cover everything under the 
 python3 -m http.server 8765 &
 ../3-Demo/demo/.venv/bin/python tests/ui_flow.py      # demo mode, every screen
 ../3-Demo/demo/.venv/bin/python tests/live_login.py   # real Firebase sign-up with a stand-in code service; deletes its test account
+../3-Demo/demo/.venv/bin/python tests/encryption.py   # real Firebase: passphrase, what the database stores, second device, recovery
 ```
