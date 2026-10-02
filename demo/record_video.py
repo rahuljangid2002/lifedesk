@@ -3,6 +3,8 @@
     python3 -m http.server 8765                       (in 4-Web-App)
     <venv>/python demo/record_video.py                -> docs/LifeDesk - Demo Video.mp4
     <venv>/python demo/record_video.py budget reports -> re-record only these scenes
+    <venv>/python demo/record_video.py --mobile       -> docs/LifeDesk - Demo Video (Mobile).mp4, portrait 1080 x 1920,
+                                                         the app in its phone layout
 
 Each scene: narration (macOS voice Samantha, en_US) -> browser recording (Playwright) -> mp4 with voice and captions.
 """
@@ -14,12 +16,14 @@ from playwright.sync_api import sync_playwright
 import live
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-WORK = os.path.join(HERE, 'work')
+MOBILE = '--mobile' in sys.argv  # portrait video of the phone layout
+WORK = os.path.join(HERE, 'work_m' if MOBILE else 'work')
 OUT = os.path.join(os.path.dirname(HERE), 'docs')
 STATE = os.path.join(WORK, 'state.json')
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 VOICE, RATE = 'Samantha', '178'  # American English, female
 W, H = 1440, 900
+MW, MH, MSCALE = 432, 768, 2.5  # phone viewport (9:16); x 2.5 = 1080 x 1920
 URL = 'http://localhost:8765/'
 DEMO = URL + '?demo=1'
 MARK = {}
@@ -83,10 +87,10 @@ def card(name, title, sub, points):
     with open(path, 'w') as f:
         f.write(f"""<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
 background:linear-gradient(135deg,#0b1324,#1b2a4a 60%,#2563eb);font-family:system-ui,-apple-system,sans-serif;color:#fff">
-<style>@keyframes drift {{ from {{ transform: translateY(0) }} to {{ transform: translateY(-6px) }} }} .mark {{ animation: drift 1.6s ease-in-out infinite alternate }}</style><div style="text-align:center;max-width:980px"><div class="mark" style="width:110px;height:110px;border-radius:30px;margin:0 auto 26px;background:linear-gradient(135deg,#1b2a4a,#2563eb);
+<style>@keyframes drift {{ from {{ transform: translateY(0) }} to {{ transform: translateY(-6px) }} }} .mark {{ animation: drift 1.6s ease-in-out infinite alternate }}</style><div style="text-align:center;max-width:980px;padding:0 22px"><div class="mark" style="width:110px;height:110px;border-radius:30px;margin:0 auto 26px;background:linear-gradient(135deg,#1b2a4a,#2563eb);
 display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px rgba(0,0,0,.4)">
 <svg width="62" height="62" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4M7.5 11.5l3-3 2.5 2.5 3.5-3.5"/></svg></div>
-<h1 style="font-size:64px;margin:0 0 10px;letter-spacing:-1px">{title}</h1><p style="font-size:24px;margin:0 0 30px;color:#c7d7fe">{sub}</p>
+<h1 style="font-size:clamp(44px,9vw,64px);margin:0 0 10px;letter-spacing:-1px">{title}</h1><p style="font-size:24px;margin:0 0 30px;color:#c7d7fe">{sub}</p>
 <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">{''.join(f'<span style="background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:9px 18px;font-size:18px">{p}</span>' for p in points)}</div></div></body>""")
     return 'file://' + path
 
@@ -383,11 +387,12 @@ def prepare(pw):
 
 
 def record(pw, name, fn, kind):
-    vw, vh = (390, 844) if kind == 'phone' else (W, H)
+    vw, vh = (MW, MH) if MOBILE else (390, 844) if kind == 'phone' else (W, H)
+    out_w, out_h = vw, vh  # the recorder captures CSS pixels and never enlarges; the mobile cut is upscaled by ffmpeg
     browser = pw.chromium.launch()
     vdir = os.path.join(WORK, f'v_{name}')
     shutil.rmtree(vdir, ignore_errors=True)
-    ctx = browser.new_context(viewport={'width': vw, 'height': vh}, record_video_dir=vdir, record_video_size={'width': vw, 'height': vh},
+    ctx = browser.new_context(viewport={'width': vw, 'height': vh}, record_video_dir=vdir, record_video_size={'width': out_w, 'height': out_h}, device_scale_factor=MSCALE if MOBILE else 1,
                               storage_state=STATE if kind in ('app', 'phone') else None, color_scheme='light')
     ctx.add_init_script(OVERLAY)
     if kind == 'login':
@@ -412,7 +417,9 @@ def build(name, webm, begin, end, apath, alen, kind):
     speed = min(1.6, max(1.0, shown / (alen + 1.5)))  # page work is slower than the voice: play it a little faster
     dur = max(alen + 1.2, shown / speed)
     sp = f'setpts=(PTS-STARTPTS)/{speed:.3f},'
-    if kind == 'phone':
+    if MOBILE:
+        vf = f'scale=1080:1920:flags=lanczos,{sp}fps=30,tpad=stop_mode=clone:stop_duration=30'
+    elif kind == 'phone':
         vf = f'scale=-2:{H - 56},pad={W}:{H}:(ow-iw)/2:28:color=0xF4F5F7,{sp}fps=30,tpad=stop_mode=clone:stop_duration=30'
     else:
         vf = f'{sp}fps=30,tpad=stop_mode=clone:stop_duration=30'
@@ -426,11 +433,12 @@ def build(name, webm, begin, end, apath, alen, kind):
 
 def main():
     os.makedirs(WORK, exist_ok=True); os.makedirs(OUT, exist_ok=True)
-    only = set(sys.argv[1:])
+    only = set(a for a in sys.argv[1:] if not a.startswith('--'))
+    scenes = [x for x in SCENES if not (MOBILE and x[0] == 'mobile')]  # the phone scene is the whole video here
     total = 0
     with sync_playwright() as pw:
         prepare(pw)
-        for name, fn, kind, text in SCENES:
+        for name, fn, kind, text in scenes:
             mp4 = os.path.join(WORK, f'{name}.mp4')
             if only and name not in only and os.path.exists(mp4):
                 continue
@@ -441,15 +449,15 @@ def main():
             print(f'{name}: voice {alen:.1f}s, shown {end - begin:.1f}s, scene {dur:.1f}s', flush=True)
             if kind == 'login':
                 print('throw-away account deleted:', live.cleanup(), flush=True)
-    for name, *_ in SCENES:
+    for name, *_ in scenes:
         probe = subprocess.run([FFMPEG, '-i', os.path.join(WORK, name + '.mp4')], capture_output=True, text=True).stderr
         if 'Video:' not in probe:
             raise SystemExit(f'scene {name} has no picture; not joining')
     lst = os.path.join(WORK, 'list.txt')
     with open(lst, 'w') as f:
-        for name, *_ in SCENES:
+        for name, *_ in scenes:
             f.write(f"file '{os.path.join(WORK, name + '.mp4')}'\n")
-    final = os.path.join(OUT, 'LifeDesk - Demo Video.mp4')
+    final = os.path.join(OUT, 'LifeDesk - Demo Video (Mobile).mp4' if MOBILE else 'LifeDesk - Demo Video.mp4')
     subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', lst, '-c', 'copy', '-movflags', '+faststart', final], check=True)
     print('video', final)
 
