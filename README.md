@@ -25,7 +25,8 @@ The start screen lists the tools. Money has these screens:
 Net balance = bank + cash − credit card owed − money owed to people.
 
 **Any country:** on first login each user picks their currency (guessed from the device); amounts, number grouping
-and dates follow their region. It can be changed under Account. Changing it does not convert existing amounts.
+and dates follow their region. Changing it under Account offers two choices: convert every saved amount at an exchange rate
+(today's rate from open.er-api.com, editable; a backup is downloaded first), or keep the numbers and change only the symbol.
 
 **Light and dark:** Account → Appearance: System (follows the device), Light or Dark; kept on the device.
 

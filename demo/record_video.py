@@ -262,13 +262,13 @@ def s_settings(page):
     time.sleep(1.5)
     nav(page, 'more', 1)
     tap(page, page.get_by_role('button', name='Light', exact=True), 1.2)
-    page.locator('[data-setting=currency]').hover(); time.sleep(0.4)
-    page.locator('[data-setting=currency]').select_option('USD')
+    page.locator('[data-currency]').hover(); time.sleep(0.4)
+    (page.locator('[data-currency]').select_option('USD'), page.get_by_role('button', name='Keep the numbers').click())
     caption(page, 'Any currency: amounts and dates follow the region')
     time.sleep(2.5)
     nav(page, 'accounts', 3)
     nav(page, 'more', 0.8)
-    page.locator('[data-setting=currency]').select_option('INR')
+    (page.locator('[data-currency]').select_option('INR'), page.get_by_role('button', name='Keep the numbers').click())
     time.sleep(1.5)
 
 

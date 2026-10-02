@@ -237,10 +237,10 @@ with sync_playwright() as p:
     check('theme: System follows the device (light here)', bg() == light_bg, bg())
 
     # Change the currency: amounts follow, nothing is converted
-    pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('EUR'); time.sleep(0.4)
+    pg.goto(URL + '#more'); (pg.locator('[data-currency]').select_option('EUR'), pg.get_by_role('button', name='Keep the numbers').click()); time.sleep(0.4)
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')
     check('currency change: euro shown', '€' in stat('Net balance') and money(stat('Net balance')) == 7700, stat('Net balance'))
-    pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('INR'); time.sleep(0.4)
+    pg.goto(URL + '#more'); (pg.locator('[data-currency]').select_option('INR'), pg.get_by_role('button', name='Keep the numbers').click()); time.sleep(0.4)
     pg.goto(URL + '#accounts'); pg.get_by_role('button', name='＋ Bank account').click()
     pg.get_by_label('Name').fill('Savings'); pg.get_by_label('Opening balance').fill('1234567'); pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
     check('rupees use lakh grouping', '₹12,34,567' in pg.locator('.acct-row', has_text='Savings').inner_text(), pg.locator('.acct-row', has_text='Savings').inner_text()[:60])
@@ -262,6 +262,24 @@ with sync_playwright() as p:
     check('phone: no sideways scrolling on any screen', not wide, str(wide))
     pg.emulate_media(color_scheme='dark'); pg.goto(URL + '#home'); time.sleep(0.3)
     pg.screenshot(path=os.path.join(OUT, 'm_home_dark.png'))
+    # Changing currency with conversion (the rate service is answered here with a fixed rate)
+    pg.route('https://open.er-api.com/**', lambda r: r.fulfill(status=200, content_type='application/json', body='{"result": "success", "rates": {"USD": 0.5, "INR": 1}}'))
+    pg.goto(URL + '#accounts'); pg.wait_for_selector('.tabbar'); before = money(stat('Net balance'))
+    pg.goto(URL + '#more'); pg.locator('[data-currency]').select_option('USD')
+    pg.wait_for_function("document.querySelector('[data-model=\"more.change.rate\"]') && document.querySelector('[data-model=\"more.change.rate\"]').value === '0.5'")
+    with pg.expect_download() as backup:
+        pg.get_by_role('button', name='Convert amounts').click()
+    pg.wait_for_selector('.toast:has-text("Converted")')
+    pg.goto(URL + '#accounts'); pg.wait_for_selector('.tabbar')
+    check('currency: converting at 0.5 halves the amounts and shows dollars, after a backup', '$' in stat('Net balance') and abs(float(re.sub(r'[^0-9.]', '', stat('Net balance'))) - before / 2) <= 1 and backup.value.suggested_filename.endswith('.json'), f"{before} -> {stat('Net balance')}")
+    pg.route('https://open.er-api.com/**', lambda r: r.fulfill(status=200, content_type='application/json', body='{"result": "success", "rates": {"INR": 2}}'))
+    pg.goto(URL + '#more'); pg.locator('[data-currency]').select_option('INR')
+    pg.wait_for_function("document.querySelector('[data-model=\"more.change.rate\"]') && document.querySelector('[data-model=\"more.change.rate\"]').value === '2'")
+    with pg.expect_download():
+        pg.get_by_role('button', name='Convert amounts').click()
+    pg.wait_for_selector('.toast:has-text("Converted")'); pg.goto(URL + '#accounts'); pg.wait_for_selector('.tabbar')
+    check('currency: converting back at 2 restores the amounts', '₹' in stat('Net balance') and abs(money(stat('Net balance')) - before) <= 2, stat('Net balance'))
+
     # Buying on EMI, the calculated interest rate, and balances carried from month to month
     rates = pg.evaluate("import('./js/logic.js').then(L => [L.impliedRate(57000, 10500, 6), L.impliedRate(1000000, 15746, 84), L.impliedRate(60000, 10000, 6), L.addMonthsToDate('2026-01-31', 1)])")
     check('EMI: calculated rates match the Salesforce app (35.24, 8.32, 0)', rates[:3] == [35.24, 8.32, 0] and rates[3] == '2026-02-28', str(rates))

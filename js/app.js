@@ -22,7 +22,7 @@ const state = {
     budget: { month: thisMonth(), edits: null, open: null },
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
-    more: { addingCategory: false, busy: false },
+    more: { addingCategory: false, busy: false, change: null },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
     login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
@@ -674,6 +674,20 @@ function payForm(card, owed) {
         <div class="split"><button class="btn" data-action="payCancel">Cancel</button><button class="btn primary" data-action="paySave">Pay</button></div></div>`;
 }
 
+/** Shown after another currency is picked: convert the amounts at a rate, or keep the numbers. */
+function currencyChange(from) {
+    const c = state.more.change;
+    if (!c) {
+        return '';
+    }
+    const busy = state.more.busy ? 'disabled' : '';
+    return `<div class="form"><b>Change from ${from} to ${c.to}</b>
+        <label>Exchange rate: 1 ${from} = how many ${c.to}?<input type="number" inputmode="decimal" min="0" step="any" value="${esc(c.rate)}" data-model="more.change.rate" placeholder="${c.loading ? 'getting today\'s rate…' : 'type the rate'}"></label>
+        <small>${c.loading ? 'Getting today\'s rate…' : c.source ? `Today's rate from ${esc(c.source)}. You can change it.` : 'Could not get today\'s rate. Type it to convert.'}</small>
+        <small><b>Convert amounts</b> multiplies every amount you have saved (entries, account opening balances and limits, people, budgets, loans) by this rate, once. A backup file is downloaded first. <b>Keep the numbers</b> only changes the symbol.</small>
+        <div class="split wrap"><button class="btn primary" data-action="currencyConvert" ${busy}>Convert amounts</button><button class="btn" data-action="currencyKeep" ${busy}>Keep the numbers</button><button class="btn ghost" data-action="currencyCancel" ${busy}>Cancel</button></div></div>`;
+}
+
 function more() {
     const f = L.currentFormat();
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
@@ -683,8 +697,9 @@ function more() {
             <div class="seg">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, label]) => `<button class="${theme() === v ? 'on' : ''}" data-action="setTheme" data-theme="${v}" aria-pressed="${theme() === v}">${label}</button>`).join('')}</div>
             <small>${theme() === 'system' ? 'Follows this device: light by day or dark, whichever the device is set to.' : `Always ${theme()} on this device, whatever the device setting.`} Saved on this device only.</small></section>
         <section class="card"><div class="card-head"><h2>Region</h2></div>
-            <label>Currency<select data-setting="currency">${currencyOptions(f.currency)}</select></label>
-            <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Changing the currency changes how amounts are shown; it does not convert them.</small></section>
+            <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
+            ${currencyChange(f.currency)}
+            <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Pick another currency to convert your amounts at today's rate, or to change only the symbol.</small></section>
         <section class="card"><div class="card-head"><h2>Money</h2></div>
             <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a></section>
         <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
@@ -1302,6 +1317,46 @@ const actions = {
         URL.revokeObjectURL(url);
     },
 
+    async currencyKeep() {
+        const to = state.more.change.to;
+        state.more.change = null;
+        await S.save('settings', { ...(S.prefs() || { id: 'prefs' }), currency: to });
+        toast(`Amounts are now shown in ${to}. The numbers were not changed.`);
+    },
+    currencyCancel() {
+        state.more.change = null;
+        render();
+    },
+    async currencyConvert() {
+        const { to, rate } = state.more.change;
+        const from = L.currentFormat().currency;
+        const r = Number(rate);
+        if (!(r > 0)) {
+            return toast('Enter the exchange rate first.', 'warn');
+        }
+        if (!window.confirm(`Convert every saved amount from ${from} to ${to} at 1 ${from} = ${r} ${to}?\nA backup file is downloaded first. This changes your data.`)) {
+            return;
+        }
+        actions.exportData(); // the way back, if the rate was wrong
+        const x = (v) => (v === null || v === undefined || v === '' ? v : Math.round(Number(v) * r * 100) / 100);
+        const pairs = [];
+        S.data.entries.forEach((e) => pairs.push(['entries', { ...e, amount: x(e.amount) }]));
+        S.data.accounts.forEach((a) => pairs.push(['accounts', { ...a, opening: x(a.opening), limit: x(a.limit) }]));
+        S.data.people.forEach((p) => pairs.push(['people', { ...p, opening: x(p.opening) }]));
+        S.data.budgets.forEach((b) => pairs.push(['budgets', { ...b, lines: Object.fromEntries(Object.entries(b.lines || {}).map(([k, v]) => [k, x(v)])) }]));
+        S.data.loans.forEach((l) => pairs.push(['loans', { ...l, price: x(l.price), downPayment: x(l.downPayment), financed: x(l.financed), emi: x(l.emi) }]));
+        pairs.push(['settings', { ...(S.prefs() || { id: 'prefs' }), currency: to }]);
+        state.more.busy = true;
+        render();
+        try {
+            await S.saveAll(pairs);
+            state.more.change = null;
+            toast(`Converted to ${to} at ${r}. A backup of the ${from} amounts was downloaded.`);
+        } finally {
+            state.more.busy = false;
+            render();
+        }
+    },
     setTheme(el) {
         const t = el.dataset.theme;
         try {
@@ -1473,6 +1528,31 @@ app.addEventListener('change', async (event) => {
         if (el.dataset.personField) {
             const p = byId(S.data.people, el.dataset.id);
             await S.save('people', { ...p, [el.dataset.personField]: el.value.trim() });
+        }
+        if ('currency' in el.dataset) {
+            const from = L.currentFormat().currency;
+            if (el.value === from) {
+                state.more.change = null;
+                return render();
+            }
+            const change = { to: el.value, rate: '', loading: true, source: '' };
+            state.more.change = change;
+            render();
+            try {
+                const res = await (await fetch(`https://open.er-api.com/v6/latest/${from}`)).json();
+                const rate = res && res.rates ? res.rates[change.to] : null;
+                if (rate) {
+                    change.rate = String(rate);
+                    change.source = 'open.er-api.com';
+                }
+            } catch (e) {
+                // no connection or the service is down: the rate is typed by hand
+            }
+            change.loading = false;
+            if (state.more.change === change) {
+                render();
+            }
+            return;
         }
         if (el.dataset.setting) {
             await S.save('settings', { ...(S.prefs() || { id: 'prefs' }), [el.dataset.setting]: el.value });
