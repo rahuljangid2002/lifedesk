@@ -1,5 +1,7 @@
 # LifeDesk
 
+**Live:** https://rahuljangid2002.github.io/lifedesk/ · demo without login: add `?demo=1`
+
 One login, several everyday tools. The first tool is **Money** (the same personal finance app as the Salesforce
 version); **Renewal reminders** and others come later. It is a web app that installs on a phone like an app.
 Plain HTML, CSS and JavaScript: no build step, so it can be hosted free on GitHub Pages.
@@ -51,6 +53,9 @@ Then open http://localhost:8765 (make the browser window narrow, or use your pho
 The values in `js/config.js` are public identifiers, not passwords. Access is protected by the login and the rules.
 
 ## Host it free on GitHub Pages
+
+Already set up: repository `rahuljangid2002/lifedesk`, Pages from branch `main`. To publish a change: `git push`
+(the site updates in about a minute). The steps below are for setting it up again elsewhere.
 
 1. Create a GitHub account and a new **public** repository named `lifedesk`.
 2. In this folder:
