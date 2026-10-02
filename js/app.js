@@ -730,7 +730,8 @@ function currencyChange(from) {
     return `<div class="form"><b>Change from ${from} to ${c.to}</b>
         <label>Exchange rate: 1 ${from} = how many ${c.to}?<input type="number" inputmode="decimal" min="0" step="any" value="${esc(c.rate)}" data-model="more.change.rate" placeholder="${c.loading ? 'getting today\'s rate…' : 'type the rate'}"></label>
         <small>${c.loading ? 'Getting today\'s rate…' : c.source ? `Today's rate from ${esc(c.source)}. You can change it.` : 'Could not get today\'s rate. Type it to convert.'}</small>
-        <small><b>Convert amounts</b> multiplies every amount you have saved (entries, account opening balances and limits, people, budgets, loans) by this rate, once. A backup file is downloaded first. <b>Keep the numbers</b> only changes the symbol.</small>
+        <small><b>Convert amounts</b> multiplies every amount you have saved (entries, account opening balances and limits, people, budgets, loans) by this rate, once. <b>Keep the numbers</b> only changes the symbol.</small>
+        <label class="check"><input type="checkbox" data-action="currencyBackup" ${c.backup ? 'checked' : ''}> Download a backup file before converting (recommended)</label>
         <div class="split wrap"><button class="btn primary" data-action="currencyConvert" ${busy}>Convert amounts</button><button class="btn" data-action="currencyKeep" ${busy}>Keep the numbers</button><button class="btn ghost" data-action="currencyCancel" ${busy}>Cancel</button></div></div>`;
 }
 
@@ -1415,21 +1416,27 @@ const actions = {
         await S.save('settings', { ...(S.prefs() || { id: 'prefs' }), currency: to });
         toast(`Amounts are now shown in ${to}. The numbers were not changed.`);
     },
+    currencyBackup() {
+        state.more.change.backup = !state.more.change.backup;
+        render();
+    },
     currencyCancel() {
         state.more.change = null;
         render();
     },
     async currencyConvert() {
-        const { to, rate } = state.more.change;
+        const { to, rate, backup } = state.more.change;
         const from = L.currentFormat().currency;
         const r = Number(rate);
         if (!(r > 0)) {
             return toast('Enter the exchange rate first.', 'warn');
         }
-        if (!window.confirm(`Convert every saved amount from ${from} to ${to} at 1 ${from} = ${r} ${to}?\nA backup file is downloaded first. This changes your data.`)) {
+        if (!window.confirm(`Convert every saved amount from ${from} to ${to} at 1 ${from} = ${r} ${to}?\n${backup ? 'A backup file is downloaded first.' : 'No backup file will be downloaded, so this cannot be undone exactly.'} This changes your data.`)) {
             return;
         }
-        actions.exportData(); // the way back, if the rate was wrong
+        if (backup) {
+            actions.exportData(); // the way back, if the rate was wrong
+        }
         const x = (v) => (v === null || v === undefined || v === '' ? v : Math.round(Number(v) * r * 100) / 100);
         const pairs = [];
         S.data.entries.forEach((e) => pairs.push(['entries', { ...e, amount: x(e.amount) }]));
@@ -1443,7 +1450,7 @@ const actions = {
         try {
             await S.saveAll(pairs);
             state.more.change = null;
-            toast(`Converted to ${to} at ${r}. A backup of the ${from} amounts was downloaded.`);
+            toast(`Converted to ${to} at ${r}.${backup ? ` A backup of the ${from} amounts was downloaded.` : ''}`);
         } finally {
             state.more.busy = false;
             render();
@@ -1637,7 +1644,7 @@ app.addEventListener('change', async (event) => {
                 state.more.change = null;
                 return render();
             }
-            const change = { to: el.value, rate: '', loading: true, source: '' };
+            const change = { to: el.value, rate: '', loading: true, source: '', backup: true };
             state.more.change = change;
             render();
             try {

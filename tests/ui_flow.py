@@ -275,9 +275,13 @@ with sync_playwright() as p:
     pg.route('https://open.er-api.com/**', lambda r: r.fulfill(status=200, content_type='application/json', body='{"result": "success", "rates": {"INR": 2}}'))
     pg.goto(URL + '#more'); pg.locator('[data-currency]').select_option('INR')
     pg.wait_for_function("document.querySelector('[data-model=\"more.change.rate\"]') && document.querySelector('[data-model=\"more.change.rate\"]').value === '2'")
-    with pg.expect_download():
-        pg.get_by_role('button', name='Convert amounts').click()
-    pg.wait_for_selector('.toast:has-text("Converted")'); pg.goto(URL + '#accounts'); pg.wait_for_selector('.tabbar')
+    downloads = []
+    pg.on('download', lambda d: downloads.append(d))
+    pg.get_by_label('Download a backup file before converting (recommended)').uncheck(); time.sleep(0.2)
+    pg.get_by_role('button', name='Convert amounts').click()
+    pg.wait_for_selector('.toast:has-text("Converted")'); time.sleep(0.5)
+    check('currency: with the backup box unticked, no file is downloaded', not downloads and 'backup' not in pg.locator('.toast').inner_text(), pg.locator('.toast').inner_text())
+    pg.goto(URL + '#accounts'); pg.wait_for_selector('.tabbar')
     check('currency: converting back at 2 restores the amounts', '₹' in stat('Net balance') and abs(money(stat('Net balance')) - before) <= 2, stat('Net balance'))
 
     # Buying on EMI, the calculated interest rate, and balances carried from month to month
