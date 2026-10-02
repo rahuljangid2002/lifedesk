@@ -81,7 +81,11 @@ with sync_playwright() as p:
 
     # Budget: plan 5,000 for fuel, open the category
     pg.goto(URL + '#budget')
-    pg.get_by_label('Budget for Vehicle - Fuel').fill('5000'); pg.get_by_role('button', name='Save budget').click(); time.sleep(0.3)
+    check('budget: no unsaved-changes bar before editing', not pg.locator('.savebar').is_visible())
+    pg.get_by_label('Budget for Vehicle - Fuel').fill('5000')
+    check('budget: unsaved-changes bar appears after editing', pg.locator('.savebar').is_visible())
+    pg.locator('.savebar').get_by_role('button', name='Save budget').click(); time.sleep(0.3)
+    check('budget: saved, bar gone, used category listed first', not pg.locator('.savebar').is_visible() and 'Vehicle - Fuel' in pg.locator('.budget-row').first.inner_text())
     check('budget: planned 5,000 and spent 999', money(stat('Planned')) == 5000 and money(stat('Spent so far')) == 999)
     pg.locator('.budget-row', has_text='Vehicle - Fuel').get_by_role('button', name='See entries').click()
     check('budget drill-down lists the expense', pg.locator('.budget-row.open .row', has_text='Car petrol').count() == 1)

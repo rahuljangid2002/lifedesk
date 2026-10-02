@@ -222,6 +222,20 @@ main {
 .card > * + * {
     margin-top: 0.6rem;
 }
+/* tiles in a grid: same height in a row, with their buttons along the bottom edge */
+.cards > .card,
+.cards > .tool {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.cards > .tool {
+    flex-direction: row;
+}
+.cards > .card > .split:last-child {
+    margin-top: auto;
+    padding-top: 0.6rem;
+}
 .card-head {
     display: flex;
     align-items: center;
@@ -830,6 +844,12 @@ input[type='number']::-webkit-outer-spin-button {
 .tool:active {
     transform: scale(0.98);
 }
+.btn {
+    white-space: nowrap;
+}
+.wide-only {
+    display: none;
+}
 .btn.primary {
     background: var(--brand);
     border-color: var(--brand);
@@ -900,10 +920,70 @@ input[type='number']::-webkit-outer-spin-button {
     flex-wrap: wrap;
     justify-content: flex-start;
 }
-.sticky {
+.over {
+    color: var(--red);
+    font-weight: 700;
+}
+/* budget: an ordered list with aligned columns */
+.btable {
+    overflow: visible;
+}
+.b-head {
+    display: none;
+}
+.budget-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name amount' 'progress progress' 'entries entries';
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    padding: 0.8rem 0.9rem;
+    border-top: 1px solid var(--border);
+}
+.btable > .budget-row:first-of-type {
+    border-top: 0;
+}
+.budget-row.open {
+    background: var(--brand-soft);
+}
+.b-name {
+    grid-area: name;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.b-progress {
+    grid-area: progress;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+}
+.budget-row .mini {
+    grid-area: amount;
+}
+.b-entries {
+    grid-area: entries;
+}
+/* unsaved changes: a bar of its own at the bottom, never on top of the content */
+.savebar {
     position: sticky;
-    bottom: calc(var(--tab-h) + 0.75rem + env(safe-area-inset-bottom));
-    z-index: 2;
+    bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0 -1rem -1rem;
+    padding: 0.7rem 1rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.savebar[hidden] {
+    display: none;
 }
 
 /* ---------- phone bottom bar ---------- */
@@ -1191,8 +1271,50 @@ input[type='number']::-webkit-outer-spin-button {
     }
     .cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: start;
+        align-items: stretch;
         gap: 1rem;
+    }
+    .wide-only {
+        display: inline-flex;
+    }
+    .b-head {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr) 9.5rem;
+        gap: 1.25rem;
+        padding: 0.6rem 1.1rem;
+        background: var(--surface-2);
+        border-radius: var(--radius) var(--radius) 0 0;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+    .b-head span:last-child {
+        text-align: right;
+    }
+    .budget-row {
+        grid-template-columns: minmax(0, 5fr) minmax(0, 6fr) 9.5rem;
+        grid-template-areas: 'name progress amount' 'entries entries entries';
+        gap: 0.6rem 1.25rem;
+        padding: 0.75rem 1.1rem;
+        min-height: 4.2rem;
+    }
+    .btable > .budget-row:first-of-type {
+        border-top: 1px solid var(--border);
+    }
+    .budget-row .mini {
+        justify-content: flex-end;
+    }
+    .budget-row .mini input {
+        width: 8rem;
+    }
+    .savebar {
+        bottom: 1rem;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.75rem 1rem 0.75rem 1.25rem;
     }
     .span {
         grid-column: 1 / -1;
@@ -1210,11 +1332,6 @@ input[type='number']::-webkit-outer-spin-button {
     .chips {
         flex-wrap: wrap;
         overflow: visible;
-    }
-    .sticky {
-        bottom: 1rem;
-        max-width: 24rem;
-        margin-left: auto;
     }
     .toast {
         bottom: 2rem;

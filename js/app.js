@@ -29,7 +29,9 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const byId = (list, id) => list.find((x) => x.id === id);
 const shortDate = (iso) => L.dateText(iso, { day: 'numeric', month: 'short' });
 const longDay = (iso) => (iso === today() ? `Today · ${shortDate(iso)}` : L.dateText(iso, { weekday: 'short', day: 'numeric', month: 'short' }));
-const activeAccounts = () => S.data.accounts.filter((a) => a.active !== false);
+const KIND_ORDER = { cash: 0, bank: 1, wallet: 2, card: 3 };
+const sortedAccounts = () => [...S.data.accounts].sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name));
+const activeAccounts = () => sortedAccounts().filter((a) => a.active !== false);
 const defaultAccount = () => activeAccounts().find((a) => a.isDefault) || activeAccounts()[0];
 const accountName = (id) => (byId(S.data.accounts, id) || {}).name || '';
 const categoryName = (id) => (byId(S.data.categories, id) || {}).name || '';
@@ -366,7 +368,7 @@ function daily() {
     const lastDay = to > today() ? today() : to;
     const span = Math.max(1, Math.round((new Date(lastDay) - new Date(from)) / 86400000) + 1);
     const top = days.reduce((a, b) => (!a || b.total > a.total ? b : a), null);
-    const cats = S.data.categories.filter((c) => (d.view === 'income' ? c.type === 'income' : d.view === 'spend' ? c.type === 'expense' : true));
+    const cats = S.data.categories.filter((c) => (d.view === 'income' ? c.type === 'income' : d.view === 'spend' ? c.type === 'expense' : true)).sort((x, y) => x.name.localeCompare(y.name));
     const seg = (v, label) => `<button class="${d.view === v ? 'on' : ''}" data-action="dailyView" data-view="${v}">${label}</button>`;
     return `<header class="hero">
         <small class="eyebrow center">Daily Expenses</small>
@@ -379,7 +381,7 @@ function daily() {
         <div class="seg">${seg('spend', 'Spending')}${seg('income', 'Income')}${seg('all', 'All entries')}</div>
         <div class="grid2">
             <select data-model="daily.category" data-rerender aria-label="Category"><option value="">All categories</option>${cats.map((c) => `<option value="${c.id}" ${c.id === d.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
-            <select data-model="daily.account" data-rerender aria-label="Account"><option value="">All accounts</option>${S.data.accounts.map((a) => `<option value="${a.id}" ${a.id === d.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+            <select data-model="daily.account" data-rerender aria-label="Account"><option value="">All accounts</option>${sortedAccounts().map((a) => `<option value="${a.id}" ${a.id === d.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
         </div>
         <input type="search" placeholder="Search description…" value="${esc(d.search)}" data-model="daily.search" data-rerender-soft aria-label="Search">
         <div id="daily-days">${dailyDays(days)}</div>
@@ -403,32 +405,40 @@ function budget() {
     const b = state.budget;
     const rows = L.budgetRows(S.data, b.month);
     const value = (r) => (b.edits && r.id in b.edits ? b.edits[r.id] : r.planned || '');
-    const planned = rows.reduce((s, r) => s + (Number(value(r)) || 0), 0);
+    const plan = (r) => Number(value(r)) || 0;
+    const planned = rows.reduce((s, r) => s + plan(r), 0);
     const spent = rows.reduce((s, r) => s + r.spent, 0);
     const income = L.monthSummary(S.data, L.addMonths(b.month, -1)).income;
-    const list = rows
-        .map((r) => {
-            const plan = Number(value(r)) || 0;
-            const pct = plan ? Math.min(100, Math.round((r.spent / plan) * 100)) : r.spent ? 100 : 0;
-            const colour = plan ? (r.spent > plan ? 'red' : pct >= 90 ? 'orange' : '') : r.spent ? 'red' : '';
-            const open = b.open === r.id;
-            const entries = open ? S.data.entries.filter((e) => e.type === 'expense' && e.categoryId === r.id && L.monthKey(e.date) === b.month).sort((x, y) => (x.date < y.date ? 1 : -1)) : [];
-            return `<section class="card budget-row ${open ? 'open span' : ''}">
-                <div class="card-head"><button class="row-name" data-action="budgetOpen" data-id="${r.id}"><b>${esc(r.name)}</b><small>${r.lastMonth || r.average ? `Last month ${L.money(r.lastMonth)} · 3-month avg ${L.money(r.average)}` : 'No recent spend'}</small></button>
-                    <label class="mini">${esc(L.symbol())}<input type="number" inputmode="numeric" min="0" step="1" value="${esc(value(r))}" data-budget="${r.id}" aria-label="Budget for ${esc(r.name)}"></label></div>
-                ${plan || r.spent ? `<div class="bar"><i class="${colour}" style="width:${pct}%"></i></div><small>${L.money(r.spent)}${plan ? ` of ${L.money(plan)}` : ''} spent${r.spent ? ` · <button class="link-btn" data-action="budgetOpen" data-id="${r.id}">${open ? 'Hide entries' : 'See entries'}</button>` : ''}</small>` : ''}
-                ${open ? `<div class="list inner">${entries.map((e) => entryRow(e, true)).join('') || '<p class="empty">No expenses yet.</p>'}<div class="row total"><span class="row-text"><b>Total</b></span><span class="amt">${L.money(r.spent)}</span></div></div>` : ''}
-            </section>`;
-        })
-        .join('');
+    // In use first (largest budget on top), then the categories with nothing this month, A to Z.
+    const inUse = rows.filter((r) => r.planned || r.spent).sort((x, y) => y.planned - x.planned || y.spent - x.spent || x.name.localeCompare(y.name));
+    const unused = rows.filter((r) => !r.planned && !r.spent).sort((x, y) => x.name.localeCompare(y.name));
+    const line = (r) => {
+        const p = plan(r);
+        const pct = p ? Math.min(100, Math.round((r.spent / p) * 100)) : r.spent ? 100 : 0;
+        const colour = p ? (r.spent > p ? 'red' : pct >= 90 ? 'orange' : '') : r.spent ? 'red' : '';
+        const open = b.open === r.id;
+        const entries = open ? S.data.entries.filter((e) => e.type === 'expense' && e.categoryId === r.id && L.monthKey(e.date) === b.month).sort((x, y) => (x.date < y.date ? 1 : -1)) : [];
+        const left = p - r.spent;
+        return `<div class="budget-row ${open ? 'open' : ''}">
+            <div class="b-name"><b>${esc(r.name)}</b><small>${r.lastMonth || r.average ? `Last month ${L.money(r.lastMonth)} · 3-month avg ${L.money(r.average)}` : 'No recent spend'}</small></div>
+            <div class="b-progress">${p || r.spent ? `<div class="bar"><i class="${colour}" style="width:${pct}%"></i></div>
+                <small>${L.money(r.spent)}${p ? ` of ${L.money(p)}` : ''} spent${p ? ` · <span class="${left < 0 ? 'over' : ''}">${left < 0 ? `${L.money(-left)} over` : `${L.money(left)} left`}</span>` : ' · no budget'}${r.spent ? ` · <button class="link-btn" data-action="budgetOpen" data-id="${r.id}">${open ? 'Hide entries' : 'See entries'}</button>` : ''}</small>` : '<small>Nothing planned or spent</small>'}</div>
+            <label class="mini">${esc(L.symbol())}<input type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${esc(value(r))}" data-budget="${r.id}" aria-label="Budget for ${esc(r.name)}"></label>
+            ${open ? `<div class="b-entries list inner">${entries.map((e) => entryRow(e, true)).join('') || '<p class="empty">No expenses yet.</p>'}<div class="row total"><span class="row-text"><b>Total</b></span><span class="amt">${L.money(r.spent)}</span></div></div>` : ''}
+        </div>`;
+    };
+    const table = (title, list) => (list.length ? `<h3>${title}</h3><section class="list btable"><div class="b-head"><span>Category</span><span>Spent this month</span><span>Budget</span></div>${list.map(line).join('')}</section>` : '');
+    const dirty = !!b.edits;
     return `<header class="hero">
         <small class="eyebrow center">Budget</small>${monthNav(b.month, 'budgetMonth')}
         <div class="stats">${stat('Planned', L.money(planned))}${stat('Spent so far', L.money(spent))}${stat('Last month income', L.money(income))}</div>
     </header>
     <main>
-        <div class="split wrap"><button class="btn" data-action="budgetCopy">Copy last month</button><button class="btn" data-action="budgetAverage">Use 3-month average</button></div>
-        <div class="cards">${list}</div>
-        <div class="sticky"><button class="btn primary wide" data-action="budgetSave" ${b.edits ? '' : 'disabled'}>${b.edits ? 'Save budget' : 'Budget saved'}</button></div>
+        <div class="toolbar"><div class="split wrap"><button class="btn" data-action="budgetCopy">Copy last month</button><button class="btn" data-action="budgetAverage">Use 3-month average</button></div>
+            <button class="btn primary wide-only" data-action="budgetSave" ${dirty ? '' : 'disabled'}>${dirty ? 'Save budget' : 'Budget saved'}</button></div>
+        ${table('In use this month', inUse)}
+        ${table(inUse.length ? 'Other categories' : 'Categories', unused)}
+        <div class="savebar" ${dirty ? '' : 'hidden'}><span>You have unsaved budget changes.</span><button class="btn primary" data-action="budgetSave">Save budget</button></div>
     </main>`;
 }
 
@@ -482,7 +492,7 @@ function people() {
 function accounts() {
     const s = state.accounts;
     const t = L.totals(S.data);
-    const list = S.data.accounts.filter((a) => s.showClosed || a.active !== false);
+    const list = sortedAccounts().filter((a) => s.showClosed || a.active !== false);
     const cards = list
         .map((a) => {
             const bal = L.accountBalance(a, S.data.entries);
@@ -1211,10 +1221,13 @@ app.addEventListener('input', (event) => {
         const b = state.budget;
         b.edits = b.edits || {};
         b.edits[el.dataset.budget] = el.value;
-        const btn = app.querySelector('[data-action="budgetSave"]');
-        if (btn) {
+        app.querySelectorAll('[data-action="budgetSave"]').forEach((btn) => {
             btn.disabled = false;
             btn.textContent = 'Save budget';
+        });
+        const bar = app.querySelector('.savebar');
+        if (bar) {
+            bar.hidden = false;
         }
     }
 });
