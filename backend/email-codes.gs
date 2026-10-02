@@ -15,6 +15,18 @@ const PROJECT_ID = 'lifedesk-43dc1';
 const WEB_API_KEY = 'AIzaSyCV6JwF2Unc3QljVGBa1Mff8SCiVSzIUIc'; // public identifier, same as in js/config.js
 const APP_NAME = 'LifeDesk';
 
+// ---------- the words in the email: change them here ----------
+// {code} = the 6 digits, {app} = APP_NAME, {minutes} = how long the code works
+const EMAIL_TEXT = {
+  subject: 'Your {app} verification code: {code}',
+  heading: 'Confirm your email',
+  intro: 'Use this code to finish creating your {app} account.',
+  validity: 'This code works for {minutes} minutes and can be used once.',
+  safety: 'If you did not ask for this code, you can ignore this email. Nobody can create the account without it. Never share this code with anyone; {app} will never ask you for it.',
+  footer: '{app} – your everyday desk for money, budget and reminders.'
+};
+const EMAIL_COLOURS = { brandDark: '#312e81', brand: '#4f46e5', text: '#0f172a', muted: '#5b6780', codeBg: '#eef0ff', page: '#f3f5fb' };
+
 const CODE_MINUTES = 10; // a code works for this long
 const MAX_TRIES = 5; // wrong guesses before a new code is needed
 const SENDS_PER_EMAIL = 3; // codes per address per 15 minutes
@@ -63,12 +75,9 @@ function sendCode(rawEmail) {
   MailApp.sendEmail({
     to: email,
     name: APP_NAME,
-    subject: code + ' is your ' + APP_NAME + ' code',
-    body: 'Your ' + APP_NAME + ' verification code is ' + code + '.\n\nIt works for ' + CODE_MINUTES + ' minutes. If you did not ask for it, ignore this email.',
-    htmlBody: '<div style="font-family:Arial,sans-serif;font-size:15px;color:#0f172a">'
-      + '<p>Your ' + APP_NAME + ' verification code is</p>'
-      + '<p style="font-size:30px;font-weight:bold;letter-spacing:6px;margin:12px 0">' + code + '</p>'
-      + '<p>It works for ' + CODE_MINUTES + ' minutes. If you did not ask for it, ignore this email.</p></div>'
+    subject: fill(EMAIL_TEXT.subject, code),
+    body: emailText(code),
+    htmlBody: emailHtml(code)
   });
   return { ok: true, minutes: CODE_MINUTES };
 }
@@ -148,6 +157,42 @@ function selfTest() {
   console.log(ok ? 'OK: this account can manage users of ' + PROJECT_ID : 'PROBLEM ' + res.getResponseCode() + ': ' + res.getContentText());
   console.log('Emails left today for this Google account: ' + MailApp.getRemainingDailyQuota());
   return ok;
+}
+
+function fill(text, code) {
+  return text.replace(/\{code\}/g, code).replace(/\{app\}/g, APP_NAME).replace(/\{minutes\}/g, String(CODE_MINUTES));
+}
+
+/** Plain-text version, for mail apps that do not show formatted email. */
+function emailText(code) {
+  return [fill(EMAIL_TEXT.heading, code), '', fill(EMAIL_TEXT.intro, code), '', '    ' + code, '',
+    fill(EMAIL_TEXT.validity, code), '', fill(EMAIL_TEXT.safety, code), '', fill(EMAIL_TEXT.footer, code)].join('\n');
+}
+
+/** Formatted version: tables and inline styles only, which every mail app understands. */
+function emailHtml(code) {
+  const c = EMAIL_COLOURS;
+  const font = 'font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;';
+  return '<div style="margin:0;padding:24px 12px;background:' + c.page + ';">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;' + font + '">'
+    + '<tr><td style="background:' + c.brand + ';background:linear-gradient(135deg,' + c.brandDark + ',' + c.brand + ');padding:22px 28px;color:#ffffff;font-size:20px;font-weight:bold;' + font + '">' + APP_NAME + '</td></tr>'
+    + '<tr><td style="padding:28px 28px 8px;color:' + c.text + ';' + font + '">'
+    + '<p style="margin:0 0 8px;font-size:20px;font-weight:bold;">' + fill(EMAIL_TEXT.heading, code) + '</p>'
+    + '<p style="margin:0;font-size:15px;line-height:22px;color:' + c.muted + ';">' + fill(EMAIL_TEXT.intro, code) + '</p></td></tr>'
+    + '<tr><td style="padding:16px 28px;">'
+    + '<div style="background:' + c.codeBg + ';border-radius:12px;padding:18px 12px;text-align:center;font-family:Menlo,Consolas,monospace;font-size:34px;font-weight:bold;letter-spacing:10px;color:' + c.brandDark + ';">' + code + '</div></td></tr>'
+    + '<tr><td style="padding:4px 28px 24px;color:' + c.text + ';' + font + '">'
+    + '<p style="margin:0 0 14px;font-size:14px;line-height:21px;">' + fill(EMAIL_TEXT.validity, code) + '</p>'
+    + '<p style="margin:0;font-size:13px;line-height:20px;color:' + c.muted + ';">' + fill(EMAIL_TEXT.safety, code) + '</p></td></tr>'
+    + '<tr><td style="padding:16px 28px;border-top:1px solid #e2e7f0;font-size:12px;color:' + c.muted + ';' + font + '">' + fill(EMAIL_TEXT.footer, code) + '</td></tr>'
+    + '</table></div>';
+}
+
+/** Run from the editor to see the email: sends one to your own address (uses one email of today's allowance). */
+function previewEmail() {
+  const me = Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail({ to: me, name: APP_NAME, subject: fill(EMAIL_TEXT.subject, '123456'), body: emailText('123456'), htmlBody: emailHtml('123456') });
+  console.log('Preview sent to ' + me);
 }
 
 function cleanEmail(value) {
