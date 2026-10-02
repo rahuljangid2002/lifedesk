@@ -7,13 +7,13 @@ import { firebaseConfig, firestoreDatabase, loginMethods, otpEndpoint } from './
 import { STARTER_CATEGORIES } from './seed.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
-const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings'];
+const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
-export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [] };
+export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [] };
 
 /** The user's preferences (currency, region); null until they have chosen. */
 export function prefs() {
@@ -363,7 +363,7 @@ function readDemo() {
         COLLECTIONS.forEach((c) => (out[c] = Array.isArray(saved[c]) ? saved[c] : []));
         return out;
     } catch (e) {
-        return { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [] };
+        return { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [] };
     }
 }
 function writeDemo() {

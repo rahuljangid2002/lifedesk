@@ -129,6 +129,57 @@ export function monthEnd(key) {
     return isoDate(new Date(y, m, 0));
 }
 
+// ---------- loans bought on EMI ----------
+/** A date n months later, keeping the day (or the month's last day when it is shorter). */
+export function addMonthsToDate(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const first = new Date(y, m - 1 + n, 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return isoDate(new Date(first.getFullYear(), first.getMonth(), Math.min(d, last)));
+}
+
+/**
+ * The yearly interest rate (%) a lender is charging, worked out from the amount financed, the EMI and the number
+ * of EMIs (reducing-balance method: financed = EMI x (1 - (1 + r)^-n) / r, r per month). 0 for a no-cost EMI.
+ */
+export function impliedRate(financed, emi, months) {
+    const p = num(financed);
+    const e = num(emi);
+    const n = Math.round(num(months));
+    if (!(p > 0) || !(e > 0) || !(n > 0) || e * n <= p) {
+        return 0;
+    }
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 100; i += 1) {
+        const r = (lo + hi) / 2;
+        const value = (e * (1 - (1 + r) ** -n)) / r;
+        if (value > p) {
+            lo = r;
+        } else {
+            hi = r;
+        }
+    }
+    return Math.round(((lo + hi) / 2) * 12 * 10000) / 100;
+}
+
+/** Where a loan stands: EMIs paid and left, what is still to pay, and the EMIs due up to the end of this month. */
+export function loanStatus(loan, entries, today) {
+    const paid = entries.filter((e) => e.loanId === loan.id).length;
+    const months = Math.round(num(loan.months));
+    const left = Math.max(0, months - paid);
+    const monthEndDate = monthEnd(monthKey(today));
+    const due = [];
+    for (let k = paid; k < months; k += 1) {
+        const date = addMonthsToDate(loan.firstDate, k);
+        if (date > monthEndDate) {
+            break;
+        }
+        due.push({ number: k + 1, date });
+    }
+    return { paid, left, months, outstanding: left * num(loan.emi), next: left ? addMonthsToDate(loan.firstDate, paid) : null, due };
+}
+
 /** How an entry moves one account: + money in, − money out, 0 not involved. */
 export function accountDelta(entry, accountId) {
     const amt = num(entry.amount);

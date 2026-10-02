@@ -115,8 +115,65 @@ function blankEntry(keep) {
         personId: null,
         newPerson: '',
         notes: '',
-        back: null
+        back: null,
+        onEmi: false,
+        emiAmount: '',
+        emiMonths: '',
+        emiFirst: L.addMonthsToDate(today(), 1),
+        emiDown: '',
+        emiRate: '',
+        emiLender: ''
     };
+}
+
+// ---------- loans bought on EMI ----------
+const loanRows = () => S.data.loans.map((l) => ({ ...l, ...L.loanStatus(l, S.data.entries, today()) }));
+const dueEmis = () => loanRows().flatMap((l) => l.due.map((d) => ({ ...d, loan: l })));
+const longDate = (iso) => L.dateText(iso, { day: 'numeric', month: 'short', year: 'numeric' });
+/** What the EMI form adds up to: amount financed, total to pay, interest and the yearly rate. */
+function emiSums(f) {
+    const price = Number(f.amount) || 0;
+    const down = Number(f.emiDown) || 0;
+    const emi = Number(f.emiAmount) || 0;
+    const months = Math.round(Number(f.emiMonths) || 0);
+    const financed = price - down;
+    const calculated = L.impliedRate(financed, emi, months);
+    const typed = f.emiRate !== '' && f.emiRate !== null;
+    return { price, down, emi, months, financed, total: down + emi * months, interest: emi * months - financed, calculated, typed, rate: typed ? Number(f.emiRate) : calculated };
+}
+function dueList() {
+    const due = dueEmis();
+    if (!due.length) {
+        return '';
+    }
+    return `<h3>EMIs due this month</h3><section class="list">${due.map((d) => `<div class="row"><span class="row-icon">${icon('repaid')}</span>
+        <span class="row-text"><b>${esc(d.loan.name)} · EMI ${d.number} of ${d.loan.months}</b><small>Due ${longDate(d.date)} · from ${esc(accountName(d.loan.accountId))}</small></span>
+        <span class="amt">${L.money(d.loan.emi)}</span><button class="btn primary" data-action="payEmi" data-id="${d.loan.id}">Pay</button></div>`).join('')}</section>`;
+}
+/** The line under the EMI fields: updated as you type, without redrawing the form. */
+function emiSummary(f) {
+    const s = emiSums(f);
+    if (!(s.price > 0 && s.emi > 0 && s.months > 0)) {
+        return '';
+    }
+    if (s.emi * s.months < s.financed) {
+        return `<div class="notice">The EMIs add up to ${L.money(s.emi * s.months)}, less than the ${L.money(s.financed)} financed.</div>`;
+    }
+    return `<div class="banner"><div><b>Financed ${L.money(s.financed)} · ${s.months} × ${L.money(s.emi)}</b><small>Total to pay ${L.money(s.total)} · interest ${L.money(Math.max(0, s.interest))} · ${s.rate}% a year${s.typed ? '' : ' (calculated)'}</small></div></div>`;
+}
+function emiBlock(f) {
+    if (f.type !== 'expense' || f.id) {
+        return '';
+    }
+    const field = (label, model, attrs) => `<label>${label}<input ${attrs} value="${esc(f[model])}" data-model="add.${model}" data-then="emi"></label>`;
+    return `<label class="check"><input type="checkbox" data-action="emiToggle" ${f.onEmi ? 'checked' : ''}> Bought on EMI / finance</label>
+        ${f.onEmi ? `<div class="form"><small>Enter the full price above. Only the down payment is spent today; each EMI is recorded when you pay it.</small>
+            <div class="grid2">${field('EMI per month', 'emiAmount', 'type="number" inputmode="decimal" min="0" step="0.01"')}${field('Number of EMIs', 'emiMonths', 'type="number" inputmode="numeric" min="1" step="1"')}</div>
+            <div class="grid2">${field('First EMI date', 'emiFirst', 'type="date"')}${field('Down payment (optional)', 'emiDown', 'type="number" inputmode="decimal" min="0" step="0.01" placeholder="0"')}</div>
+            <div class="grid2">${field('Interest rate, % a year', 'emiRate', 'type="number" inputmode="decimal" min="0" step="0.01" placeholder="calculated if empty"')}${field('Financed by (optional)', 'emiLender', 'type="text" placeholder="e.g. bank or store"')}</div>
+            <small>Leave the rate empty and it is worked out from the price, down payment, EMI and number of EMIs (reducing-balance method: financed = EMI × (1 − (1 + r)<sup>−n</sup>) ÷ r, r per month). A flat rate quoted by a store is lower than this.</small>
+            <div id="emi-summary">${emiSummary(f)}</div>
+        </div>` : ''}`;
 }
 
 function go(route) {
@@ -305,6 +362,7 @@ function home() {
             <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
             <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
         </div>
+        ${dueEmis().length ? `<a class="notice span" href="#add">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#accounts">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
         <div class="stack">
@@ -353,6 +411,7 @@ function addEntry() {
     <main class="two">
         <div class="pane">
             ${editing ? `<div class="banner"><div><b>Editing an entry</b><small>${esc(f.label)}</small></div><button class="btn" data-action="cancelEdit">Cancel</button></div>` : ''}
+            ${editing ? '' : dueList()}
             <div class="pane-head"><h2>${editing ? 'Edit entry' : 'New entry'}</h2><small>${L.TYPES[f.type].hint}</small></div>
             <div class="type-grid">${tiles}</div>
             <label class="amount ${L.TYPES[f.type].sign > 0 ? 'in' : L.TYPES[f.type].sign < 0 ? 'out' : ''}"><span>${esc(L.symbol())}</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
@@ -366,8 +425,9 @@ function addEntry() {
             ${needsCategory ? `<label>Category<select data-model="add.categoryId" data-then="touchCategory" id="add-category"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
             ${needsPerson ? `<label>${direction === 'owesMe' ? 'Person (owes you)' : 'Person (you owe)'}<select data-model="add.personId" data-rerender><option value="">Choose a person</option>${people.map((p) => `<option value="${p.id}" ${p.id === f.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.personId === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
                 ${f.personId === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPerson)}" data-model="add.newPerson"></label>` : ''}` : ''}
+            ${emiBlock(f)}
             <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
-            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : `Save ${L.TYPES[f.type].label}`}</button>
+            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && f.type === 'expense' ? 'Save EMI purchase' : `Save ${L.TYPES[f.type].label}`}</button>
             ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
         ${editing ? '' : `<div class="pane"><h3>Recent entries</h3>${recent.length
@@ -470,8 +530,31 @@ function budget() {
     </main>`;
 }
 
+function loansView() {
+    const s = state.people;
+    const loans = loanRows().sort((a, b) => b.outstanding - a.outstanding);
+    const seg = (v, label) => `<button class="${s.view === v ? 'on' : ''}" data-action="peopleView" data-view="${v}">${label}</button>`;
+    const rows = loans.map((l) => `<div class="acct-row">
+        <div class="a-name"><span class="row-icon">${icon('repaid')}</span><span><b>${esc(l.name)}</b><small>${[l.lender ? esc(l.lender) : '', `${l.rate}% a year${l.rateCalculated ? ' (calculated)' : ''}`, `financed ${L.money(l.financed)}`].filter(Boolean).join(' · ')}</small></span></div>
+        <div class="a-detail"><div class="bar"><i style="width:${Math.round((l.paid / l.months) * 100)}%"></i></div><small>${l.paid} of ${l.months} EMIs paid · ${l.left ? `next ${longDate(l.next)}` : 'fully paid'}</small></div>
+        <div class="a-bal"><b class="big">${L.money(l.outstanding)}</b><small>${l.left} × ${L.money(l.emi)} to pay</small></div>
+        <div class="a-actions">${l.left ? `<button class="btn primary" data-action="payEmi" data-id="${l.id}">Pay EMI</button>` : ''}<button class="btn ghost danger" data-action="loanDelete" data-id="${l.id}">Delete</button></div>
+    </div>`).join('');
+    return `<header class="hero">
+        <small class="eyebrow">People &amp; Loans</small><h1>Loans on EMI</h1>
+        <div class="stats">${stat('Still to pay', L.money(loans.reduce((t, l) => t + l.outstanding, 0)))}${stat('EMI per month', L.money(loans.filter((l) => l.left).reduce((t, l) => t + Number(l.emi), 0)))}${stat('Loans', loans.length)}</div>
+    </header>
+    <main>
+        <div class="toolbar"><div class="seg fit">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}${seg('loans', 'Loans')}</div><a class="btn primary" href="#add">${icon('plus')} Buy on EMI</a></div>
+        ${rows ? `<section class="list atable">${rows}</section>` : `<div class="empty-state">${icon('repaid')}<b>No loans yet</b><small>On Add Entry, choose Expense and tick "Bought on EMI / finance".</small></div>`}
+    </main>`;
+}
+
 function people() {
     const s = state.people;
+    if (s.view === 'loans') {
+        return loansView();
+    }
     const t = L.totals(S.data);
     const list = S.data.people
         .filter((p) => p.direction === s.view)
@@ -516,7 +599,7 @@ function people() {
         <div class="stats">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}${stat('People', S.data.people.length)}</div>
     </header>
     <main>
-        <div class="toolbar"><div class="seg fit">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}</div>
+        <div class="toolbar"><div class="seg fit">${seg('owesMe', 'Owe me')}${seg('iOwe', 'I owe')}${seg('loans', 'Loans')}</div>
         ${s.adding ? '' : `<button class="btn primary" data-action="personAddToggle">${icon('plus')} Add person</button>`}</div>
         ${s.adding ? `<section class="card form"><h3>Add person</h3>
             <div class="grid3"><label>Name<input type="text" id="np-name"></label>
@@ -843,8 +926,61 @@ const actions = {
         state.add.toAccountId = el.dataset.id;
         render();
     },
+    emiToggle() {
+        state.add.onEmi = !state.add.onEmi;
+        render();
+    },
+    async saveEmi() {
+        const f = state.add;
+        const s = emiSums(f);
+        const problem = !(s.price > 0) ? 'Enter the full price.'
+            : !f.accountId ? 'Choose the account the EMIs are paid from.'
+            : byId(S.data.accounts, f.accountId).kind === 'card' ? 'Choose a bank, wallet or cash account for the EMIs.'
+            : !f.categoryId ? 'Choose a category.'
+            : !(s.emi > 0) ? 'Enter the EMI per month.'
+            : !(s.months >= 1) ? 'Enter the number of EMIs.'
+            : !f.emiFirst ? 'Choose the first EMI date.'
+            : s.down < 0 || s.down >= s.price ? 'The down payment must be less than the price.'
+            : s.emi * s.months < s.financed ? `The EMIs add up to ${L.money(s.emi * s.months)}, less than the ${L.money(s.financed)} financed. Check the EMI and the number of EMIs.`
+            : f.date > today() ? 'The date cannot be in the future.' : null;
+        if (problem) {
+            return toast(problem, 'warn');
+        }
+        const name = f.description.trim() || 'Purchase on EMI';
+        const loan = { id: S.newId(), name, lender: f.emiLender.trim(), price: s.price, downPayment: s.down, financed: s.financed, emi: s.emi, months: s.months,
+            firstDate: f.emiFirst, rate: s.rate, rateCalculated: !s.typed, accountId: f.accountId, categoryId: f.categoryId, boughtOn: f.date, createdAt: Date.now() };
+        const pairs = [['loans', loan]];
+        if (s.down > 0) {
+            pairs.push(['entries', { id: S.newId(), type: 'expense', amount: s.down, date: f.date, description: `${name} – down payment`, accountId: f.accountId, toAccountId: null,
+                categoryId: f.categoryId, personId: null, notes: f.notes.trim(), loanDown: loan.id, createdAt: Date.now() }]);
+        }
+        state.add = blankEntry();
+        await S.saveMany(pairs);
+        toast(`${name}: ${s.months} EMIs of ${L.money(s.emi)} set up${s.down ? `, ${L.money(s.down)} paid today` : ''}.`);
+    },
+    async payEmi(el) {
+        const loan = loanRows().find((l) => l.id === el.dataset.id);
+        if (!loan || !loan.left) {
+            return;
+        }
+        const number = loan.paid + 1;
+        const category = S.data.categories.find((c) => c.type === 'expense' && /loan|instalment|emi/i.test(c.name));
+        await S.save('entries', { id: S.newId(), type: 'expense', amount: Number(loan.emi), date: loan.next > today() ? today() : loan.next, description: `${loan.name} – EMI ${number} of ${loan.months}`,
+            accountId: loan.accountId, toAccountId: null, categoryId: category ? category.id : loan.categoryId, personId: null, notes: '', loanId: loan.id, createdAt: Date.now() });
+        toast(`EMI ${number} of ${loan.months} paid. ${L.money((loan.left - 1) * loan.emi)} still to pay.`);
+    },
+    async loanDelete(el) {
+        const loan = byId(S.data.loans, el.dataset.id);
+        if (window.confirm(`Delete the loan "${loan.name}"?\nEMIs already paid stay as expenses.`)) {
+            await S.remove('loans', loan.id);
+            toast('Loan deleted.');
+        }
+    },
     async saveEntry() {
         const f = state.add;
+        if (f.onEmi && f.type === 'expense' && !f.id) {
+            return actions.saveEmi();
+        }
         let personId = f.personId;
         const pairs = [];
         if (L.PERSON_TYPES.includes(f.type) && personId === '__new') {
@@ -1285,6 +1421,10 @@ app.addEventListener('input', (event) => {
             if (select) {
                 select.value = id || '';
             }
+        }
+        const emiBox = document.getElementById('emi-summary');
+        if (emiBox && (el.dataset.then === 'emi' || el.dataset.model === 'add.amount')) {
+            emiBox.innerHTML = emiSummary(state.add);
         }
         if (el.dataset.then === 'touchCategory') {
             state.add.categoryTouched = true;

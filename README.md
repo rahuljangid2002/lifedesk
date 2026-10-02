@@ -33,7 +33,11 @@ and dates follow their region. It can be changed under Account. Changing it does
 there is a side menu and pages use two or three columns. Light and dark follow the device setting. Icons are drawn
 (`js/icons.js`), so they look the same on Android, iOS and desktop.
 
-Not built yet: buying on EMI and EMI plans, assets (so there are no Loans and Assets dashboards yet),
+**Buying on EMI:** Add Entry → Expense → "Bought on EMI / finance" (EMI, number of EMIs, first date, down payment,
+rate calculated when left empty). Loans are listed under People & Loans → Loans; EMIs due this month appear on
+Add Entry and Money home with a Pay button. Collection `loans`.
+
+Not built yet: changing an EMI plan, assets and the Loans / Assets dashboards,
 "paid by someone", recurring bills, month-end summary email, receipts.
 
 ## Two modes
