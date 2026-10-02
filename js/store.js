@@ -121,7 +121,7 @@ function subscribe(u) {
 const OTP_ERRORS = {
     bad_email: 'That email address does not look right. Please check it.',
     rate: 'Too many codes were sent to this address. Wait 15 minutes and try again.',
-    daily: 'The limit for verification emails is used up for today. Try again tomorrow, or use Google sign-in.',
+    daily: 'New email accounts cannot be created right now: this test version has reached today\'s limit. Use Continue with Google, or try again tomorrow.',
     wrong: 'That code is not right. Check the email and try again.',
     expired: 'That code is no longer valid. Send a new one.',
     too_many: 'Too many wrong tries. Send a new code.',

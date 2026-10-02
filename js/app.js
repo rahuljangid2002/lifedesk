@@ -20,7 +20,7 @@ const state = {
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false },
-    login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false }
+    login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
 };
 
 // ---------- helpers ----------
@@ -142,7 +142,7 @@ const currencyOptions = (selected) =>
 
 // ---------- screens ----------
 function login() {
-    return `<div class="login">
+    return `<div class="login ${state.login.limit && state.login.mode === 'signup' ? 'limit-hit' : ''}">
         <div class="logo">${icon('logo')}</div>
         <h1>LifeDesk</h1>
         <p>Your everyday desk: money, budget, people and loans today, with more tools on the way.</p>
@@ -177,6 +177,7 @@ function passwordForm() {
     }
     if (f.mode === 'signup') {
         return `<form class="login-form" data-form="loginSubmit"><h2>Create your account</h2>
+            ${f.limit ? `<div class="notice stacked" role="alert"><b>Email sign-up is paused for today</b><span>This is a test version and today's limit for verification emails has been reached, so new accounts cannot be created by email right now.</span><span>You can still use <b>Continue with Google</b> below, or try again tomorrow. If you already have an account, <button type="button" class="link-btn" data-action="loginMode" data-mode="signin">sign in</button> as usual.</span></div>` : ''}
             <label class="left">Your name<input type="text" value="${esc(f.name)}" data-model="login.name" autocomplete="name"></label>
             ${email}
             ${password('Password (at least 8 characters)', 'new-password')}
@@ -659,7 +660,16 @@ const actions = {
                 f.mode = 'signin';
                 toast(`If ${email} has an account, a reset email is on its way. Check spam too.`);
             } else if (f.mode === 'signup' && f.step === 'form') {
-                await S.sendCode(email);
+                try {
+                    await S.sendCode(email);
+                    f.limit = false;
+                } catch (e) {
+                    if (e.code === 'daily') {
+                        f.limit = true; // stays on the form as a notice, not a passing message
+                        return;
+                    }
+                    throw e;
+                }
                 f.step = 'code';
                 f.code = '';
                 toast(`Code sent to ${email}.`);
@@ -683,7 +693,16 @@ const actions = {
         }
     },
     async loginResend() {
-        await S.sendCode(state.login.email.trim());
+        try {
+            await S.sendCode(state.login.email.trim());
+        } catch (e) {
+            if (e.code === 'daily') {
+                state.login.limit = true;
+                state.login.step = 'form';
+                return render();
+            }
+            throw e;
+        }
         state.login.code = '';
         toast('A new code is on its way.');
     },

@@ -47,6 +47,19 @@ with sync_playwright() as p:
     answers = []
     pg.on('dialog', lambda d: d.accept(answers.pop(0)) if d.type == 'prompt' else d.accept())
     toast = lambda: pg.locator('.toast').last.inner_text() if pg.locator('.toast').count() else ''
+    # daily limit reached: a notice on the form that points to Google, and no account is created
+    lim = b.new_context(viewport={'width': 390, 'height': 844})
+    lim.add_init_script(f"localStorage.setItem('lifedesk-otp-endpoint', '{OTP}')")
+    lim.route(OTP, lambda route: route.fulfill(status=200, content_type='application/json', body='{"ok": false, "error": "daily"}'))
+    lp = lim.new_page(); lp.goto(URL); lp.wait_for_selector('.login-form')
+    lp.get_by_role('button', name='Create an account').click()
+    lp.get_by_label('Your name').fill('Limit Test'); lp.get_by_label('Email').fill('limit.test@example.com')
+    lp.locator('[data-model="login.password"]').fill('long-enough-pw'); lp.get_by_role('button', name='Send verification code').click()
+    lp.wait_for_selector('.notice.stacked', timeout=20000)
+    text = lp.locator('.notice.stacked').inner_text()
+    check('daily limit: notice stays on the form and points to Google', 'test version' in text and 'Continue with Google' in text and lp.locator('input.code').count() == 0, text[:60])
+    lp.screenshot(path='tests/out/12_limit.png'); lim.close()
+
     pg.goto(URL); pg.wait_for_selector('.login-form')
 
     pg.get_by_label('Email').fill(EMAIL); pg.locator('[data-model="login.password"]').fill('wrong-password')

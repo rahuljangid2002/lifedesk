@@ -64,7 +64,8 @@ function sendCode(rawEmail) {
     const props = PropertiesService.getScriptProperties();
     const day = 'day:' + Utilities.formatDate(new Date(), 'UTC', 'yyyy-MM-dd');
     const today = Number(props.getProperty(day) || 0);
-    if (today >= DAILY_LIMIT) return { ok: false, error: 'daily' };
+    // our own cap, or Gmail's allowance for this Google account already used up by other mail
+    if (today >= DAILY_LIMIT || MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'daily' };
     props.setProperty(day, String(today + 1));
     cache.put('n:' + key, String(sends + 1), 15 * 60);
   } finally {
