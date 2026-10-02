@@ -211,6 +211,30 @@ export async function saveMany(pairs) {
     await batch.commit();
 }
 
+/** Saves many documents, a few hundred at a time (Firestore takes up to 500 per batch). */
+export async function saveAll(pairs) {
+    for (let i = 0; i < pairs.length; i += 400) {
+        await saveMany(pairs.slice(i, i + 400));
+    }
+}
+
+/** Deletes many documents: pairs of [collection, id]. */
+export async function removeMany(pairs) {
+    if (isDemo) {
+        for (const [c, id] of pairs) {
+            data[c] = data[c].filter((x) => x.id !== id);
+        }
+        writeDemo();
+        listener('ready');
+        return;
+    }
+    for (let i = 0; i < pairs.length; i += 400) {
+        const batch = fb.fs.writeBatch(fb.db);
+        pairs.slice(i, i + 400).forEach(([c, id]) => batch.delete(fb.fs.doc(fb.db, 'users', user.uid, c, id)));
+        await batch.commit();
+    }
+}
+
 export async function remove(collection, id) {
     if (isDemo) {
         data[collection] = data[collection].filter((x) => x.id !== id);

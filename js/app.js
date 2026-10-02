@@ -5,6 +5,7 @@
 import * as L from './logic.js';
 import * as S from './store.js';
 import { icon } from './icons.js';
+import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -19,7 +20,7 @@ const state = {
     budget: { month: thisMonth(), edits: null, open: null },
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
-    more: { addingCategory: false },
+    more: { addingCategory: false, busy: false },
     login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false, limit: false }
 };
 
@@ -551,6 +552,12 @@ function more() {
         <section class="card"><div class="card-head"><h2>Backup</h2></div>
             <div class="split wrap"><button class="btn" data-action="exportData">Download my data</button><label class="btn file">Restore from file<input type="file" accept="application/json" data-file="import" hidden></label></div>
             <small>${S.data.entries.length} entries · ${S.data.accounts.length} accounts · ${S.data.people.length} people</small></section>
+        <section class="card"><div class="card-head"><h2>Sample data</h2>${sampleDocs(S.data).length ? '<span class="pill">Loaded</span>' : ''}</div>
+            <small>Made-up history from ${L.dateText(SAMPLE_START, { day: 'numeric', month: 'long', year: 'numeric' })} to today, for trying the app: salary, rent, bills, shopping, card payments, lending and budgets, in sample accounts. Your own entries are not changed, and it can be removed again.</small>
+            <div class="split wrap">${sampleDocs(S.data).length
+                ? `<button class="btn danger" data-action="sampleRemove" ${state.more.busy ? 'disabled' : ''}>${icon('trash')} Remove sample data</button>`
+                : `<button class="btn" data-action="sampleLoad" ${state.more.busy ? 'disabled' : ''}>Load sample data</button>`}</div>
+            ${state.more.busy ? '<small>Working… this can take a few seconds.</small>' : ''}</section>
         <div class="span split wrap">${S.isDemo ? `<button class="btn danger" data-action="demoReset">Erase demo data</button>` : `<button class="btn" data-action="signOut">${icon('logout')} Sign out</button><button class="btn danger" data-action="deleteAccount">${icon('trash')} Delete my account and data</button>`}</div>
     </main>`;
 }
@@ -1101,6 +1108,37 @@ const actions = {
         const a = Object.assign(document.createElement('a'), { href: url, download: `lifedesk-${today()}.json` });
         a.click();
         URL.revokeObjectURL(url);
+    },
+    async sampleLoad() {
+        const pairs = buildSample(S.data, today(), L.currentFormat().currency);
+        const entries = pairs.filter((p) => p[0] === 'entries').length;
+        if (!window.confirm(`Add sample data?\n${entries} made-up entries from 1 March 2025 to today, in four sample accounts and three sample people. Your own entries stay as they are, and you can remove the sample data here later.`)) {
+            return;
+        }
+        state.more.busy = true;
+        render();
+        try {
+            await S.saveAll(pairs);
+            toast(`${entries} sample entries added.`);
+        } finally {
+            state.more.busy = false;
+            render();
+        }
+    },
+    async sampleRemove() {
+        const pairs = sampleDocs(S.data);
+        if (!window.confirm(`Remove all sample data (${pairs.length} items)? Your own entries are kept.`)) {
+            return;
+        }
+        state.more.busy = true;
+        render();
+        try {
+            await S.removeMany(pairs);
+            toast('Sample data removed.');
+        } finally {
+            state.more.busy = false;
+            render();
+        }
     },
     async deleteAccount() {
         if (!window.confirm('Delete your LifeDesk account and ALL your data?\nThis cannot be undone. Download a backup first if you may want it.')) {

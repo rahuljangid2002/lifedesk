@@ -119,6 +119,51 @@ with sync_playwright() as p:
     check('Money tile opens Money home', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1, pg.url)
     pg.goto(URL); pg.wait_for_selector('.tool'); shot('0_hub')
 
+    # Sample data: load, look, remove
+    before = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).entries.length")
+    pg.goto(URL + '#more'); pg.get_by_role('button', name='Load sample data').click()
+    pg.wait_for_selector('button:has-text("Remove sample data")')
+    d = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
+    sample = [e for e in d['entries'] if e['id'].startswith('sample-')]
+    check('sample: about 19 months of entries from 1 March 2025', len(sample) > 500 and min(e['date'] for e in sample) == '2025-03-01', f"{len(sample)} entries, {min(e['date'] for e in sample)} to {max(e['date'] for e in sample)}")
+    import datetime
+    check('sample: nothing dated in the future', max(e['date'] for e in sample) <= datetime.date.today().isoformat())
+    check('sample: every expense and income has a category', all(e['categoryId'] for e in sample if e['type'] in ('expense', 'income')))
+    # running balance of every non-card account, day by day, over the whole history
+    kinds = {a['id']: a['kind'] for a in d['accounts']}
+    bal = {a['id']: (a.get('opening') or 0) for a in d['accounts'] if a['kind'] != 'card'}
+    lowest = dict(bal)
+    sign = {'expense': -1, 'income': 1, 'lent': -1, 'gotback': 1, 'borrowed': 1, 'repaid': -1}
+    for e in sorted(d['entries'], key=lambda e: (e['date'], e.get('createdAt', 0))):
+        if e['type'] == 'transfer':
+            moves = [(e['accountId'], -e['amount']), (e['toAccountId'], e['amount'])]
+        else:
+            moves = [(e['accountId'], sign[e['type']] * e['amount'])]
+        for acc_id, delta in moves:
+            if acc_id in bal:
+                bal[acc_id] += delta
+                lowest[acc_id] = min(lowest[acc_id], bal[acc_id])
+    names = {a['id']: a['name'] for a in d['accounts']}
+    below = {names[k]: v for k, v in lowest.items() if v < 0 and (k.startswith('sample-') or kinds[k] == 'cash')}
+    check('sample: no bank, wallet or cash balance is ever below zero', not below, str(below) if below else 'lowest: ' + ', '.join(f'{names[k]} {round(v)}' for k, v in lowest.items()))
+    card_owed = -sum((1 if e.get('toAccountId') == 'sample-acc-card' else -1 if e['accountId'] == 'sample-acc-card' and e['type'] == 'expense' else 0) * e['amount'] for e in d['entries'])
+    check('sample: card owes only the charges since its last bill payment', 0 < card_owed < 2000, str(card_owed))
+    pg.goto(URL + '#accounts'); time.sleep(0.4)
+    shot('s_accounts')
+    pg.goto(URL + '#home'); time.sleep(0.3); shot('s_home')
+    pg.goto(URL + '#daily'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.3)
+    check('sample: last month has a full set of days', pg.locator('.day').count() > 15, str(pg.locator('.day').count()))
+    shot('s_daily')
+    pg.goto(URL + '#budget'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.3); shot('s_budget')
+    check('sample: budget planned and spent last month', money(stat('Planned')) > 0 and money(stat('Spent so far')) > 0)
+    pg.goto(URL + '#people'); time.sleep(0.3); shot('s_people')
+    # Alex: lent 300, paid back 200 -> 100; plus the 300 Friend A owes from earlier in this test. Sam is a bad debt, not counted.
+    check('sample: to receive is 400 (Alex 100 + Friend A 300)', money(stat('To receive')) == 400, stat('To receive'))
+    pg.goto(URL + '#more'); pg.get_by_role('button', name='Remove sample data').click()
+    pg.wait_for_selector('button:has-text("Load sample data")')
+    after = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
+    check('sample removed: own entries untouched', len(after['entries']) == before and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
+
     # Change the currency: amounts follow, nothing is converted
     pg.goto(URL + '#more'); pg.locator('[data-setting=currency]').select_option('EUR'); time.sleep(0.4)
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')

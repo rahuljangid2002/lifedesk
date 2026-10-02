@@ -18,7 +18,7 @@ The start screen lists the tools. Money has these screens:
 | Budget | Amount per category per month; last month and 3-month average; copy last month; tap a category to see its expenses |
 | People & Loans | Who owes you and whom you owe; history; quick "got back / gave more / paid back / borrowed more"; status |
 | My Accounts | Banks, wallets and credit cards with limits; close or delete; pay a card bill in full or in part |
-| More | Add categories; download or restore a backup file; sign out |
+| Account | Currency; add categories; download or restore a backup file; **load or remove sample data** (made-up history from 1 March 2025 to today); sign out; delete my account |
 
 Net balance = bank + cash − credit card owed − money owed to people.
 
@@ -93,6 +93,7 @@ js/logic.js           calculations: balances, month summary, budget, people, val
 js/app.js             start screen (TOOLS), Money screens and navigation
 js/seed.js            starter categories with keywords
 js/icons.js           line icons
+js/sample.js          sample data generator (ids start with "sample-")
 firestore.rules       database security rules (paste into Firebase)
 backend/              Google Apps Script that emails and checks the sign-up codes
 sw.js, manifest.webmanifest, icons/   install on a phone and open offline
