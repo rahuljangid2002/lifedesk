@@ -1,4 +1,4 @@
-"""End-to-end check of the web app in demo mode (data in the browser only).
+"""End-to-end check of LifeDesk in demo mode (data in the browser only).
 
     python3 -m http.server 8765        (in 4-Web-App)
     <venv with playwright>/python tests/ui_flow.py [output folder for screenshots]
@@ -28,7 +28,8 @@ with sync_playwright() as p:
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
     pg.on('dialog', lambda d: d.accept())
-    pg.goto(URL); pg.wait_for_selector('.tabbar')
+    pg.goto(URL); pg.wait_for_selector('.tool')
+    check('start screen lists Money and a coming-soon tool', pg.locator('a.tool', has_text='Money').count() == 1 and pg.locator('.tool.soon').count() == 1)
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
 
@@ -108,6 +109,12 @@ with sync_playwright() as p:
     pg.goto(URL + '#home')
     check('delete: net 7,700', money(stat('Net balance')) == 7700, stat('Net balance'))
 
+    pg.goto(URL); pg.wait_for_selector('.tool')
+    check('start screen shows the Money figure', '7,700' in pg.locator('a.tool', has_text='Money').inner_text())
+    pg.locator('a.tool', has_text='Money').click()
+    pg.wait_for_selector('.tabbar')
+    check('Money tile opens Money home', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1, pg.url)
+    pg.goto(URL); pg.wait_for_selector('.tool'); shot('0_hub')
     check('no console errors', not errors, str(errors[:3]))
     b.close()
 

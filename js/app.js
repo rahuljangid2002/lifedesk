@@ -1,5 +1,7 @@
-// Screens and navigation. Each screen is a function that returns HTML from the current data and state;
-// clicks and typing are handled once, at the bottom, through data-action / data-model attributes.
+// LifeDesk: one login, several tools. The start screen (hub) lists the tools; Money is the first one.
+// Each screen is a function that returns HTML from the current data and state; clicks and typing are
+// handled once, at the bottom, through data-action / data-model attributes.
+// To add a tool: add it to TOOLS, add its screens to SCREENS, and keep its data in its own collections.
 import * as L from './logic.js';
 import * as S from './store.js';
 
@@ -9,7 +11,7 @@ const thisMonth = () => L.monthKey(today());
 
 const state = {
     status: 'loading',
-    route: 'home',
+    route: 'hub',
     toast: null,
     add: null,
     daily: { month: thisMonth(), custom: false, from: null, to: null, view: 'spend', category: '', account: '', search: '', closed: new Set() },
@@ -106,14 +108,40 @@ const stat = (label, value) => `<div class="stat"><small>${label}</small><b>${va
 function login() {
     return `<div class="login">
         <div class="logo">₹</div>
-        <h1>Account Management</h1>
-        <p>Your money in one place: accounts, daily expenses, budget, people and loans.</p>
+        <h1>LifeDesk</h1>
+        <p>Your everyday desk: money, budget, people and loans today, with more tools on the way.</p>
         ${S.methods.google ? `<button class="btn primary wide" data-action="google">Continue with Google</button>` : ''}
         ${S.methods.emailLink ? `<div class="or">or sign in with a link sent to your email</div>
         <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
         <button class="btn wide" data-action="emailLink">Email me a sign-in link</button>` : ''}
         <small>New here? The same buttons create your account. Your data is private to you.</small>
     </div>`;
+}
+
+/** Tools on the start screen. ready: false shows the tile as coming soon. */
+const TOOLS = [
+    { id: 'money', name: 'Money', icon: '₹', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
+    { id: 'reminders', name: 'Renewal reminders', icon: '🔔', route: null, ready: false, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
+];
+
+function hub() {
+    const t = L.totals(S.data);
+    const m = L.monthSummary(S.data, thisMonth());
+    const tiles = TOOLS.map((tool) =>
+        tool.ready
+            ? `<a class="tool" href="#${tool.route}"><span class="tool-icon">${tool.icon}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small>${tool.id === 'money' ? `<small class="tool-figure">Net balance ${L.inr(t.net)} · spent ${L.inr(m.expense)} this month</small>` : ''}</span><span class="tool-go">›</span></a>`
+            : `<div class="tool soon"><span class="tool-icon">${tool.icon}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small></span><span class="badge">Coming soon</span></div>`
+    ).join('');
+    return `<header class="hero">
+        <small class="eyebrow">LifeDesk</small><h1>Hello, ${esc(S.user.name.split(' ')[0])}</h1>
+        <p class="hero-sub">${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+    </header>
+    <main>
+        ${S.isDemo ? `<div class="notice">Demo mode: your data is saved only in this browser.</div>` : ''}
+        <h3>Your tools</h3>
+        ${tiles}
+        <a class="card link" href="#more"><div class="card-head"><span><b>Account &amp; backup</b><small>${esc(S.user.contact)}</small></span><span>›</span></div></a>
+    </main>`;
 }
 
 function home() {
@@ -131,7 +159,8 @@ function home() {
         })
         .join('');
     return `<header class="hero">
-        <small class="eyebrow">Money Home</small><h1>${L.monthLabel(key)}</h1>
+        <a class="back" href="#hub">‹ LifeDesk</a>
+        <small class="eyebrow">Money</small><h1>${L.monthLabel(key)}</h1>
         <div class="stats">${stat('Income', L.inr(m.income))}${stat('Expense', L.inr(m.expense))}${stat('Net balance', L.inr(t.net))}</div>
         <p class="hero-sub">Money in hand ${L.inr(t.inHand)}${t.cardOwed ? ` · Card owed ${L.inr(t.cardOwed)}` : ''}${t.owedToPeople ? ` · Owed to people ${L.inr(t.owedToPeople)}` : ''}</p>
     </header>
@@ -393,12 +422,12 @@ function payForm(card, owed) {
 }
 
 function more() {
-    return `<header class="hero"><small class="eyebrow">More</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
+    return `<header class="hero"><a class="back" href="#hub">‹ LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
     <main>
         ${S.isDemo ? `<div class="notice">Demo mode: your data is saved only in this browser. Add the Firebase settings in js/config.js to turn on login and cloud storage.</div>` : ''}
-        <section class="card"><div class="card-head"><h2>Screens</h2></div>
-            <a class="row nav-row" href="#people">People &amp; Loans <span>›</span></a><a class="row nav-row" href="#accounts">My Accounts <span>›</span></a></section>
-        <section class="card"><div class="card-head"><h2>Categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
+        <section class="card"><div class="card-head"><h2>Money</h2></div>
+            <a class="row nav-row" href="#home">Money home <span>›</span></a><a class="row nav-row" href="#people">People &amp; Loans <span>›</span></a><a class="row nav-row" href="#accounts">My Accounts <span>›</span></a></section>
+        <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. petrol, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
             <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
         <section class="card"><div class="card-head"><h2>Backup</h2></div>
@@ -408,7 +437,8 @@ function more() {
     </main>`;
 }
 
-const SCREENS = { home, add: addEntry, daily, budget, people, accounts, more };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, more };
+const NO_TABS = ['hub'];
 const NAV = [['home', '🏠', 'Home'], ['daily', '📅', 'Daily'], ['add', '＋', 'Add'], ['budget', '🎯', 'Budget'], ['more', '☰', 'More']];
 
 function render() {
@@ -420,10 +450,13 @@ function render() {
         app.innerHTML = login() + toastHtml();
         return;
     }
-    const screen = SCREENS[state.route] || home;
+    if (!SCREENS[state.route]) {
+        state.route = 'hub';
+    }
+    const screen = SCREENS[state.route];
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
     app.innerHTML = `<div class="shell">${screen()}</div>
-        <nav class="tabbar">${NAV.map(([r, icon, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon}</span>${label}</a>`).join('')}</nav>${toastHtml()}`;
+        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, icon, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon}</span>${label}</a>`).join('')}</nav>`}${toastHtml()}`;
     if (focus) {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {
@@ -803,7 +836,7 @@ const actions = {
     },
     exportData() {
         const url = URL.createObjectURL(new Blob([S.exportJson()], { type: 'application/json' }));
-        const a = Object.assign(document.createElement('a'), { href: url, download: `account-management-${today()}.json` });
+        const a = Object.assign(document.createElement('a'), { href: url, download: `lifedesk-${today()}.json` });
         a.click();
         URL.revokeObjectURL(url);
     },
@@ -898,12 +931,12 @@ app.addEventListener('change', async (event) => {
 });
 
 window.addEventListener('hashchange', () => {
-    state.route = window.location.hash.slice(1) || 'home';
+    state.route = window.location.hash.slice(1) || 'hub';
     window.scrollTo(0, 0);
     render();
 });
 
-state.route = window.location.hash.slice(1) || 'home';
+state.route = window.location.hash.slice(1) || 'hub';
 render();
 S.init((status) => {
     state.status = status;

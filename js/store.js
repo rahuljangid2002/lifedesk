@@ -1,4 +1,6 @@
-// Data layer. Two back ends behind the same functions:
+// Data layer for LifeDesk. Each tool keeps its data in its own collections under the user
+// (Money: accounts, categories, entries, people, budgets); a new tool adds its names to COLLECTIONS.
+// Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
 import { firebaseConfig, loginMethods } from './config.js';
@@ -6,8 +8,8 @@ import { STARTER_CATEGORIES } from './seed.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
 const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets'];
-const DEMO_KEY = 'account-management-demo';
-const EMAIL_KEY = 'account-management-email';
+const DEMO_KEY = 'lifedesk-demo';
+const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey;
 export const methods = loginMethods;
@@ -169,7 +171,7 @@ export async function signOut() {
 
 // ---------- backup ----------
 export function exportJson() {
-    return JSON.stringify({ app: 'Account Management', exportedAt: new Date().toISOString(), ...data }, null, 1);
+    return JSON.stringify({ app: 'LifeDesk', exportedAt: new Date().toISOString(), ...data }, null, 1);
 }
 
 export async function importJson(text) {
@@ -183,7 +185,7 @@ export async function importJson(text) {
         }
     }
     if (!pairs.length) {
-        throw new Error('No Account Management data found in this file.');
+        throw new Error('No LifeDesk data found in this file.');
     }
     // Firestore batches take up to 500 writes
     for (let i = 0; i < pairs.length; i += 400) {

@@ -1,7 +1,7 @@
 {
-    "name": "Account Management",
-    "short_name": "Accounts",
-    "description": "Personal finance: accounts, daily expenses, budget, people and loans.",
+    "name": "LifeDesk",
+    "short_name": "LifeDesk",
+    "description": "Money, budget, people and loans, with more everyday tools to come.",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",

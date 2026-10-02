@@ -1,9 +1,12 @@
-# Account Management – web app
+# LifeDesk
 
-The same personal finance app as the Salesforce version, as a web app that installs on a phone like an app.
+One login, several everyday tools. The first tool is **Money** (the same personal finance app as the Salesforce
+version); **Renewal reminders** and others come later. It is a web app that installs on a phone like an app.
 Plain HTML, CSS and JavaScript: no build step, so it can be hosted free on GitHub Pages.
 
 ## What is in version 1
+
+The start screen lists the tools. Money has these screens:
 
 | Screen | What it does |
 |---|---|
@@ -36,7 +39,7 @@ Then open http://localhost:8765 (make the browser window narrow, or use your pho
 
 ## Turn on login and cloud storage (Firebase, free "Spark" plan)
 
-1. https://console.firebase.google.com → **Add project** (any name, e.g. `account-management`). Analytics is not needed.
+1. https://console.firebase.google.com → **Add project**, name `lifedesk` (the project ID cannot be changed later). Analytics is not needed.
 2. **Build → Authentication → Get started → Sign-in method**: enable **Google**, and **Email/Password** with
    **Email link (passwordless sign-in)** switched on.
 3. **Build → Firestore Database → Create database** (production mode; pick a location such as `asia-south1` Mumbai).
@@ -49,14 +52,14 @@ The values in `js/config.js` are public identifiers, not passwords. Access is pr
 
 ## Host it free on GitHub Pages
 
-1. Create a GitHub account and a new **public** repository, e.g. `account-management`.
+1. Create a GitHub account and a new **public** repository named `lifedesk`.
 2. In this folder:
    ```bash
-   git remote add origin https://github.com/<your-github-name>/account-management.git
+   git remote add origin https://github.com/<your-github-name>/lifedesk.git
    git push -u origin main
    ```
 3. On GitHub: repository → **Settings → Pages** → Source **Deploy from a branch** → Branch `main`, folder `/ (root)` → Save.
-4. After a minute the app is at `https://<your-github-name>.github.io/account-management/`.
+4. After a minute the app is at `https://<your-github-name>.github.io/lifedesk/`.
    On a phone: open it → browser menu → **Add to Home screen**.
 
 ## Mobile number + OTP (later)
@@ -73,7 +76,7 @@ css/app.css           styling
 js/config.js          Firebase settings and which sign-in buttons to show
 js/store.js           data layer: demo (browser) or Firebase (login + Firestore)
 js/logic.js           calculations: balances, month summary, budget, people, validation
-js/app.js             screens and navigation
+js/app.js             start screen (TOOLS), Money screens and navigation
 js/seed.js            starter categories with keywords
 firestore.rules       database security rules (paste into Firebase)
 sw.js, manifest.webmanifest, icons/   install on a phone and open offline
@@ -82,8 +85,16 @@ tests/ui_flow.py      end-to-end check in demo mode
 
 ## Data layout (Firestore)
 
-`users/{user id}/accounts | categories | entries | people | budgets/{YYYY-MM}`. Balances are always calculated from the
+Everything a user owns is under `users/{user id}/...`, and the rules give each user access to that area only.
+Money uses `accounts | categories | entries | people | budgets/{YYYY-MM}`. Balances are always calculated from the
 entries, so editing or deleting an entry can never leave a balance out of date.
+
+## Adding a tool later (e.g. renewal reminders)
+
+1. Give it its own collection names (e.g. `reminders`) and add them to `COLLECTIONS` in `js/store.js`.
+2. Put its calculations in their own file next to `js/logic.js`.
+3. Add its screens to `SCREENS` and its tile to `TOOLS` in `js/app.js` (set `ready: true`).
+No database rule change is needed: the rules already cover everything under the user.
 
 ## Test
 
