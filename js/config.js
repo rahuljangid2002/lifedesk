@@ -20,8 +20,8 @@ export const firebaseConfig = {
 export const firestoreDatabase = 'default';
 
 // Email one-time codes at sign-up: the web address of the deployed Apps Script (backend/README.md).
-// A public address, not a secret. While it is empty, new email + password accounts cannot be created.
-export const otpEndpoint = '';
+// A public address, not a secret. If it is empty, new email + password accounts cannot be created.
+export const otpEndpoint = 'https://script.google.com/macros/s/AKfycbxJj5fd1KO33PuG9hqnmqdhtA0OJjMSf_tSrmpwtnV4x3__L0phk9ptjbctfURdMhvL1A/exec';
 
 // Sign-in methods shown on the login screen (enable the same ones in Firebase console → Authentication).
 export const loginMethods = {
