@@ -1,10 +1,14 @@
 rules_version = '2';
 // LifeDesk: each signed-in user can read and write only their own data, everything under users/{their id}/...
 // Every tool (Money, reminders, ...) keeps its collections there, so new tools need no rule change.
+// An email + password account must have a verified email (the one-time code at sign-up); Google accounts
+// are verified by Google.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId
+        && (request.auth.token.email_verified == true
+            || request.auth.token.firebase.sign_in_provider != 'password');
     }
     match /{document=**} {
       allow read, write: if false;

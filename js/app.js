@@ -20,7 +20,7 @@ const state = {
     people: { view: 'owesMe', selected: null, form: null, adding: false },
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false },
-    login: { mode: 'signin', name: '', email: '', password: '', show: false, busy: false }
+    login: { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false }
 };
 
 // ---------- helpers ----------
@@ -168,12 +168,20 @@ function passwordForm() {
             <button class="btn primary wide" data-action="loginSubmit" ${busy}>Send reset email</button>
             <button type="button" class="link-btn" data-action="loginMode" data-mode="signin">Back to sign in</button></form>`;
     }
+    if (f.mode === 'signup' && f.step === 'code') {
+        return `<form class="login-form" data-form="loginSubmit"><h2>Check your email</h2>
+            <small class="left-text">We sent a 6-digit code to <b>${esc(f.email)}</b>. It works for 10 minutes; look in spam if you do not see it.</small>
+            ${codeInput('login.code', f.code)}
+            <button class="btn primary wide" data-action="loginSubmit" ${busy}>Verify and create account</button>
+            <div class="split"><button type="button" class="link-btn" data-action="loginResend" ${busy}>Send a new code</button><button type="button" class="link-btn" data-action="loginBack">Change email</button></div></form>`;
+    }
     if (f.mode === 'signup') {
         return `<form class="login-form" data-form="loginSubmit"><h2>Create your account</h2>
             <label class="left">Your name<input type="text" value="${esc(f.name)}" data-model="login.name" autocomplete="name"></label>
             ${email}
             ${password('Password (at least 8 characters)', 'new-password')}
-            <button class="btn primary wide" data-action="loginSubmit" ${busy}>Create account</button>
+            <button class="btn primary wide" data-action="loginSubmit" ${busy}>Send verification code</button>
+            <small>We email you a one-time code to confirm the address.</small>
             <small>Already have an account? <button type="button" class="link-btn" data-action="loginMode" data-mode="signin">Sign in</button></small></form>`;
     }
     return `<form class="login-form" data-form="loginSubmit"><h2>Sign in</h2>
@@ -182,6 +190,25 @@ function passwordForm() {
         <button type="button" class="link-btn right" data-action="loginMode" data-mode="reset">Forgot password?</button>
         <button class="btn primary wide" data-action="loginSubmit" ${busy}>Sign in</button>
         <small>New here? <button type="button" class="link-btn" data-action="loginMode" data-mode="signup">Create an account</button></small></form>`;
+}
+
+const codeInput = (model, value) => `<label class="left">Verification code<input class="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="••••••" value="${esc(value)}" data-model="${model}"></label>`;
+
+/** Signed in with a password, but the email was never confirmed (sign-up was interrupted). */
+function unverified() {
+    const f = state.login;
+    return `<div class="login">
+        <div class="logo">${icon('logo')}</div>
+        <h1>Verify your email</h1>
+        <form class="login-form" data-form="verifySubmit">
+            <small class="left-text">Your account <b>${esc(S.user.contact)}</b> needs its email confirmed before it can be used.</small>
+            ${f.step === 'code' ? `${codeInput('login.code', f.code)}
+            <button class="btn primary wide" data-action="verifySubmit" ${f.busy ? 'disabled' : ''}>Verify</button>
+            <button type="button" class="link-btn" data-action="verifySend">Send a new code</button>`
+            : `<button class="btn primary wide" data-action="verifySend" ${f.busy ? 'disabled' : ''}>Email me a code</button>`}
+        </form>
+        <div class="split wrap"><button class="btn" data-action="signOut">${icon('logout')} Sign out</button><button class="btn danger" data-action="deleteAccount">${icon('trash')} Delete this account</button></div>
+    </div>`;
 }
 
 /** First visit: choose the currency amounts are shown in. */
@@ -541,8 +568,13 @@ function render() {
         app.innerHTML = `<div class="loading"><div class="logo">${icon('logo')}</div><p>Loading…</p></div>`;
         return;
     }
-    if (state.status === 'signedOut') {
-        app.innerHTML = login() + toastHtml();
+    if (state.status === 'signedOut' || state.status === 'unverified') {
+        const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
+        app.innerHTML = (state.status === 'signedOut' ? login() : unverified()) + toastHtml();
+        const el = focus && app.querySelector(`[data-model="${focus}"]`);
+        if (el) {
+            el.focus();
+        }
         return;
     }
     L.setFormat(S.prefs());
@@ -588,12 +620,14 @@ const actions = {
         toast(`Sign-in link sent to ${email}. Open it on this device.`);
     },
     async signOut() {
-        state.login = { mode: 'signin', name: '', email: '', password: '', show: false, busy: false };
+        state.login = { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false };
         await S.signOut();
     },
     loginMode(el) {
         state.login.mode = el.dataset.mode;
+        state.login.step = 'form';
         state.login.password = '';
+        state.login.code = '';
         render();
     },
     loginShow() {
@@ -622,12 +656,73 @@ const actions = {
                 await S.resetPassword(email);
                 f.mode = 'signin';
                 toast(`If ${email} has an account, a reset email is on its way. Check spam too.`);
+            } else if (f.mode === 'signup' && f.step === 'form') {
+                await S.sendCode(email);
+                f.step = 'code';
+                f.code = '';
+                toast(`Code sent to ${email}.`);
+                return;
             } else if (f.mode === 'signup') {
+                if (f.code.replace(/\D/g, '').length !== 6) {
+                    toast('Enter the 6-digit code from the email.', 'warn');
+                    return;
+                }
+                await S.verifyCode(email, f.code);
                 await S.signUpPassword(f.name.trim(), email, f.password);
+                f.step = 'form';
+                f.code = '';
             } else {
                 await S.signInPassword(email, f.password);
             }
             f.password = '';
+        } finally {
+            f.busy = false;
+            render();
+        }
+    },
+    async loginResend() {
+        await S.sendCode(state.login.email.trim());
+        state.login.code = '';
+        toast('A new code is on its way.');
+    },
+    loginBack() {
+        state.login.step = 'form';
+        state.login.code = '';
+        render();
+    },
+    // signed in but the email was never confirmed
+    async verifySend() {
+        const f = state.login;
+        f.busy = true;
+        render();
+        try {
+            await S.sendCode(S.user.contact);
+            f.step = 'code';
+            f.code = '';
+            toast(`Code sent to ${S.user.contact}.`);
+        } finally {
+            f.busy = false;
+            render();
+        }
+    },
+    async verifySubmit() {
+        const f = state.login;
+        if (f.step !== 'code') {
+            return actions.verifySend();
+        }
+        if (f.busy) {
+            return;
+        }
+        if (f.code.replace(/\D/g, '').length !== 6) {
+            return toast('Enter the 6-digit code from the email.', 'warn');
+        }
+        f.busy = true;
+        render();
+        try {
+            await S.verifyCode(S.user.contact, f.code);
+            await S.confirmVerified();
+            f.step = 'form';
+            f.code = '';
         } finally {
             f.busy = false;
             render();
@@ -994,6 +1089,7 @@ const actions = {
             return toast('Nothing was deleted.');
         }
         await S.deleteAccount();
+        state.login = { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false };
         toast('Your account and data were deleted.');
     },
     async demoReset() {

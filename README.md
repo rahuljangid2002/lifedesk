@@ -36,6 +36,7 @@ charts / dashboards, month-end summary email, receipts.
 
 - **Demo mode** (now): `js/config.js` has no Firebase settings. No login; data is saved only in the browser you use.
 - **Live mode** (now on): users sign in with **email + password** (create account, forgot password) or **Google**.
+  A new email + password account must first confirm its email with a **6-digit code** (see `backend/README.md`).
   Each user's data is stored in the cloud, private to them, and shared across their devices. Account → "Delete my
   account and data" removes everything.
 
@@ -93,6 +94,7 @@ js/app.js             start screen (TOOLS), Money screens and navigation
 js/seed.js            starter categories with keywords
 js/icons.js           line icons
 firestore.rules       database security rules (paste into Firebase)
+backend/              Google Apps Script that emails and checks the sign-up codes
 sw.js, manifest.webmanifest, icons/   install on a phone and open offline
 tests/ui_flow.py      end-to-end check in demo mode
 ```
@@ -115,5 +117,5 @@ No database rule change is needed: the rules already cover everything under the 
 ```bash
 python3 -m http.server 8765 &
 ../3-Demo/demo/.venv/bin/python tests/ui_flow.py      # demo mode, every screen
-../3-Demo/demo/.venv/bin/python tests/live_login.py   # real Firebase: sign up, save, sign in again, delete the test account
+../3-Demo/demo/.venv/bin/python tests/live_login.py   # real Firebase sign-up with a stand-in code service; deletes its test account
 ```

@@ -1203,3 +1203,14 @@ a:focus-visible {
     height: 1px;
     background: var(--border);
 }
+
+input.code {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.5em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.login-form .left-text {
+    text-align: left;
+}

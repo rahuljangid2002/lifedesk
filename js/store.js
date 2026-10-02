@@ -3,7 +3,7 @@
 // Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
-import { firebaseConfig, firestoreDatabase, loginMethods } from './config.js';
+import { firebaseConfig, firestoreDatabase, loginMethods, otpEndpoint } from './config.js';
 import { STARTER_CATEGORIES } from './seed.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
@@ -25,12 +25,17 @@ let listener = () => {};
 let fb = null; // firebase modules and handles
 let unsubscribe = [];
 let loaded = new Set();
+let confirming = false; // sign-up in progress: the account exists but its email is being marked verified
+
+// On this computer only, tests may point the email-code calls somewhere else.
+const OTP_URL = (window.location.hostname === 'localhost' && localStorage.getItem('lifedesk-otp-endpoint')) || otpEndpoint;
+export const canSignUp = !!OTP_URL;
 
 export function newId() {
     return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** cb(state): 'loading' | 'signedOut' | 'ready' (data changed). */
+/** cb(state): 'loading' | 'signedOut' | 'unverified' (email not confirmed yet) | 'ready' (data changed). */
 export async function init(cb) {
     listener = cb;
     if (isDemo) {
@@ -73,20 +78,91 @@ export async function init(cb) {
             return;
         }
         user = { uid: u.uid, name: u.displayName || u.email || u.phoneNumber || 'You', contact: u.email || u.phoneNumber || '' };
-        listener('loading');
-        for (const c of COLLECTIONS) {
-            unsubscribe.push(
-                fs.onSnapshot(fs.collection(fb.db, 'users', u.uid, c), async (snap) => {
+        if (!isVerified(u)) {
+            // the database refuses unverified email + password accounts, so do not even ask it
+            listener(confirming ? 'loading' : 'unverified');
+            return;
+        }
+        subscribe(u);
+    });
+}
+
+/** Google accounts are verified by Google; email + password accounts by the one-time code. */
+function isVerified(u) {
+    return u.emailVerified || !u.providerData.some((p) => p.providerId === 'password');
+}
+
+function subscribe(u) {
+    listener('loading');
+    for (const c of COLLECTIONS) {
+        unsubscribe.push(
+            fb.fs.onSnapshot(
+                fb.fs.collection(fb.db, 'users', u.uid, c),
+                async (snap) => {
                     data[c] = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
                     loaded.add(c);
                     if (loaded.size === COLLECTIONS.length) {
                         await seedIfNew();
                         listener('ready');
                     }
-                })
-            );
-        }
-    });
+                },
+                (err) => {
+                    console.error('data listener', c, err.code);
+                    if (err.code === 'permission-denied') {
+                        listener('unverified'); // the database does not accept this account yet
+                    }
+                }
+            )
+        );
+    }
+}
+
+// ---------- email one-time codes ----------
+const OTP_ERRORS = {
+    bad_email: 'That email address does not look right. Please check it.',
+    rate: 'Too many codes were sent to this address. Wait 15 minutes and try again.',
+    daily: 'The limit for verification emails is used up for today. Try again tomorrow, or use Google sign-in.',
+    wrong: 'That code is not right. Check the email and try again.',
+    expired: 'That code is no longer valid. Send a new one.',
+    too_many: 'Too many wrong tries. Send a new code.',
+    not_verified: 'The email is not verified yet. Enter the code we sent you.',
+    not_signed_in: 'Please sign in again.',
+    offline: 'Cannot reach the verification service. Check your connection and try again.'
+};
+
+async function otpCall(body) {
+    if (!OTP_URL) {
+        throw new Error('Creating an account with email is not switched on yet. Use Continue with Google.');
+    }
+    let res;
+    try {
+        // no content type: a plain request that Apps Script accepts from a browser without extra checks
+        res = await (await fetch(OTP_URL, { method: 'POST', body: JSON.stringify(body) })).json();
+    } catch (e) {
+        throw new Error(OTP_ERRORS.offline);
+    }
+    if (!res.ok) {
+        const err = new Error(OTP_ERRORS[res.error] || 'The verification service had a problem. Try again in a minute.');
+        err.code = res.error;
+        throw err;
+    }
+    return res;
+}
+
+export function sendCode(email) {
+    return otpCall({ action: 'send', email });
+}
+export function verifyCode(email, code) {
+    return otpCall({ action: 'verify', email, code });
+}
+
+/** For a signed-in account whose email passed the code check: marks it verified and opens the data. */
+export async function confirmVerified() {
+    const u = fb.handle.currentUser;
+    await otpCall({ action: 'confirm', idToken: await u.getIdToken() });
+    await u.reload();
+    await u.getIdToken(true); // the database reads "verified" from a fresh token
+    subscribe(fb.handle.currentUser);
 }
 
 /** A new user starts with the starter categories and a Cash account. */
@@ -165,14 +241,25 @@ export async function signInPassword(email, password) {
     await fb.auth.signInWithEmailAndPassword(fb.handle, email, password);
 }
 
+/** Creates the account for an email that has just passed the code check (verifyCode), then opens it. */
 export async function signUpPassword(name, email, password) {
-    const cred = await fb.auth.createUserWithEmailAndPassword(fb.handle, email, password);
-    if (name) {
-        await fb.auth.updateProfile(cred.user, { displayName: name });
-        if (user) {
-            user.name = name; // the sign-in event fired before the name was stored
-            listener(loaded.size === COLLECTIONS.length ? 'ready' : 'loading');
+    confirming = true;
+    try {
+        const cred = await fb.auth.createUserWithEmailAndPassword(fb.handle, email, password);
+        if (name) {
+            await fb.auth.updateProfile(cred.user, { displayName: name });
+            if (user) {
+                user.name = name; // the sign-in event fired before the name was stored
+            }
         }
+        await confirmVerified();
+    } catch (e) {
+        if (fb.handle.currentUser && !isVerified(fb.handle.currentUser)) {
+            listener('unverified'); // account exists; the user can finish from the verify screen
+        }
+        throw e;
+    } finally {
+        confirming = false;
     }
 }
 
