@@ -4,19 +4,21 @@
     <venv>/python demo/record_video.py                -> docs/LifeDesk - Demo Video.mp4
     <venv>/python demo/record_video.py budget reports -> re-record only these scenes
 
-Each scene: narration (macOS voice Rishi, en_IN) -> browser recording (Playwright) -> mp4 with voice and captions.
+Each scene: narration (macOS voice Samantha, en_US) -> browser recording (Playwright) -> mp4 with voice and captions.
 """
 import json, os, shutil, subprocess, sys, time, wave
 
 import imageio_ffmpeg
 from playwright.sync_api import sync_playwright
 
+import live
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, 'work')
 OUT = os.path.join(os.path.dirname(HERE), 'docs')
 STATE = os.path.join(WORK, 'state.json')
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
-VOICE, RATE = 'Rishi', '172'
+VOICE, RATE = 'Samantha', '178'  # American English, female
 W, H = 1440, 900
 URL = 'http://localhost:8765/'
 DEMO = URL + '?demo=1'
@@ -81,7 +83,7 @@ def card(name, title, sub, points):
     with open(path, 'w') as f:
         f.write(f"""<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
 background:linear-gradient(135deg,#0b1324,#1b2a4a 60%,#2563eb);font-family:system-ui,-apple-system,sans-serif;color:#fff">
-<div style="text-align:center;max-width:980px"><div style="width:110px;height:110px;border-radius:30px;margin:0 auto 26px;background:linear-gradient(135deg,#1b2a4a,#2563eb);
+<style>@keyframes drift {{ from {{ transform: translateY(0) }} to {{ transform: translateY(-6px) }} }} .mark {{ animation: drift 1.6s ease-in-out infinite alternate }}</style><div style="text-align:center;max-width:980px"><div class="mark" style="width:110px;height:110px;border-radius:30px;margin:0 auto 26px;background:linear-gradient(135deg,#1b2a4a,#2563eb);
 display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px rgba(0,0,0,.4)">
 <svg width="62" height="62" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4M7.5 11.5l3-3 2.5 2.5 3.5-3.5"/></svg></div>
 <h1 style="font-size:64px;margin:0 0 10px;letter-spacing:-1px">{title}</h1><p style="font-size:24px;margin:0 0 30px;color:#c7d7fe">{sub}</p>
@@ -92,26 +94,35 @@ display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px rg
 # ---------------- scenes ----------------
 def s_title(page):
     start(page, card('title', 'LifeDesk', 'One login. Your everyday tools. Money first.',
-                     ['Works in any browser', 'Phone and desktop', 'Any currency', 'Light and dark', 'Free to host']), 0.6)
-    time.sleep(2)  # the card must still be on screen after the start mark, or the scene has no picture
+                     ['Works in any browser', 'Phone and desktop', 'Any currency', 'Encrypted on your device', 'Free to host']), 0.6)
+    time.sleep(3)  # the logo moves slightly, so the recorder keeps capturing frames of the card
 
 
 def s_login(page):
     start(page, URL)
     page.wait_for_selector('.login-form', timeout=30000)
     caption(page, 'Sign in with email and password, or with Google')
-    time.sleep(4)
+    time.sleep(3)
     tap(page, page.get_by_role('button', name='Create an account'))
     caption(page, 'Creating an account: name, email and a password')
-    page.get_by_label('Your name').type('Aarav Mehta', delay=70)
-    page.get_by_label('Email').type('aarav.mehta@example.com', delay=45)
-    page.locator('[data-model="login.password"]').type('a-long-password', delay=55)
-    time.sleep(0.8)
-    tap(page, page.get_by_role('button', name='Send verification code'), 1.5)
+    page.get_by_label('Your name').type('Aarav Mehta', delay=55)
+    page.get_by_label('Email').type(live.EMAIL, delay=30)
+    page.locator('[data-model="login.password"]').type(live.PASSWORD, delay=25)
+    tap(page, page.get_by_role('button', name='Send verification code'), 1.2)
     page.wait_for_selector('input.code', timeout=20000)
-    caption(page, 'A 6-digit code is emailed: the account is created only after it is entered')
-    page.locator('input.code').type('482913', delay=260)
-    time.sleep(4)
+    caption(page, 'A 6-digit code is emailed and typed here')
+    page.locator('input.code').type('482913', delay=200)
+    time.sleep(1.2)
+    tap(page, page.get_by_role('button', name='Verify and create account'), 1)
+    page.wait_for_selector('h2:has-text("Protect your data")', timeout=40000)
+    caption(page, 'A data passphrase: your data is encrypted on your device')
+    time.sleep(2.5)
+    page.locator('[data-model="vault.pass"]').type('river-stone-lantern', delay=45)
+    page.locator('[data-model="vault.pass2"]').type('river-stone-lantern', delay=45)
+    tap(page, page.get_by_role('button', name='Set passphrase'), 1)
+    page.wait_for_selector('#recovery-code', timeout=40000)
+    caption(page, 'A recovery code, shown once. Nobody else can read your data, not even the people who run LifeDesk')
+    time.sleep(6)
 
 
 def s_hub(page):
@@ -123,9 +134,12 @@ def s_hub(page):
     tap(page, page.locator('a.tool').first, 1.2)
     caption(page, 'Money home: this month at a glance')
     time.sleep(3.5)
-    scroll(page, 520)
-    caption(page, 'Accounts, budget, people and the latest entries')
+    scroll(page, 330)
+    caption(page, 'Net worth: balance, money owed to you and assets, less loans')
     time.sleep(4)
+    scroll(page, 420)
+    caption(page, 'Accounts, budget, people and the latest entries')
+    time.sleep(3.5)
 
 
 def s_add(page):
@@ -147,6 +161,49 @@ def s_add(page):
     amount.click(); page.keyboard.press('Meta+A'); page.keyboard.type('480', delay=140)
     amount.evaluate('el => el.blur()')
     tap(page, page.get_by_role('button', name='Save changes'), 2.5)
+
+
+def s_emi(page):
+    start(page, DEMO + '#add')
+    tap(page, page.locator('.tile-btn[data-type=asset]'), 0.6)
+    caption(page, 'Asset: something valuable you bought')
+    amount = page.get_by_label('Amount')
+    amount.click(); page.keyboard.type('120000', delay=90)
+    page.get_by_label('Description').click(); page.keyboard.type('Motorbike', delay=70)
+    page.get_by_label('Kind of asset').select_option('Vehicle')
+    amount.evaluate('el => el.blur()')
+    time.sleep(0.8)
+    scroll(page, 330, steps=18)
+    tap(page, page.get_by_label('Bought on EMI / finance'), 0.8)
+    caption(page, 'Bought on EMI: enter the EMI and the number of months')
+    scroll(page, 380, steps=18)
+    page.get_by_label('EMI per month').click(); page.keyboard.type('5500', delay=130)
+    page.get_by_label('Number of EMIs').click(); page.keyboard.type('24', delay=200)
+    page.get_by_label('Number of EMIs').evaluate('el => el.blur()')
+    caption(page, 'The interest rate is worked out as you type')
+    page.locator('#emi-rate').hover()
+    time.sleep(4.5)
+    scroll(page, 320, steps=15)
+    tap(page, page.get_by_role('button', name='Save EMI purchase'), 2)
+    nav(page, 'assets', 1.2)
+    caption(page, 'My assets: price, value, the loan left, interest paid and still to pay')
+    time.sleep(5)
+
+
+def s_pay(page):
+    start(page, DEMO + '#pay')
+    caption(page, 'Payments: every EMI and credit card bill in one place')
+    time.sleep(4)
+    tap(page, page.locator('.acct-row', has_text='Car (sample)').get_by_role('button'), 2)
+    caption(page, 'An EMI you pay is recorded as an expense')
+    time.sleep(2)
+    tap(page, page.get_by_role('button', name='Pay bill'), 0.8)
+    caption(page, 'A card bill, in full or in part')
+    time.sleep(1.5)
+    tap(page, page.get_by_role('button', name='Pay', exact=True), 2)
+    scroll(page, 420)
+    caption(page, 'Paid recently')
+    time.sleep(3)
 
 
 def s_daily(page):
@@ -203,13 +260,18 @@ def s_dash(page):
     time.sleep(3.5)
     scroll(page, -600, steps=15, pause=0.03)
     tap(page, page.get_by_role('button', name='Balances', exact=True), 1)
-    caption(page, 'Balances: by account, by card and by person')
-    time.sleep(4)
+    caption(page, 'Balances: by account, by card and by person, with net worth')
+    time.sleep(3)
+    tap(page, page.get_by_role('button', name='Loans & assets'), 1)
+    caption(page, 'Loans and assets: principal, interest paid and interest still to pay')
+    time.sleep(3.5)
+    scroll(page, 560)
+    time.sleep(3)
 
 
 def s_reports(page):
     start(page, DEMO + '#reports')
-    caption(page, 'Reports: 15 tables with totals')
+    caption(page, 'Reports: 18 tables with totals')
     time.sleep(3.5)
     page.locator('[data-model="reports.id"]').hover(); time.sleep(0.4)
     page.locator('[data-model="reports.id"]').select_option('spend-by-category')
@@ -241,35 +303,23 @@ def s_people(page):
 def s_accounts(page):
     start(page, DEMO + '#accounts')
     caption(page, 'My Accounts: cash and bank, wallets, credit cards')
-    time.sleep(4.5)
-    tap(page, page.get_by_role('button', name='Pay bill'), 1)
-    caption(page, 'Pay a card bill in full or in part')
-    tap(page, page.get_by_role('button', name='Partial'), 0.6)
-    box = page.locator('.a-panel input[type=number]')
-    box.click(); page.keyboard.type('5000', delay=150)
-    time.sleep(1)
-    tap(page, page.get_by_role('button', name='Pay', exact=True), 3)
+    time.sleep(6)
 
 
 def s_settings(page):
     start(page, DEMO + '#more')
-    caption(page, 'Account: appearance, currency, categories, backup and sample data')
-    time.sleep(4)
+    caption(page, 'Account: appearance, privacy, currency, categories, backup and sample data')
+    time.sleep(3.5)
     tap(page, page.get_by_role('button', name='Dark', exact=True), 1.5)
     caption(page, 'Light, dark, or follow the device')
-    time.sleep(2)
-    nav(page, 'insights', 2.5)
-    time.sleep(1.5)
+    nav(page, 'insights', 2.8)
     nav(page, 'more', 1)
-    tap(page, page.get_by_role('button', name='Light', exact=True), 1.2)
+    tap(page, page.get_by_role('button', name='Light', exact=True), 1)
     page.locator('[data-currency]').hover(); time.sleep(0.4)
-    (page.locator('[data-currency]').select_option('USD'), page.get_by_role('button', name='Keep the numbers').click())
-    caption(page, 'Any currency: amounts and dates follow the region')
-    time.sleep(2.5)
-    nav(page, 'accounts', 3)
-    nav(page, 'more', 0.8)
-    (page.locator('[data-currency]').select_option('INR'), page.get_by_role('button', name='Keep the numbers').click())
-    time.sleep(1.5)
+    page.locator('[data-currency]').select_option('USD')
+    caption(page, 'Change currency: convert every amount at today\'s rate, or keep the numbers')
+    time.sleep(5)
+    tap(page, page.get_by_role('button', name='Cancel'), 1)
 
 
 def s_mobile(page):
@@ -288,24 +338,26 @@ def s_mobile(page):
 
 def s_outro(page):
     start(page, card('outro', 'LifeDesk', 'All your money, in one place. More tools on the way.',
-                     ['rahuljangid2002.github.io/lifedesk', 'Add to Home screen on your phone', 'Your data is private to you']), 0.6)
-    time.sleep(2)
+                     ['rahuljangid2002.github.io/lifedesk', 'Add to Home screen on your phone', 'Encrypted: only you can read your data']), 0.6)
+    time.sleep(3)
 
 
 SCENES = [
     ('title', s_title, 'card', "This is LifeDesk: one login for your everyday tools. The first tool is Money, a personal finance app that runs in any browser, on a phone or a desktop, in any currency. Everything in this demo is made-up sample data."),
-    ('login', s_login, 'login', "You sign in with an email and password, or with Google. A new account gives a name, an email and a password. A six digit code is then sent to that email, and the account is created only after the code is entered."),
-    ('hub', s_hub, 'app', "After signing in, you land on All tools. Money is ready today, and renewal reminders are next. Money home shows this month's income, expense and net balance, with your accounts, the budget, people, and the latest entries."),
-    ('add', s_add, 'app', "Add Entry handles seven kinds of entry in one form. Type the amount and a description, and the category is suggested for you. Pick the account, and save. Every recent entry has a pencil, so a mistake can be corrected, or deleted, and all balances follow."),
+    ('login', s_login, 'login', "You sign in with an email and password, or with Google. A new account confirms its email with a six digit code. Then you choose a data passphrase. Your data is encrypted on your own device before it is saved, so nobody else can read it, not even the people who run LifeDesk. You also get a recovery code, shown once, in case you forget the passphrase."),
+    ('hub', s_hub, 'app', "After signing in, you land on All tools. Money is ready today, and renewal reminders are next. Money home shows this month's income, expense and net balance. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
+    ('add', s_add, 'app', "Add Entry handles eight kinds of entry in one form. Type the amount and a description, and the category is filled in for you, from keywords and from what you chose before. Pick the account, and save. Every recent entry has a pencil, so a mistake can be corrected, or deleted, and all balances follow."),
+    ('emi', s_emi, 'app', "When you buy something valuable, choose Asset. If you bought it on E M I, tick the box and enter the E M I and the number of months. The interest rate is worked out as you type. Saving creates the asset and its loan. My assets then shows what each thing cost, what it is worth, the loan left, and the interest paid and still to pay."),
+    ('pay', s_pay, 'app', "The Payments screen puts every E M I and credit card bill in one place. Paying an E M I records it as an expense. A card bill can be paid in full, or in part, and everything paid is listed below."),
     ('daily', s_daily, 'app', "Daily Expenses lists every entry date by date, with the total for each day, the average per day and the highest day. You can filter by category, account or text, or switch between spending, income and all entries."),
     ('budget', s_budget, 'app', "The Budget screen has one row for each category, with the largest first, showing what is spent and what is left. See entries opens the expenses behind a category. When you change an amount, a bar offers to save it."),
-    ('dash', s_dash, 'app', "Dashboards turn the entries into pictures. The monthly dashboard compares income, expense and savings with last month, and shows spend by category, budget against actual, and spend for each day. The yearly dashboard shows income against expense, and the net balance trend. Balances shows every account, card and person."),
-    ('reports', s_reports, 'app', "There are fifteen reports. Choose a report and a period, such as last month or the whole year. Each report is a table with totals, and it can be downloaded as a file that opens in any spreadsheet."),
+    ('dash', s_dash, 'app', "Dashboards turn the entries into pictures. The monthly dashboard compares income, expense and savings with last month, and shows spend by category, budget against actual, and spend for each day. The yearly dashboard shows income against expense, and the net balance trend. Balances shows every account, card and person. Loans and assets shows what is still owed, and how much of it is interest."),
+    ('reports', s_reports, 'app', "There are eighteen reports. Choose a report and a period, such as last month or the whole year. Each report is a table with totals, and it can be downloaded as a file that opens in any spreadsheet."),
     ('people', s_people, 'app', "People and Loans shows who owes you, and whom you owe. Open a person to record money returned, or lent again, in one step, and to see the full history."),
-    ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance. A credit card bill can be paid in full, or in part, from any account."),
-    ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You also choose your currency, and amounts and dates follow your region. You can add categories, download a backup, and load or remove the sample data."),
+    ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance."),
+    ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You can change your currency, and either convert every amount at today's exchange rate, or keep the numbers as they are. You can also add categories, download a backup, and load or remove the sample data."),
     ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a bar at the bottom. Add it to the home screen, and it opens like any other app."),
-    ('outro', s_outro, 'card', "That is LifeDesk. Your data is private to you, and it is free to host. Thank you for watching."),
+    ('outro', s_outro, 'card', "That is LifeDesk. Your data is encrypted and private to you, and it is free to host. Thank you for watching."),
 ]
 
 
@@ -339,8 +391,10 @@ def record(pw, name, fn, kind):
                               storage_state=STATE if kind in ('app', 'phone') else None, color_scheme='light')
     ctx.add_init_script(OVERLAY)
     if kind == 'login':
-        # the code email is not really sent in the demo: the request to the code service is answered here
-        ctx.route('**/macros/s/**', lambda r: r.fulfill(status=200, content_type='application/json', body='{"ok": true, "minutes": 10}'))
+        # the code email is not really sent in the demo: the code service is answered here, and a throw-away
+        # account is created so the real passphrase screens can be shown (deleted again in main)
+        ctx.add_init_script(live.FLAGS)
+        live.answer_codes(ctx)
     t0 = time.time()
     page = ctx.new_page()
     page.on('dialog', lambda d: d.accept())
@@ -385,6 +439,8 @@ def main():
             dur = build(name, webm, begin, end, apath, alen, kind)
             total += dur
             print(f'{name}: voice {alen:.1f}s, shown {end - begin:.1f}s, scene {dur:.1f}s', flush=True)
+            if kind == 'login':
+                print('throw-away account deleted:', live.cleanup(), flush=True)
     for name, *_ in SCENES:
         probe = subprocess.run([FFMPEG, '-i', os.path.join(WORK, name + '.mp4')], capture_output=True, text=True).stderr
         if 'Video:' not in probe:

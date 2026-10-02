@@ -11,6 +11,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt, RGBColor
 from playwright.sync_api import sync_playwright
 
+import live
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), 'docs')
 SHOTS = os.path.join(OUT, 'shots')
@@ -34,22 +36,42 @@ SECTIONS = [
         'A 6-digit code is sent to that email. The account is created only after the code is entered (10 minutes, 5 tries).',
         'Forgot password? sends a reset email. Every sign-in starts on the All tools screen.',
     ]),
+    ('Your data is encrypted', ['02b_passphrase', '02c_recovery'], [
+        'After the first sign-in you choose a data passphrase. It is separate from the sign-in password.',
+        'Everything you save is encrypted on your own device first. In the database it is unreadable text, also to the people who run LifeDesk.',
+        'A recovery code is shown once. It is the only way back if the passphrase is forgotten, so it must be saved.',
+        'The passphrase is asked once on each device. Account → Lock this device asks for it again.',
+        'If both the passphrase and the recovery code are lost, the data cannot be recovered by anyone.',
+    ]),
     ('All tools', ['03_hub'], [
         'One login, several tools. Money is ready; Renewal reminders is shown as coming soon.',
         'The Money tile shows the net balance and this month\'s spending.',
         'On a wide screen the menu is on the left; on a phone there is a bar at the bottom.',
     ]),
-    ('Money home', ['04_home'], [
+    ('Money home and net worth', ['04_home'], [
         'This month\'s income, expense and net balance, with money in hand, card owed and money owed to people.',
-        'Shortcuts to Add Entry, People & Loans, Budget, Daily, Dashboards and Reports.',
-        'Accounts with their balances, budget progress, people, and the latest entries.',
         'Net balance = bank + wallets + cash − credit card owed − money owed to people.',
+        'Net worth = net balance + money owed to you + what your assets are worth − loan principal still owed.',
+        'Notices for EMIs due and card bills lead to the Payments screen. Shortcuts to every screen.',
     ]),
     ('Add Entry', ['05_add', '06_edit'], [
-        'Seven kinds of entry in one form: Expense, Income, Transfer, Lent, Got back, Borrowed, Repaid. A line under the title explains the chosen kind.',
-        'Type the amount and a description: the category is suggested from the description.',
+        'Eight kinds of entry in one form: Expense, Income, Transfer, Lent, Got back, Borrowed, Repaid, Asset. A line under the title explains the chosen kind.',
+        'The category is filled in from the description: from keywords, from what you chose for the same or a similar description before, or from the category\'s name.',
         'Account chips show each balance; a credit card shows what it owes.',
         'Recent entries are listed beside the form. The pencil opens an entry to change or delete it; balances, budget and people follow.',
+    ]),
+    ('Buying on EMI and assets', ['22_emi_form', '23_assets'], [
+        'Choose Asset for something valuable you bought; the description becomes its name in My assets.',
+        'Tick "Bought on EMI / finance" (also available for an Expense): EMI per month, number of EMIs, first EMI date, down payment and who financed it.',
+        'The interest rate is worked out as you type (reducing-balance method). Type over it to use your own rate.',
+        'Only the down payment is spent on the day. Each EMI becomes an expense when it is paid.',
+        'My assets shows price paid, what it is worth now, the loan left, interest paid and interest still to pay.',
+    ]),
+    ('Payments: EMIs and card bills', ['24_payments'], [
+        'Every EMI with its number, due date and amount: Pay EMI, or Pay early.',
+        'Every credit card with what it owes: pay in full or in part, from any account.',
+        'An EMI paid is an expense (spending and budget). A card bill is a transfer, because the purchases were already counted when they were made.',
+        'Paid recently lists the last payments, each with a pencil to edit.',
     ]),
     ('Daily Expenses', ['07_daily'], [
         'Every entry date by date, with the total and the number of entries for each day.',
@@ -72,18 +94,24 @@ SECTIONS = [
     ('Dashboards: Yearly and Balances', ['12_dash_yearly', '13_dash_balances'], [
         'Yearly: income, expense, savings and savings rate; income against expense for each month; the net balance trend; top categories; income by source.',
         'The month a year starts in can be chosen (April for a financial year, January for a calendar year).',
-        'Balances: money in each account, what each card owes, who owes you and whom you owe.',
+        'Balances: net worth, money in each account, what each card owes, who owes you and whom you owe.',
+    ]),
+    ('Dashboards: Loans and assets', ['25_dash_loans'], [
+        'Assets worth, loans to pay and net asset value; principal still owed, interest paid, interest still to pay, EMI per month and EMIs left.',
+        'Still to pay by loan, assets by kind, value against loan for each asset, EMIs paid by month.',
+        'A table of every loan and every asset with its interest.',
     ]),
     ('Reports', ['14_report_category', '15_report_pivot'], [
-        '15 reports as tables with totals: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, '
-        'spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, all entries.',
+        '18 reports as tables with totals: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, '
+        'spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, '
+        'asset register, loan summary, EMI payments, all entries.',
         'Choose the period: this month, last month, last 3 months, this year, last year, all time, or custom dates.',
         'Download CSV opens in any spreadsheet.',
     ]),
     ('People & Loans', ['16_people'], [
         'Who owes you and whom you owe, with the amount still outstanding and a status: Active, Settled or Bad Debt.',
         'Open a person for quick actions (got money back, gave more, paid back, borrowed more), phone, notes and the full history.',
-        'Bad debts are kept out of "to receive".',
+        'The Loans tab lists every EMI loan with its progress and interest. Bad debts are kept out of "to receive".',
     ]),
     ('My Accounts', ['17_accounts', '18_pay_card'], [
         'Cash and bank accounts, wallets and credit cards, grouped, each with its balance.',
@@ -93,7 +121,7 @@ SECTIONS = [
     ]),
     ('Account, appearance and currency', ['19_account', '20_dark', '21_currency'], [
         'Appearance: System (follows the device), Light or Dark.',
-        'Currency: any currency; amounts, number grouping and dates follow the region.',
+        'Currency: pick another one and either convert every saved amount at today\'s exchange rate (the rate can be changed; a backup download is optional) or keep the numbers and change only the symbol.',
         'Add your own categories with keywords for the suggestion.',
         'Download a backup file or restore one. Load or remove the sample data. Delete my account and data.',
     ]),
@@ -108,9 +136,9 @@ FACTS = [
     ('Address', 'https://rahuljangid2002.github.io/lifedesk/  (try it without an account: add ?demo=1)'),
     ('Devices', 'Any modern browser on Android, iPhone, Windows or Mac'),
     ('Sign-in', 'Email + password with an emailed code at sign-up, or Google'),
-    ('Privacy', 'Each user can reach only their own data'),
+    ('Privacy', 'Data is encrypted on the device with a passphrase; only the user can read it. A lost passphrase and recovery code cannot be recovered.'),
     ('Cost', 'Free to use; hosted on free services'),
-    ('Not included yet', 'Buying on EMI, assets, recurring bills, receipts, mobile-number sign-in, renewal reminders'),
+    ('Not included yet', 'Changing an EMI plan, recurring bills, receipts, month-end email, mobile-number sign-in, renewal reminders'),
 ]
 
 
@@ -125,12 +153,17 @@ def take_shots():
         go = lambda route, wait=0.6: (pg.evaluate("r => { location.hash = r; window.scrollTo(0, 0); }", route), time.sleep(wait))
 
         # sign-in screens (the real ones; the code request is answered here, so no email is sent and no account is made)
-        ctx.route('**/macros/s/**', lambda r: r.fulfill(status=200, content_type='application/json', body='{"ok": true, "minutes": 10}'))
+        ctx.add_init_script(live.FLAGS)
+        live.answer_codes(ctx)
         pg.goto(URL); pg.wait_for_selector('.login-form', timeout=30000); time.sleep(0.5); shot('01_login')
         pg.get_by_role('button', name='Create an account').click()
-        pg.get_by_label('Your name').fill('Aarav Mehta'); pg.get_by_label('Email').fill('aarav.mehta@example.com')
-        pg.locator('[data-model="login.password"]').fill('a-long-password'); pg.get_by_role('button', name='Send verification code').click()
+        pg.get_by_label('Your name').fill('Aarav Mehta'); pg.get_by_label('Email').fill(live.EMAIL)
+        pg.locator('[data-model="login.password"]').fill(live.PASSWORD); pg.get_by_role('button', name='Send verification code').click()
         pg.wait_for_selector('input.code'); pg.locator('input.code').fill('482913'); time.sleep(3.5); shot('02_signup_code')
+        pg.get_by_role('button', name='Verify and create account').click(); pg.wait_for_selector('h2:has-text("Protect your data")', timeout=40000)
+        pg.locator('[data-model="vault.pass"]').fill('river-stone-lantern'); pg.locator('[data-model="vault.pass2"]').fill('river-stone-lantern'); time.sleep(0.4); shot('02b_passphrase')
+        pg.get_by_role('button', name='Set passphrase').click(); pg.wait_for_selector('#recovery-code', timeout=40000); time.sleep(3.5); shot('02c_recovery')
+        print('throw-away account deleted:', live.cleanup())
 
         # demo mode, rupees, sample data
         pg.goto(DEMO); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR')
@@ -153,6 +186,13 @@ def take_shots():
         pg.get_by_role('button', name='Balances', exact=True).click(); time.sleep(0.6); shot('13_dash_balances')
         go('reports'); pg.locator('[data-model="reports.id"]').select_option('spend-by-category'); pg.locator('[data-model="reports.preset"]').select_option('last-month'); time.sleep(0.5); shot('14_report_category')
         pg.locator('[data-model="reports.id"]').select_option('category-by-month'); time.sleep(0.5); shot('15_report_pivot')
+        go('pay'); shot('24_payments')
+        go('assets'); shot('23_assets')
+        go('insights'); pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.6); shot('25_dash_loans')
+        go('add'); pg.locator('.tile-btn[data-type=asset]').click(); pg.get_by_label('Amount').fill('120000'); pg.get_by_label('Description').fill('Motorbike')
+        pg.get_by_label('Kind of asset').select_option('Vehicle'); pg.get_by_label('Bought on EMI / finance').check(); time.sleep(0.2)
+        pg.get_by_label('EMI per month').fill('5500'); pg.get_by_label('Number of EMIs').fill('24'); time.sleep(0.3)
+        pg.locator('.pane-head').scroll_into_view_if_needed(); pg.mouse.wheel(0, 330); time.sleep(0.5); shot('22_emi_form')
         go('people'); pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.5); shot('16_people')
         go('accounts'); shot('17_accounts')
         pg.get_by_role('button', name='Pay bill').click(); pg.get_by_role('button', name='Partial').click()
@@ -161,8 +201,8 @@ def take_shots():
         go('more'); shot('19_account')
         pg.get_by_role('button', name='Dark', exact=True).click(); go('home'); shot('20_dark')
         go('more'); pg.get_by_role('button', name='Light', exact=True).click()
-        (pg.locator('[data-currency]').select_option('USD'), pg.get_by_role('button', name='Keep the numbers').click()); time.sleep(0.5); go('accounts'); shot('21_currency')
-        go('more'); (pg.locator('[data-currency]').select_option('INR'), pg.get_by_role('button', name='Keep the numbers').click()); time.sleep(0.5)
+        pg.locator('[data-currency]').select_option('USD'); time.sleep(4); shot('21_currency')
+        pg.get_by_role('button', name='Cancel').click(); time.sleep(0.3)
         pg.get_by_role('button', name='System', exact=True).click()
         state = ctx.storage_state()
         ctx.close()
