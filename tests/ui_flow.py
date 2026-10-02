@@ -64,7 +64,7 @@ with sync_playwright() as p:
     pg.locator('.row', has_text='Car petrol').get_by_role('button', name='Edit').click()
     pg.get_by_label('Amount').fill('999'); pg.get_by_role('button', name='Save changes').click(); time.sleep(0.3)
     check('edit: net balance 7,001', money(stat('Net balance')) == 7001, stat('Net balance'))
-    pg.locator('.tile-btn', has_text='Lent').click()
+    pg.locator('.tile-btn[data-type=lent]').click()
     pg.get_by_label('Amount').fill('500'); pg.get_by_label('Description').fill('Lunch money')
     pg.get_by_label('Person (owes you)').select_option('__new'); pg.get_by_label("New person's name").fill('Friend A')
     pg.get_by_role('button', name='Save Lent').click(); time.sleep(0.3)
@@ -129,6 +129,7 @@ with sync_playwright() as p:
     check('rupees use lakh grouping', '₹12,34,567' in pg.locator('.card', has_text='Savings').inner_text(), pg.locator('.card', has_text='Savings').inner_text()[:60])
 
     # Desktop width: side menu instead of the bottom bar
+    pg.set_viewport_size({'width': 1680, 'height': 950}); pg.goto(URL + '#add'); time.sleep(0.3); shot('w_add')
     pg.set_viewport_size({'width': 1366, 'height': 850}); pg.goto(URL + '#home'); pg.wait_for_selector('.side')
     check('desktop: side menu shown, bottom bar hidden', pg.locator('.side').is_visible() and not pg.locator('.tabbar').is_visible())
     check('desktop: no sideways scrolling', pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))

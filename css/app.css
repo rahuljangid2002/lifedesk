@@ -639,6 +639,50 @@ a:focus-visible {
 .amount.small input {
     font-size: 1.4rem;
 }
+.amount.out:focus-within {
+    border-color: var(--brand);
+}
+.amount.in input,
+.amount.in span {
+    color: var(--green);
+}
+/* no browser arrows on number boxes */
+input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.pane-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+.pane-head h2 {
+    font-size: 1.1rem;
+}
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 2rem 1.25rem;
+    color: var(--muted);
+}
+.empty-state .ic {
+    width: 2rem;
+    height: 2rem;
+    color: var(--brand-ink);
+}
+.empty-state b {
+    color: var(--text);
+}
 .mini {
     flex-direction: row;
     align-items: center;
@@ -661,8 +705,11 @@ a:focus-visible {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 0.3rem;
-    padding: 0.7rem 0.2rem;
+    min-height: 4.1rem;
+    white-space: nowrap;
+    padding: 0.6rem 0.2rem;
     border: 1px solid var(--border);
     border-radius: 0.9rem;
     background: var(--surface);
@@ -1060,20 +1107,35 @@ a:focus-visible {
     .shell {
         max-width: 72rem;
         width: 100%;
+        margin: 0 auto;
         padding: 1.5rem 2rem 3rem;
     }
+    /* compact header: title on the left, the three figures on the right */
     .hero {
-        border-radius: 1.5rem;
-        padding: 1.5rem 1.75rem 1.6rem;
+        border-radius: 1.25rem;
+        padding: 1.1rem 1.5rem;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 2rem;
+        align-items: center;
+    }
+    .hero > * {
+        grid-column: 1;
+    }
+    .hero > .stats {
+        grid-column: 2;
+        grid-row: 1 / span 3;
+        margin-top: 0;
+        min-width: 30rem;
+    }
+    .hero-sub {
+        margin-top: 0.25rem;
     }
     .hero .back {
         display: none;
     }
     .hero h1 {
-        font-size: 1.7rem;
-    }
-    .hero .stats {
-        max-width: 46rem;
+        font-size: 1.5rem;
     }
     .hero .center + .month-nav,
     .month-nav {
@@ -1085,7 +1147,7 @@ a:focus-visible {
     .stat b,
     .stat b.long,
     .stat b.xlong {
-        font-size: 1.25rem;
+        font-size: 1.15rem;
         line-height: inherit;
     }
     main {
@@ -1102,16 +1164,30 @@ a:focus-visible {
     }
     main.two {
         display: grid;
-        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: start;
         gap: 1.5rem;
     }
     main.two .pane:first-child {
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 1.25rem;
+        border-radius: 1.25rem;
+        padding: 1.5rem;
+        gap: 1rem;
         box-shadow: var(--shadow);
+    }
+    main.two .pane:only-child {
+        grid-column: 1 / -1;
+        max-width: 40rem;
+    }
+    main.two .btn.wide {
+        max-width: none;
+    }
+    main.two .pane + .pane h3 {
+        margin-top: 0.4rem;
+    }
+    .empty-state {
+        padding: 3rem 1.5rem;
     }
     .cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1126,6 +1202,10 @@ a:focus-visible {
     }
     .type-grid {
         grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+    .tile-btn {
+        font-size: 0.72rem;
     }
     .chips {
         flex-wrap: wrap;

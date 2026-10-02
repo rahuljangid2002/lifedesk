@@ -1,13 +1,13 @@
 // Pure calculations: no screen and no storage code here, so the same rules can be tested on their own.
 
 export const TYPES = {
-    expense: { label: 'Expense', icon: 'cart', sign: -1 },
-    income: { label: 'Income', icon: 'income', sign: 1 },
-    transfer: { label: 'Transfer', icon: 'transfer', sign: 0 },
-    lent: { label: 'Lent / Given', icon: 'lent', sign: -1 },
-    gotback: { label: 'Got Back', icon: 'gotback', sign: 1 },
-    borrowed: { label: 'Borrowed', icon: 'borrowed', sign: 1 },
-    repaid: { label: 'Repaid', icon: 'repaid', sign: -1 }
+    expense: { label: 'Expense', short: 'Expense', icon: 'cart', sign: -1, hint: 'Money you spent.' },
+    income: { label: 'Income', short: 'Income', icon: 'income', sign: 1, hint: 'Money you earned or received.' },
+    transfer: { label: 'Transfer', short: 'Transfer', icon: 'transfer', sign: 0, hint: 'Move money between your own accounts, or pay a card bill.' },
+    lent: { label: 'Lent / Given', short: 'Lent', icon: 'lent', sign: -1, hint: 'Money you gave to someone who will pay it back.' },
+    gotback: { label: 'Got Back', short: 'Got back', icon: 'gotback', sign: 1, hint: 'Someone returned money they owed you.' },
+    borrowed: { label: 'Borrowed', short: 'Borrowed', icon: 'borrowed', sign: 1, hint: 'Money you took from someone and will pay back.' },
+    repaid: { label: 'Repaid', short: 'Repaid', icon: 'repaid', sign: -1, hint: 'You paid back someone you owe.' }
 };
 export const PERSON_TYPES = ['lent', 'gotback', 'borrowed', 'repaid'];
 export const ACCOUNT_KINDS = { bank: 'Bank', wallet: 'Wallet', cash: 'Cash', card: 'Credit card' };

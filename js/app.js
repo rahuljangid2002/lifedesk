@@ -298,7 +298,7 @@ function addEntry() {
     const m = L.monthSummary(S.data, thisMonth());
     const t = L.totals(S.data);
     const tiles = Object.entries(L.TYPES)
-        .map(([k, v]) => `<button class="tile-btn t-${k} ${f.type === k ? 'on' : ''}" data-action="setType" data-type="${k}">${icon(v.icon)}<span>${v.label}</span></button>`)
+        .map(([k, v]) => `<button class="tile-btn t-${k} ${f.type === k ? 'on' : ''}" data-action="setType" data-type="${k}" title="${v.label}" aria-pressed="${f.type === k}">${icon(v.icon)}<span>${v.short}</span></button>`)
         .join('');
     const chips = (selected, action, skip) =>
         activeAccounts()
@@ -324,9 +324,9 @@ function addEntry() {
     <main class="two">
         <div class="pane">
             ${editing ? `<div class="banner"><div><b>Editing an entry</b><small>${esc(f.label)}</small></div><button class="btn" data-action="cancelEdit">Cancel</button></div>` : ''}
-            <h3>What kind of entry?</h3>
+            <div class="pane-head"><h2>${editing ? 'Edit entry' : 'New entry'}</h2><small>${L.TYPES[f.type].hint}</small></div>
             <div class="type-grid">${tiles}</div>
-            <label class="amount"><span>${esc(L.symbol())}</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
+            <label class="amount ${L.TYPES[f.type].sign > 0 ? 'in' : L.TYPES[f.type].sign < 0 ? 'out' : ''}"><span>${esc(L.symbol())}</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
             <div class="grid2">
                 <label>Date<input type="date" max="${today()}" value="${esc(f.date)}" data-model="add.date"></label>
                 <label>Description<input type="text" placeholder="e.g. Fuel, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
@@ -341,7 +341,9 @@ function addEntry() {
             <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : `Save ${L.TYPES[f.type].label}`}</button>
             ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
-        ${!editing && recent.length ? `<div class="pane"><h3>Recent entries</h3><section class="list">${recent.map((e) => entryRow(e, true)).join('')}</section></div>` : ''}
+        ${editing ? '' : `<div class="pane"><h3>Recent entries</h3>${recent.length
+            ? `<section class="list">${recent.map((e) => entryRow(e, true)).join('')}</section>`
+            : `<div class="empty-state">${icon('calendar')}<b>No entries yet</b><small>What you save appears here, newest first, ready to edit or delete.</small></div>`}</div>`}
     </main>`;
 }
 
