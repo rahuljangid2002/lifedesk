@@ -756,7 +756,7 @@ function more() {
             <div class="split wrap"><button class="btn" data-action="exportData">Download my data</button><label class="btn file">Restore from file<input type="file" accept="application/json" data-file="import" hidden></label></div>
             <small>${S.data.entries.length} entries · ${S.data.accounts.length} accounts · ${S.data.people.length} people</small></section>
         <section class="card"><div class="card-head"><h2>Sample data</h2>${sampleDocs(S.data).length ? '<span class="pill">Loaded</span>' : ''}</div>
-            <small>Made-up history from ${L.dateText(SAMPLE_START, { day: 'numeric', month: 'long', year: 'numeric' })} to today, for trying the app: salary, rent, bills, shopping, card payments, lending and budgets, in sample accounts. Your own entries are not changed, and it can be removed again.</small>
+            <small>Made-up history from ${L.dateText(SAMPLE_START, { day: 'numeric', month: 'long', year: 'numeric' })} to today, for trying the app: salary, rent, bills, shopping, card payments, lending, budgets, and assets bought on EMI with their loans, in sample accounts. Your own entries are not changed, and it can be removed again.</small>
             <div class="split wrap">${sampleDocs(S.data).length
                 ? `<button class="btn danger" data-action="sampleRemove" ${state.more.busy ? 'disabled' : ''}>${icon('trash')} Remove sample data</button>`
                 : `<button class="btn" data-action="sampleLoad" ${state.more.busy ? 'disabled' : ''}>Load sample data</button>`}</div>
@@ -1491,7 +1491,7 @@ const actions = {
     async sampleLoad() {
         const pairs = buildSample(S.data, today(), L.currentFormat().currency);
         const entries = pairs.filter((p) => p[0] === 'entries').length;
-        if (!window.confirm(`Add sample data?\n${entries} made-up entries from 1 March 2025 to today, in four sample accounts and three sample people. Your own entries stay as they are, and you can remove the sample data here later.`)) {
+        if (!window.confirm(`Add sample data?\n${entries} made-up entries from 1 March 2025 to today, in four sample accounts, with three sample people, three assets and two loans on EMI. Your own entries stay as they are, and you can remove the sample data here later.`)) {
             return;
         }
         state.more.busy = true;

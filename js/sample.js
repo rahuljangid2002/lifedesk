@@ -1,7 +1,7 @@
 // Made-up history for trying the Money tool: salary, rent, bills, shopping, card payments, lending and budgets
 // from 1 March 2025 to today. Everything it creates has an id starting with "sample-" (budgets carry sample: true),
 // so it can be removed again without touching the user's own entries. The same input always gives the same data.
-import { addMonths, monthEnd, monthKey } from './logic.js';
+import { addMonths, addMonthsToDate, impliedRate, monthEnd, monthKey } from './logic.js';
 
 export const SAMPLE_START = '2025-03-01';
 const PREFIX = 'sample-';
@@ -115,6 +115,38 @@ export function buildSample(data, today, currency) {
     const FUN = ['Movie tickets', 'Birthday gift', 'Concert tickets', 'Board game night'];
     const TRIPS = ['Train tickets', 'Taxi to airport', 'Weekend bus trip', 'Hotel for two nights'];
 
+    // ---------- assets and loans ----------
+    // A car on a 42-month loan with interest, a laptop on a 6-month no-cost EMI, and gold bought outright.
+    const loan = (key, name, lender, price, down, emi, months, firstDate, boughtOn) => {
+        const financed = price - down;
+        const doc = { id: `${PREFIX}loan-${key}`, name, lender, price, downPayment: down, financed, emi, months, firstDate, rate: impliedRate(financed, emi, months), rateCalculated: true,
+            accountId: bank, categoryId: null, boughtOn, assetId: `${PREFIX}asset-${key}`, createdAt: stamp };
+        pairs.push(['loans', doc]);
+        return doc;
+    };
+    const asset = (key, name, type, price, value, boughtOn, loanId) =>
+        pairs.push(['assets', { id: `${PREFIX}asset-${key}`, name, type, price, value, boughtOn, loanId, status: 'Owned', createdAt: stamp }]);
+    const carDown = amt(1500);
+    const car = loan('car', 'Car (sample)', 'City Auto Finance', amt(8000), carDown, amt(180), 42, '2025-06-10', '2025-06-01');
+    asset('car', 'Car (sample)', 'Vehicle', car.price, amt(7000), '2025-06-01', car.id);
+    add('2025-06-01', 'asset', carDown, 'Car (sample) – down payment', savings, { loanDown: car.id, assetId: car.assetId });
+    const laptopEmi = amt(200);
+    const laptop = loan('laptop', 'Laptop (sample)', 'Store no-cost EMI', laptopEmi * 6, 0, laptopEmi, 6, '2026-06-12', '2026-06-02');
+    asset('laptop', 'Laptop (sample)', 'Electronics', laptop.price, amt(1000), '2026-06-02', laptop.id);
+    asset('gold', 'Gold coins (sample)', 'Gold & Jewellery', amt(2000), amt(2600), '2025-10-20', null);
+    add('2025-10-20', 'asset', amt(2000), 'Gold coins (sample)', savings, { assetId: `${PREFIX}asset-gold` });
+    const payEmi = (l) => {
+        for (let k = 0; k < l.months; k += 1) {
+            const date = addMonthsToDate(l.firstDate, k);
+            if (date > today) {
+                break;
+            }
+            add(date, 'expense', l.emi, `${l.name} – EMI ${k + 1} of ${l.months}`, bank, { categoryId: C.loan, loanId: l.id });
+        }
+    };
+    payEmi(car);
+    payEmi(laptop);
+
     for (let key = monthKey(SAMPLE_START), i = 0; key <= monthKey(today); key = addMonths(key, 1), i += 1) {
         const lastDay = Number(monthEnd(key).slice(8));
         const day = (d) => `${key}-${String(Math.min(d, lastDay)).padStart(2, '0')}`;
@@ -130,9 +162,6 @@ export function buildSample(data, today, currency) {
         spend(day(6), 30, 0, 'Internet bill', bank, C.utilities);
         spend(day(7), 12, 0, 'Music and video subscription', card, C.subs);
         spend(day(9), 22, 0.1, 'Mobile recharge', wallet, C.utilities);
-        if (key >= '2025-06') {
-            spend(day(10), 180, 0, 'Car loan instalment', bank, C.loan);
-        }
         spend(day(8), 150, 0, 'Sent to parents', bank, C.family);
 
         // paying last month's card bill in full
@@ -209,7 +238,7 @@ export function buildSample(data, today, currency) {
         // budget, only where the user has none of their own
         if (!data.budgets.some((b) => b.id === key && !b.sample)) {
             const lines = {};
-            const plan = { groceries: 500, food: 170, fuel: 130, housing: 900, utilities: 140, subs: 15, family: 150, shopping: 120, fun: 60, care: 30, health: 40, loan: key >= '2025-06' ? 180 : 0 };
+            const plan = { groceries: 500, food: 170, fuel: 130, housing: 900, utilities: 140, subs: 15, family: 150, shopping: 120, fun: 60, care: 30, health: 40, loan: (key >= '2025-06' ? 180 : 0) + (key >= '2026-06' && key <= '2026-11' ? 200 : 0) };
             for (const [k, v] of Object.entries(plan)) {
                 if (v && C[k]) {
                     lines[C[k]] = amt(v);
@@ -224,7 +253,7 @@ export function buildSample(data, today, currency) {
 /** [collection, id] pairs of everything the sample created. */
 export function sampleDocs(data) {
     const out = [];
-    for (const c of ['entries', 'people', 'accounts', 'budgets']) {
+    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets']) {
         for (const doc of data[c]) {
             if (isSample(doc)) {
                 out.push([c, doc.id]);

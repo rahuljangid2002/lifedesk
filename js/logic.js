@@ -145,6 +145,10 @@ export function addMonthsToDate(iso, n) {
  * of EMIs (reducing-balance method: financed = EMI x (1 - (1 + r)^-n) / r, r per month). 0 for a no-cost EMI.
  */
 export function impliedRate(financed, emi, months) {
+    return Math.round(monthlyRate(financed, emi, months) * 12 * 10000) / 100;
+}
+/** The same rate per month, as a fraction and not rounded: used for the principal / interest split. */
+export function monthlyRate(financed, emi, months) {
     const p = num(financed);
     const e = num(emi);
     const n = Math.round(num(months));
@@ -155,14 +159,13 @@ export function impliedRate(financed, emi, months) {
     let hi = 1;
     for (let i = 0; i < 100; i += 1) {
         const r = (lo + hi) / 2;
-        const value = (e * (1 - (1 + r) ** -n)) / r;
-        if (value > p) {
+        if ((e * (1 - (1 + r) ** -n)) / r > p) {
             lo = r;
         } else {
             hi = r;
         }
     }
-    return Math.round(((lo + hi) / 2) * 12 * 10000) / 100;
+    return (lo + hi) / 2;
 }
 
 /** Where a loan stands: EMIs paid and left, what is still to pay, and the EMIs due up to the end of this month. */
@@ -183,7 +186,7 @@ export function loanStatus(loan, entries, today) {
     const emi = num(loan.emi);
     const financed = num(loan.financed);
     const totalInterest = Math.max(0, emi * months - financed);
-    const r = impliedRate(financed, emi, months) / 1200;
+    const r = monthlyRate(financed, emi, months);
     const k = Math.min(paid, months);
     const principalLeft = left === 0 ? 0 : r > 0 ? Math.max(0, financed * (1 + r) ** k - (emi * ((1 + r) ** k - 1)) / r) : Math.max(0, financed - emi * k);
     const interestPaid = Math.min(totalInterest, Math.max(0, Math.round((emi * k - (financed - principalLeft)) * 100) / 100));

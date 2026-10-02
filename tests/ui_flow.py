@@ -128,6 +128,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#more'); pg.get_by_role('button', name='Load sample data').click()
     pg.wait_for_selector('button:has-text("Remove sample data")')
     d = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
+    today_d0 = __import__('datetime').date.today()
     sample = [e for e in d['entries'] if e['id'].startswith('sample-')]
     check('sample: about 19 months of entries from 1 March 2025', len(sample) > 500 and min(e['date'] for e in sample) == '2025-03-01', f"{len(sample)} entries, {min(e['date'] for e in sample)} to {max(e['date'] for e in sample)}")
     import datetime
@@ -137,7 +138,7 @@ with sync_playwright() as p:
     kinds = {a['id']: a['kind'] for a in d['accounts']}
     bal = {a['id']: (a.get('opening') or 0) for a in d['accounts'] if a['kind'] != 'card'}
     lowest = dict(bal)
-    sign = {'expense': -1, 'income': 1, 'lent': -1, 'gotback': 1, 'borrowed': 1, 'repaid': -1}
+    sign = {'expense': -1, 'income': 1, 'lent': -1, 'gotback': 1, 'borrowed': 1, 'repaid': -1, 'asset': -1}
     for e in sorted(d['entries'], key=lambda e: (e['date'], e.get('createdAt', 0))):
         if e['type'] == 'transfer':
             moves = [(e['accountId'], -e['amount']), (e['toAccountId'], e['amount'])]
@@ -150,6 +151,25 @@ with sync_playwright() as p:
     names = {a['id']: a['name'] for a in d['accounts']}
     below = {names[k]: v for k, v in lowest.items() if v < 0 and (k.startswith('sample-') or kinds[k] == 'cash')}
     check('sample: no bank, wallet or cash balance is ever below zero', not below, str(below) if below else 'lowest: ' + ', '.join(f'{names[k]} {round(v)}' for k, v in lowest.items()))
+    # sample loans and assets, with the interest worked out here independently (reducing balance)
+    def split(financed, emi, n, k):
+        if emi * n <= financed:
+            return 0.0, 0.0
+        lo, hi = 0.0, 1.0
+        for _ in range(200):
+            r = (lo + hi) / 2
+            lo, hi = (r, hi) if emi * (1 - (1 + r) ** -n) / r > financed else (lo, r)
+        bal, paid = financed, 0.0
+        for _ in range(k):
+            i = bal * r; paid += i; bal -= emi - i
+        return paid, emi * n - financed - paid
+    loans = {l['id']: l for l in d['loans']}
+    paid_count = {i: len([e for e in d['entries'] if e.get('loanId') == i]) for i in loans}
+    car, lap = loans['sample-loan-car'], loans['sample-loan-laptop']
+    months_since = (today_d0.year - 2025) * 12 + today_d0.month - 6 + (1 if today_d0.day >= 10 else 0)
+    check('sample: 3 assets and 2 loans, the car loan has one EMI paid for every month since June 2025', len(d['assets']) == 3 and len(loans) == 2 and paid_count[car['id']] == min(42, months_since), f"{paid_count} (expected car {months_since})")
+    exp_paid, exp_left = split(car['financed'], car['emi'], car['months'], paid_count[car['id']])
+    exp_all = exp_paid + split(lap['financed'], lap['emi'], lap['months'], paid_count[lap['id']])[0]
     card_owed = -sum((1 if e.get('toAccountId') == 'sample-acc-card' else -1 if e['accountId'] == 'sample-acc-card' and e['type'] == 'expense' else 0) * e['amount'] for e in d['entries'])
     check('sample: card owes only the charges since its last bill payment', 0 < card_owed < 2000, str(card_owed))
     pg.goto(URL + '#accounts'); time.sleep(0.4)
@@ -165,7 +185,7 @@ with sync_playwright() as p:
     check('sample: to receive is 400 (Alex 100 + Friend A 300)', money(stat('To receive')) == 400, stat('To receive'))
     # Dashboards and reports, checked against totals worked out here from the raw entries
     import calendar
-    today_d = datetime.date.today()
+    today_d = today_d0
     last = (today_d.replace(day=1) - datetime.timedelta(days=1))
     lm = last.strftime('%Y-%m')
     spent_lm = sum(e['amount'] for e in d['entries'] if e['type'] == 'expense' and e['date'].startswith(lm))
@@ -196,6 +216,29 @@ with sync_playwright() as p:
     check('balances: account bars add up to In accounts', bank_bars == money(stat('In accounts')), f"{bank_bars} vs {stat('In accounts')}")
     shot('i_balances')
 
+    # Loans, assets and interest on the screens, against the figures worked out above
+    num2 = lambda s: float(re.sub(r'[^0-9.]', '', s) or 0)
+    pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.4)
+    check('interest: dashboard interest paid matches an independent schedule', abs(num2(kpi('Interest paid')) - exp_all) < 0.02, f"{kpi('Interest paid')} vs {exp_all:.2f}")
+    check('interest: paid + still to pay = EMI x months - financed, for the car loan', abs(num2(kpi('Interest paid')) + num2(kpi('Interest still to pay')) - (car['emi'] * car['months'] - car['financed'])) < 0.5, kpi('Interest still to pay'))
+    check('interest: the no-cost EMI loan carries no interest', lap['rate'] == 0 and lap['emi'] * lap['months'] == lap['financed'])
+    left_emis = sum(l['months'] - paid_count[i] for i, l in loans.items())
+    check('loans: EMIs left and still-to-pay add up', int(kpi('EMIs left')) == left_emis and num2(stat('Loans to pay')) == sum((l['months'] - paid_count[i]) * l['emi'] for i, l in loans.items()), f"{kpi('EMIs left')} / {stat('Loans to pay')}")
+    check('assets: worth now is the sum of the three assets', num2(stat('Assets worth')) == sum(a['value'] for a in d['assets']), stat('Assets worth'))
+    shot('i_loans')
+    pg.goto(URL + '#assets'); time.sleep(0.3)
+    car_row = pg.locator('.acct-row', has_text='Car (sample)').inner_text()
+    check('assets: the car shows its loan and interest; gold shows no loan', f'{car["months"] - paid_count[car["id"]]} EMIs' in car_row and 'Interest paid' in car_row and 'no loan' in pg.locator('.acct-row', has_text='Gold').inner_text(), car_row.replace('\n', ' | ')[:140])
+    pg.goto(URL + '#people'); pg.get_by_role('button', name='Loans', exact=True).click(); time.sleep(0.3)
+    check('loans: the list shows EMIs paid of the total for each loan', f"{paid_count[car['id']]} of 42 EMIs paid" in pg.locator('.acct-row', has_text='Car (sample)').inner_text())
+    pg.goto(URL + '#reports'); time.sleep(0.3)
+    for rid, col in (('loan-summary', 7), ('asset-register', 9)):
+        pg.locator('[data-model="reports.id"]').select_option(rid); time.sleep(0.2)
+        got = num2(pg.locator('table.report tfoot td').nth(col).inner_text())
+        check(f'report {rid}: interest paid total matches', abs(got - exp_all) < 0.02, str(got))
+    pg.locator('[data-model="reports.id"]').select_option('emi-payments'); pg.locator('[data-model="reports.preset"]').select_option('all'); time.sleep(0.3)
+    check('report emi-payments: one row per EMI paid', pg.locator('table.report tbody tr').count() == sum(paid_count.values()), str(pg.locator('table.report tbody tr').count()))
+
     pg.goto(URL + '#reports'); time.sleep(0.3)
     names = pg.locator('[data-model="reports.id"] option').all_inner_texts()
     broken = []
@@ -220,7 +263,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#more'); pg.get_by_role('button', name='Remove sample data').click()
     pg.wait_for_selector('button:has-text("Load sample data")')
     after = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
-    check('sample removed: own entries untouched', len(after['entries']) == before and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
+    check('sample removed: own entries untouched, sample loans and assets gone', len(after['entries']) == before and not after.get('loans') and not after.get('assets') and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
 
     # Appearance: Light / Dark / System
     bg = lambda: pg.evaluate("getComputedStyle(document.body).backgroundColor")
@@ -320,7 +363,7 @@ with sync_playwright() as p:
     check('asset: listed with its value, its loan and the interest', '1,20,000' in row and '24 EMIs' in row and 'Interest paid' in row and money(stat('Worth now')) == 120000 and money(stat('Net value')) == 0, row.replace('\n', ' | ')[:150])
     pg.goto(URL + '#insights'); pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.4)
     paid_i = float(re.sub(r'[^0-9.]', '', kpi('Interest paid'))); left_i = float(re.sub(r'[^0-9.]', '', kpi('Interest still to pay')))
-    check('loans dashboard: interest paid + to pay = all interest on both loans (6,000 + 12,000)', abs(paid_i + left_i - 18000) < 1 and paid_i > 1500, f'{paid_i} + {left_i}')
+    check('loans dashboard: interest paid + to pay = all interest on both loans (6,000 + 12,000)', abs(paid_i + left_i - 18000) < 0.02 and abs(paid_i - 1673.75) < 1, f'{paid_i} + {left_i}')
     check('loans dashboard: assets 1,20,000 and loans 52,500 + 1,32,000 to pay', money(stat('Assets worth')) == 120000 and money(stat('Loans to pay')) == 184500, stat('Loans to pay'))
     pg.screenshot(path=os.path.join(OUT, 'e_dash.png'), full_page=True)
     carried = pg.evaluate("""import('./js/logic.js').then(L => { const d = JSON.parse(localStorage.getItem('lifedesk-demo')); const k = L.monthKey(L.isoDate());
