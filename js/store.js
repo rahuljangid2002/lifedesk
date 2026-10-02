@@ -3,7 +3,7 @@
 // Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
-import { firebaseConfig, loginMethods } from './config.js';
+import { firebaseConfig, firestoreDatabase, loginMethods } from './config.js';
 import { STARTER_CATEGORIES } from './seed.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
@@ -42,7 +42,7 @@ export async function init(cb) {
         import(`${SDK}/firebase-firestore.js`)
     ]);
     const fbApp = app.initializeApp(firebaseConfig);
-    const db = fs.initializeFirestore(fbApp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) });
+    const db = fs.initializeFirestore(fbApp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }, firestoreDatabase);
     fb = { auth, fs, db, handle: auth.getAuth(fbApp) };
     // Coming back from the link in a sign-in email
     if (auth.isSignInWithEmailLink(fb.handle, window.location.href)) {

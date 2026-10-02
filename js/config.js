@@ -15,6 +15,10 @@ export const firebaseConfig = {
     appId: '1:317761864681:web:6f5755d992be6d9cea8178'
 };
 
+// The Firestore database ID as shown in Firebase console → Firestore Database (this project's is "default";
+// older projects use "(default)").
+export const firestoreDatabase = 'default';
+
 // Sign-in methods shown on the login screen (enable the same ones in Firebase console → Authentication).
 export const loginMethods = {
     google: true,
