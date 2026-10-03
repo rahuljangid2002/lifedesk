@@ -1400,7 +1400,7 @@ const actions = {
     },
     async pushTest() {
         const reg = await navigator.serviceWorker.ready;
-        await reg.showNotification('LifeDesk', { body: 'Notifications work on this device.', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'lifedesk-test', data: { link: './#more' } });
+        await reg.showNotification('✅ Notifications work on this device', { body: 'Renewal reminders and a start-of-month nudge will appear here.', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'lifedesk-test', data: { link: './#more' } });
     },
     // renewal reminders
     remNew() {

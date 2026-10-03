@@ -13,6 +13,7 @@
  *   - a renewal reminder when one enters its remind-me window, the day before, on the day, the day after
  *     (overdue) and then once a week while it stays overdue;
  *   - on the 1st of the month, a start-of-month nudge.
+ * The words are in TEXT below.
  * Messages go through Firebase Cloud Messaging (free). Devices that no longer exist are removed from tokens.
  *
  * Runs as the person who sets it up, who must be an owner of the Firebase project; no private key is stored.
@@ -24,15 +25,26 @@ const APP_URL = 'https://rahuljangid2002.github.io/lifedesk/';
 const SEND_FROM_HOUR = 9; // local time of each user
 
 // ---------- the words: change them here ----------
+// {days} = days left, {date} = the due date ("Sat, 10 Oct"), {ago} = days overdue, {count} = how many,
+// {month} / {lastMonth} = month names. Names and amounts are encrypted, so a message never says which renewal.
 const TEXT = {
-  renewalTitle: 'Renewal reminder',
-  renewalOne: 'A renewal is {when}. Open LifeDesk to see it.',
-  renewalMany: '{count} renewals need attention: {list}. Open LifeDesk to see them.',
-  monthTitle: '{month} has started',
-  monthBody: 'Take a minute to look at last month and set this month\'s budget in LifeDesk.',
-  testTitle: 'LifeDesk test',
-  testBody: 'Push notifications from LifeDesk reach this device.'
+  soonTitle: '🔔 Renewal due in {days} days',
+  soonBody: 'Due on {date}. Plan ahead, then mark it renewed in LifeDesk.',
+  tomorrowTitle: '🔔 Renewal due tomorrow',
+  tomorrowBody: 'Due on {date}. Renew it today to stay covered.',
+  todayTitle: '⏰ Renewal due today',
+  todayBody: 'Due today, {date}. Renew it and mark it done in LifeDesk.',
+  overdueTitle: '⚠️ Renewal overdue',
+  overdueBody: 'It was due on {date} ({ago} ago). Renew it as soon as you can.',
+  manyTitle: '🔔 {count} renewals need attention',
+  manyBody: '{list}. Tap to see them in LifeDesk.',
+  monthTitle: '📅 {month} has started',
+  monthBody: 'See how {lastMonth} went and set this month\'s budget in LifeDesk.',
+  testTitle: '✅ LifeDesk notifications are on',
+  testBody: 'Renewal reminders and a start-of-month nudge will appear here.'
 };
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // ---------- what to send (no Google services here, so it can be tested anywhere) ----------
 
@@ -50,33 +62,49 @@ function notifyToday(days, remind) {
   return (-days) % 7 === 1;
 }
 
-function whenWords(days) {
-  if (days < 0) {
-    return 'overdue by ' + (-days) + ' day' + (days === -1 ? '' : 's');
-  }
-  return days === 0 ? 'due today' : days === 1 ? 'due tomorrow' : 'due in ' + days + ' days';
+/** "Sat, 10 Oct" from "2026-10-10". */
+function dateWords(iso) {
+  const p = iso.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  return WEEKDAYS[d.getUTCDay()] + ', ' + p[2] + ' ' + MONTHS[p[1] - 1].slice(0, 3);
+}
+const plural = function (n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+const fill = function (text, values) { return text.replace(/\{(\w+)\}/g, function (m, k) { return k in values ? values[k] : m; }); };
+
+/** Title and text for one renewal, by how close it is. */
+function oneRenewal(days, due) {
+  const v = { days: days, date: dateWords(due), ago: plural(-days, 'day') };
+  const kind = days < 0 ? 'overdue' : days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'soon';
+  return { title: fill(TEXT[kind + 'Title'], v), body: fill(TEXT[kind + 'Body'], v) };
 }
 
 /**
- * The messages for one user on their local date `today` ("yyyy-mm-dd"); monthName is the name of that month.
- * Returns [{ title, body, link, tag }].
+ * The messages for one user on their local date `today` ("yyyy-mm-dd"). Returns [{ title, body, link, tag }].
  */
-function messagesFor(schedule, today, monthName) {
+function messagesFor(schedule, today) {
   const out = [];
   if (schedule.renewals !== false) {
     const due = (schedule.dates || [])
-      .map(function (d) { return { days: daysBetween(today, d.due), remind: Number(d.remind) || 0 }; })
+      .map(function (d) { return { due: d.due, days: daysBetween(today, d.due), remind: Number(d.remind) || 0 }; })
       .filter(function (d) { return notifyToday(d.days, d.remind); })
       .sort(function (a, b) { return a.days - b.days; });
     if (due.length === 1) {
-      out.push({ title: TEXT.renewalTitle, body: TEXT.renewalOne.replace('{when}', whenWords(due[0].days)), link: APP_URL + '#renewals', tag: 'renewals' });
+      const m = oneRenewal(due[0].days, due[0].due);
+      out.push({ title: m.title, body: m.body, link: APP_URL + '#renewals', tag: 'renewals' });
     } else if (due.length > 1) {
-      const list = due.map(function (d) { return 'one ' + whenWords(d.days); }).join(', ');
-      out.push({ title: TEXT.renewalTitle, body: TEXT.renewalMany.replace('{count}', due.length).replace('{list}', list), link: APP_URL + '#renewals', tag: 'renewals' });
+      const groups = [];
+      due.forEach(function (d) {
+        const label = d.days < 0 ? 'Overdue' : d.days === 0 ? 'Due today' : d.days === 1 ? 'Due tomorrow' : 'Due in ' + d.days + ' days';
+        const g = groups.filter(function (x) { return x.label === label; })[0];
+        if (g) g.n += 1; else groups.push({ label: label, n: 1 });
+      });
+      out.push({ title: fill(TEXT.manyTitle, { count: due.length }), body: fill(TEXT.manyBody, { list: groups.map(function (g) { return g.label + ': ' + g.n; }).join(' · ') }),
+        link: APP_URL + '#renewals', tag: 'renewals' });
     }
   }
   if (schedule.monthStart !== false && today.slice(8) === '01') {
-    out.push({ title: TEXT.monthTitle.replace('{month}', monthName), body: TEXT.monthBody, link: APP_URL + '#home', tag: 'month-start' });
+    const m = Number(today.slice(5, 7)) - 1;
+    out.push({ title: fill(TEXT.monthTitle, { month: MONTHS[m] }), body: fill(TEXT.monthBody, { lastMonth: MONTHS[(m + 11) % 12] }), link: APP_URL + '#home', tag: 'month-start' });
   }
   return out;
 }
@@ -131,7 +159,7 @@ function sendDue() {
     if (hour < SEND_FROM_HOUR || s.data.lastSent === today || !(s.data.tokens || []).length) {
       return;
     }
-    const messages = messagesFor(s.data, today, Utilities.formatDate(now, tz, 'MMMM'));
+    const messages = messagesFor(s.data, today);
     const gone = deliver(s.data.tokens, messages);
     sent += messages.length;
     const fields = { lastSent: { stringValue: today } };
@@ -171,9 +199,9 @@ function sendDueNowTest() {
   const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
   (s.dates || []).forEach(function (d) {
     const days = daysBetween(today, d.due);
-    Logger.log('Reminder due ' + d.due + ' (remind ' + d.remind + ' days before): ' + whenWords(days) + ' – ' + (notifyToday(days, Number(d.remind) || 0) ? 'NOTIFIES TODAY' : 'not today'));
+    Logger.log('Reminder due ' + d.due + ' (remind ' + d.remind + ' days before): ' + (days < 0 ? 'overdue by ' + plural(-days, 'day') : days === 0 ? 'due today' : 'due in ' + plural(days, 'day')) + ' – ' + (notifyToday(days, Number(d.remind) || 0) ? 'NOTIFIES TODAY' : 'not today'));
   });
-  const messages = messagesFor(s, today, Utilities.formatDate(now, tz, 'MMMM'));
+  const messages = messagesFor(s, today);
   if (!messages.length) {
     Logger.log('Nothing to send today (' + today + ', ' + tz + '). Add a reminder due today or tomorrow in LifeDesk, wait a few seconds, then run this again.');
     return;
