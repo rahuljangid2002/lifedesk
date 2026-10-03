@@ -59,6 +59,9 @@ On iPhone and iPad, notifications work only after LifeDesk is added to the Home 
    If it says PROBLEM, copy that line to Claude.
 5. In LifeDesk (signed in): **Account & backup → Notifications → Turn on for this device**, allow notifications.
 6. Back in the script: function **sendTest** → **Run**. The device should show "LifeDesk test" within a minute.
+7. To test with a real reminder: in LifeDesk add a reminder due **today or tomorrow**, wait a few seconds, then
+   run **sendDueNowTest**. It logs each reminder date and sends today's real message at once (the hourly job
+   sends only from 9 am and once a day).
 
 Nothing to deploy: the timer (Triggers, clock icon) runs `sendDue` every hour. Words of the messages: `TEXT` at
 the top of the script. To stop all notifications: delete the trigger.

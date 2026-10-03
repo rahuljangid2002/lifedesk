@@ -155,6 +155,34 @@ function sendTest() {
   Logger.log('Test sent to ' + ((list[0].data.tokens || []).length - gone.length) + ' device(s)' + (gone.length ? '; ' + gone.length + ' no longer exist' : '') + '.');
 }
 
+/**
+ * Run by hand to test with real reminders: sends today's real messages now to the devices turned on most recently,
+ * ignoring the 9 am start and the once-a-day limit (and not counting as today's send). Logs each reminder date and
+ * whether it notifies today.
+ */
+function sendDueNowTest() {
+  const list = allSchedules().sort(function (a, b) { return (b.data.updated || 0) - (a.data.updated || 0); });
+  if (!list.length) {
+    throw new Error('Nobody has turned notifications on yet. Turn them on in LifeDesk (Account → Notifications) first.');
+  }
+  const s = list[0].data;
+  const now = new Date();
+  const tz = s.tz || 'UTC';
+  const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  (s.dates || []).forEach(function (d) {
+    const days = daysBetween(today, d.due);
+    Logger.log('Reminder due ' + d.due + ' (remind ' + d.remind + ' days before): ' + whenWords(days) + ' – ' + (notifyToday(days, Number(d.remind) || 0) ? 'NOTIFIES TODAY' : 'not today'));
+  });
+  const messages = messagesFor(s, today, Utilities.formatDate(now, tz, 'MMMM'));
+  if (!messages.length) {
+    Logger.log('Nothing to send today (' + today + ', ' + tz + '). Add a reminder due today or tomorrow in LifeDesk, wait a few seconds, then run this again.');
+    return;
+  }
+  const gone = deliver(s.tokens || [], messages);
+  messages.forEach(function (m) { Logger.log('Sent: ' + m.title + ' – ' + m.body); });
+  Logger.log('To ' + ((s.tokens || []).length - gone.length) + ' device(s).');
+}
+
 // ---------- Google services ----------
 
 function firestore(method, path, body) {
