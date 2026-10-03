@@ -1,5 +1,5 @@
 // Data layer for LifeDesk. Each tool keeps its data in its own collections under the user
-// (Money: accounts, categories, entries, people, budgets; shared: settings); a new tool adds its names to COLLECTIONS.
+// (Money: accounts, categories, entries, people, budgets, loans, assets; Renewals: reminders; shared: settings); a new tool adds its names to COLLECTIONS.
 // Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
@@ -8,13 +8,13 @@ import { STARTER_CATEGORIES } from './seed.js';
 import * as V from './vault.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
-const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets'];
+const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets', 'reminders'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
-export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [] };
+export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [] };
 
 /** The user's preferences (currency, region); null until they have chosen. */
 export function prefs() {
@@ -478,7 +478,7 @@ function readDemo() {
         COLLECTIONS.forEach((c) => (out[c] = Array.isArray(saved[c]) ? saved[c] : []));
         return out;
     } catch (e) {
-        return { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [] };
+        return { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [] };
     }
 }
 function writeDemo() {
