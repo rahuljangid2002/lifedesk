@@ -6,7 +6,10 @@
  *   tz         their time zone, e.g. "Asia/Kolkata"
  *   renewals   true = renewal reminders;  monthStart  true = a nudge on the 1st of each month
  *   dates      [{ due: "2026-10-13", remind: 30 }] – the due date and remind-me days of each open reminder;
- *              no names, amounts or notes (those stay encrypted, so a message never says which reminder)
+ *              no names, amounts or notes (those stay encrypted, so a message never says which reminder) –
+ *              unless the user ticked "Include names and amounts in emails": then also { name, amount } (text)
+ *   email      true = also send each day's messages by email, to the account's sign-in email address
+ *              (looked up in Firebase Authentication, not stored here)
  *   lastSent   the user's local date this script last handled them (written here, so nobody gets a second message)
  *
  * Once a day per user, from 9 in the morning their time, it sends what is due:
@@ -15,6 +18,8 @@
  *   - on the 1st of the month, a start-of-month nudge.
  * The words are in TEXT below.
  * Messages go through Firebase Cloud Messaging (free). Devices that no longer exist are removed from tokens.
+ * Emails go from your Gmail (about 100 a day on a free account, shared with the email-code script); this script
+ * stops emailing when fewer than EMAIL_RESERVE are left, so sign-up codes keep working.
  *
  * Runs as the person who sets it up, who must be an owner of the Firebase project; no private key is stored.
  * Set-up steps are in backend/README.md ("Push notifications").
@@ -23,6 +28,8 @@ const PROJECT_ID = 'lifedesk-43dc1';
 const DATABASE_ID = 'default'; // same as firestoreDatabase in js/config.js
 const APP_URL = 'https://rahuljangid2002.github.io/lifedesk/';
 const SEND_FROM_HOUR = 9; // local time of each user
+const EMAIL_RESERVE = 25; // emails a day kept free for sign-up codes
+const EMAIL_COLOURS = { brandDark: '#0b1324', brand: '#1b2a4a', accent: '#2563eb', text: '#101828', muted: '#667085', line: '#e3e6eb', page: '#f4f5f7', red: '#b42318', orange: '#b54708' };
 
 // ---------- the words: change them here ----------
 // {days} = days left, {date} = the due date ("Sat, 10 Oct"), {ago} = days overdue, {count} = how many,
@@ -85,12 +92,12 @@ function messagesFor(schedule, today) {
   const out = [];
   if (schedule.renewals !== false) {
     const due = (schedule.dates || [])
-      .map(function (d) { return { due: d.due, days: daysBetween(today, d.due), remind: Number(d.remind) || 0 }; })
+      .map(function (d) { return { due: d.due, days: daysBetween(today, d.due), remind: Number(d.remind) || 0, name: d.name || '', amount: d.amount || '' }; })
       .filter(function (d) { return notifyToday(d.days, d.remind); })
       .sort(function (a, b) { return a.days - b.days; });
     if (due.length === 1) {
       const m = oneRenewal(due[0].days, due[0].due);
-      out.push({ title: m.title, body: m.body, link: APP_URL + '#renewals', tag: 'renewals' });
+      out.push({ title: m.title, body: m.body, link: APP_URL + '#renewals', tag: 'renewals', rows: due });
     } else if (due.length > 1) {
       const groups = [];
       due.forEach(function (d) {
@@ -99,7 +106,7 @@ function messagesFor(schedule, today) {
         if (g) g.n += 1; else groups.push({ label: label, n: 1 });
       });
       out.push({ title: fill(TEXT.manyTitle, { count: due.length }), body: fill(TEXT.manyBody, { list: groups.map(function (g) { return g.label + ': ' + g.n; }).join(' · ') }),
-        link: APP_URL + '#renewals', tag: 'renewals' });
+        link: APP_URL + '#renewals', tag: 'renewals', rows: due });
     }
   }
   if (schedule.monthStart !== false && today.slice(8) === '01') {
@@ -107,6 +114,49 @@ function messagesFor(schedule, today) {
     out.push({ title: fill(TEXT.monthTitle, { month: MONTHS[m] }), body: fill(TEXT.monthBody, { lastMonth: MONTHS[(m + 11) % 12] }), link: APP_URL + '#home', tag: 'month-start' });
   }
   return out;
+}
+
+// ---------- the email (also no Google services, so it can be tested) ----------
+const esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+const noEmoji = function (t) { return t.replace(/^[^A-Za-z0-9]+/, ''); };
+
+/** "Due tomorrow · Sun, 4 Oct", "Overdue by 2 days · was due Thu, 1 Oct". */
+function whenLine(d) {
+  if (d.days < 0) return 'Overdue by ' + plural(-d.days, 'day') + ' · was due ' + dateWords(d.due);
+  return (d.days === 0 ? 'Due today' : d.days === 1 ? 'Due tomorrow' : 'Due in ' + d.days + ' days') + ' · ' + dateWords(d.due);
+}
+
+/** One email for the day's messages: { subject, html, text }, or null when there is nothing to send. */
+function emailFor(messages) {
+  if (!messages.length) return null;
+  const c = EMAIL_COLOURS;
+  const subject = messages.map(function (m) { return noEmoji(m.title); }).join(' · ');
+  const text = [];
+  const blocks = messages.map(function (m) {
+    text.push(noEmoji(m.title), m.body);
+    let rows = '';
+    if (m.rows) {
+      rows = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:14px 0 4px">' + m.rows.map(function (d) {
+        const colour = d.days < 0 ? c.red : d.days <= 1 ? c.orange : c.text;
+        text.push('- ' + (d.name || 'A renewal') + (d.amount ? ' (' + d.amount + ')' : '') + ': ' + whenLine(d));
+        return '<tr><td style="padding:10px 0;border-top:1px solid ' + c.line + ';font:600 15px Arial,sans-serif;color:' + c.text + '">' + esc(d.name || 'A renewal') +
+          '<div style="font:400 13px Arial,sans-serif;color:' + colour + ';padding-top:3px">' + esc(whenLine(d)) + '</div></td>' +
+          '<td align="right" style="padding:10px 0;border-top:1px solid ' + c.line + ';font:700 15px Arial,sans-serif;color:' + c.text + ';white-space:nowrap">' + esc(d.amount) + '</td></tr>';
+      }).join('') + '</table>';
+    }
+    return '<h2 style="margin:0 0 6px;font:700 19px Arial,sans-serif;color:' + c.text + '">' + esc(m.title) + '</h2>' +
+      '<p style="margin:0;font:400 15px/1.5 Arial,sans-serif;color:' + c.muted + '">' + esc(m.body) + '</p>' + rows +
+      '<p style="margin:18px 0 26px"><a href="' + esc(m.link) + '" style="display:inline-block;background:' + c.accent + ';color:#ffffff;text-decoration:none;font:600 15px Arial,sans-serif;padding:11px 20px;border-radius:10px">Open LifeDesk</a></p>';
+  });
+  const named = messages.some(function (m) { return m.rows && m.rows.some(function (d) { return d.name; }); });
+  const footer = (named ? '' : 'Reminder names and amounts are encrypted, so they are not in this email. You can include them under Account → Notifications in LifeDesk. ') +
+    'You get this because email reminders are on in LifeDesk (Account → Notifications), where you can turn them off.';
+  text.push('', 'Open LifeDesk: ' + APP_URL, '', footer);
+  const html = '<div style="background:' + c.page + ';padding:24px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden">' +
+    '<tr><td style="background:' + c.brandDark + ';background-image:linear-gradient(135deg,' + c.brandDark + ',' + c.brand + ');padding:18px 24px;font:700 18px Arial,sans-serif;color:#ffffff">LifeDesk</td></tr>' +
+    '<tr><td style="padding:24px 24px 0">' + blocks.join('') + '</td></tr>' +
+    '<tr><td style="padding:16px 24px 22px;border-top:1px solid ' + c.line + ';font:400 12px/1.5 Arial,sans-serif;color:' + c.muted + '">' + esc(footer) + '</td></tr></table></div>';
+  return { subject: subject, html: html, text: text.join('\n') };
 }
 
 /** Firestore's typed JSON to plain values. */
@@ -146,6 +196,7 @@ function setup() {
 function sendDue() {
   const now = new Date();
   let sent = 0;
+  let mailed = 0;
   allSchedules().forEach(function (s) {
     const tz = s.data.tz || 'UTC';
     let today;
@@ -156,12 +207,15 @@ function sendDue() {
     } catch (e) {
       return; // unknown time zone
     }
-    if (hour < SEND_FROM_HOUR || s.data.lastSent === today || !(s.data.tokens || []).length) {
+    if (hour < SEND_FROM_HOUR || s.data.lastSent === today || (!(s.data.tokens || []).length && !s.data.email)) {
       return;
     }
     const messages = messagesFor(s.data, today);
-    const gone = deliver(s.data.tokens, messages);
+    const gone = deliver(s.data.tokens || [], messages);
     sent += messages.length;
+    if (s.data.email) {
+      mailed += sendEmail(s.path, messages);
+    }
     const fields = { lastSent: { stringValue: today } };
     const mask = ['lastSent'];
     if (gone.length) {
@@ -170,7 +224,7 @@ function sendDue() {
     }
     firestore('patch', '/' + s.path + '?' + mask.map(function (m) { return 'updateMask.fieldPaths=' + m; }).join('&'), { fields: fields });
   });
-  Logger.log('Messages sent: ' + sent);
+  Logger.log('Messages sent: ' + sent + ', emails: ' + mailed);
 }
 
 /** Run by hand after turning notifications on in LifeDesk: a test message to the devices turned on most recently. */
@@ -209,6 +263,11 @@ function sendDueNowTest() {
   const gone = deliver(s.tokens || [], messages);
   messages.forEach(function (m) { Logger.log('Sent: ' + m.title + ' – ' + m.body); });
   Logger.log('To ' + ((s.tokens || []).length - gone.length) + ' device(s).');
+  if (s.email) {
+    Logger.log(sendEmail(list[0].path, messages) ? 'Email sent.' : 'Email NOT sent (see above).');
+  } else {
+    Logger.log('Email is off for this user (Account → Notifications → Also send by email).');
+  }
 }
 
 // ---------- Google services ----------
@@ -232,6 +291,36 @@ function allSchedules() {
   return JSON.parse(res.getContentText())
     .filter(function (r) { return r.document && /\/push\/schedule$/.test(r.document.name); })
     .map(function (r) { return { path: r.document.name.split('/documents/')[1], data: fieldsToObject(r.document.fields || {}) }; });
+}
+
+/** The sign-in email of the user whose schedule is at path "users/{uid}/push/schedule". */
+function emailOf(path) {
+  const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/projects/' + PROJECT_ID + '/accounts:lookup', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJECT_ID },
+    payload: JSON.stringify({ localId: [path.split('/')[1]] }),
+    muteHttpExceptions: true
+  });
+  const user = res.getResponseCode() === 200 ? (JSON.parse(res.getContentText()).users || [])[0] : null;
+  return user && user.email && user.emailVerified !== false ? user.email : null;
+}
+
+/** Emails the day's messages; 1 when sent, 0 when not (nothing to send, no address, or the daily limit is near). */
+function sendEmail(path, messages) {
+  const mail = emailFor(messages);
+  if (!mail) return 0;
+  if (MailApp.getRemainingDailyQuota() <= EMAIL_RESERVE) {
+    Logger.log('Email skipped: only ' + MailApp.getRemainingDailyQuota() + ' emails left today, kept for sign-up codes.');
+    return 0;
+  }
+  const to = emailOf(path);
+  if (!to) {
+    Logger.log('Email skipped: no verified email address for ' + path);
+    return 0;
+  }
+  MailApp.sendEmail({ to: to, subject: mail.subject, body: mail.text, htmlBody: mail.html, name: 'LifeDesk' });
+  return 1;
 }
 
 /** Sends each message to each device; returns the device tokens that no longer exist. */

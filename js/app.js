@@ -693,7 +693,10 @@ function pushBlocker() {
     return null;
 }
 /** What the sender needs and nothing more: due date and remind-me days of each open reminder. */
-const pushDates = (on = !(S.push && S.push.renewals === false)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due).map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30) })).sort((a, b) => (a.due < b.due ? -1 : 1)));
+// With "include names and amounts in emails" ticked, name and amount go along as plain text (the email server must read them).
+const pushDates = (on = !(S.push && S.push.renewals === false), named = !!(S.push && S.push.email && S.push.emailDetails)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due)
+    .map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30), ...(named ? { name: r.name, amount: Number(r.amount) ? L.money(r.amount) : '' } : {}) }))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : String(a.name || '').localeCompare(String(b.name || '')))));
 const pushZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 let pushTimer = null;
 /** Keeps the dates in the schedule in step with the reminders, from whichever device changes them. */
@@ -713,20 +716,28 @@ function syncPushSoon() {
 function notificationsCard() {
     if (S.isDemo) {
         return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">Off</span></div>
-            <small>Sign in to get a notification when a renewal is due and at the start of each month. Demo mode has no account to send them to.</small></section>`;
+            <small>Sign in to get a notification or email when a renewal is due and at the start of each month. Demo mode has no account to send them to.</small></section>`;
     }
     const on = !!pushDevice() && !!S.push;
     const p = S.push || {};
+    const mail = !!p.email;
     const busy = state.push.busy ? 'disabled' : '';
     const blocker = on ? null : pushBlocker();
-    return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">${on ? 'On for this device' : 'Off on this device'}</span></div>
-        ${on ? `<label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: when one comes up, the day before, on the day, and if it is overdue</label>
-            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>
-            <small>Sent around 9 in the morning, your time. ${(p.tokens || []).length > 1 ? `${(p.tokens || []).length} devices get them.` : 'Only this device gets them; turn them on on your other devices too.'}</small>
+    const pill = [on ? 'This device' : '', mail ? 'Email' : ''].filter(Boolean).join(' + ') || 'Off';
+    return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">${pill}</span></div>
+        <small>Around 9 in the morning, your time, when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
+        <b class="sub">On this device</b>
+        ${on ? `<small>${(p.tokens || []).length > 1 ? `On. ${(p.tokens || []).length} devices get them.` : 'On. Only this device gets them; turn them on on your other devices too.'}</small>
             <div class="split wrap"><button class="btn" data-action="pushTest" ${busy}>Show a test notification</button><button class="btn ghost danger" data-action="pushOff" ${busy}>Turn off on this device</button></div>`
-            : `<small>Get a notification when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
-            ${blocker ? `<small class="over">${esc(blocker)}</small>` : `<div class="split wrap"><button class="btn primary" data-action="pushOn" ${busy}>${icon('bell')} Turn on for this device</button></div>`}`}
-        <small>Privacy: to know when to notify you, the due dates of your reminders are kept without encryption, with nothing else: no names, amounts or notes. They are deleted when you turn notifications off on your last device.</small>
+            : blocker ? `<small class="over">${esc(blocker)}</small>` : `<div class="split wrap"><button class="btn primary" data-action="pushOn" ${busy}>${icon('bell')} Turn on for this device</button></div>`}
+        <b class="sub">By email</b>
+        <label class="check"><input type="checkbox" data-action="emailToggle" ${mail ? 'checked' : ''} ${busy}> Also send them by email to ${esc(S.user.contact)}</label>
+        ${mail ? `<label class="check"><input type="checkbox" data-action="emailDetails" ${p.emailDetails ? 'checked' : ''} ${busy}> Include reminder names and amounts in emails</label>
+            <small>${p.emailDetails ? 'Names and amounts of your reminders are kept readable for the email sender. The rest of your data stays encrypted.' : 'Off: emails say when a renewal is due, not which one, because names and amounts are encrypted.'}</small>` : ''}
+        ${on || mail ? `<b class="sub">What to send</b>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: when one comes up, the day before, on the day, and if it is overdue</label>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>` : ''}
+        <small>Privacy: to know when to remind you, the due dates of your reminders are kept without encryption${p.emailDetails ? ', and so are their names and amounts (you chose to include them in emails)' : ', with nothing else: no names, amounts or notes'}. All of it is deleted when you turn off notifications on your last device and email.</small>
     </section>`;
 }
 
@@ -1396,6 +1407,34 @@ const actions = {
         const key = el.dataset.pref;
         const value = !(S.push && S.push[key] !== false);
         await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
+        render();
+    },
+    async emailToggle() {
+        const value = !(S.push && S.push.email);
+        state.push.busy = true;
+        render();
+        try {
+            if (value) {
+                const p = S.push || {};
+                await S.pushUpdate({ enabled: true, email: true, emailDetails: false, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(),
+                    dates: pushDates(p.renewals !== false, false) });
+                toast(`Reminders will also be emailed to ${S.user.contact}.`);
+            } else {
+                await S.pushUpdate({ email: false, emailDetails: false, dates: pushDates(undefined, false) });
+                await S.pushRemove(null); // deletes the schedule when no device is left either
+                toast('Email reminders are off.');
+            }
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async emailDetails() {
+        const value = !(S.push && S.push.emailDetails);
+        if (value && !window.confirm('Include reminder names and amounts in emails?\nTo write them into the email, they are kept readable for the email sender (only the names and amounts of reminders). Everything else stays encrypted.')) {
+            return render();
+        }
+        await S.pushUpdate({ emailDetails: value, dates: pushDates(undefined, value) });
         render();
     },
     async pushTest() {

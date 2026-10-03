@@ -65,7 +65,7 @@ with sync_playwright() as p:
         rems = [H.rest(f'{H.DOCS}/users/{uid}/reminders/{i}', token=token)[1] for i in ids]
         check('reminders themselves stay encrypted', len(rems) == 2 and all(list(r['fields'].keys()) == ['enc'] for r in rems))
         pg.locator('.card', has_text='Notifications').screenshot(path=__import__('os').path.join(__import__('os').path.dirname(__file__), 'out', 'push_card_on.png'))
-        check('Account: card says on, with both choices', 'On for this device' in pg.locator('.card', has_text='Notifications').inner_text() and pg.locator('[data-pref]').count() == 2)
+        check('Account: card says on for this device, with both choices', pg.locator('.card', has_text='Notifications').locator('.pill').inner_text() == 'This device' and pg.locator('[data-pref]').count() == 2)
 
         # a message pushed to the service worker is shown, and opens the right screen
         pg.evaluate("navigator.serviceWorker.ready.then(r => r.getNotifications()).then(l => l.forEach(n => n.close()))")
@@ -94,6 +94,24 @@ with sync_playwright() as p:
         check('renewal reminders off: dates emptied, month start kept', s.get('renewals') is False and s.get('dates') == [] and s.get('monthStart') is True, str({k: v for k, v in s.items() if k != 'tokens'}))
         pg.locator('[data-pref="renewals"]').click(); time.sleep(2)
         check('renewal reminders back on: dates back', H.plain(schedule()[1]['fields']['dates']) == [{'due': iso(33), 'remind': 7}])
+
+        # email: on, with and without names; a device can be turned off while email keeps the schedule
+        sched = lambda: {k: H.plain(v) for k, v in schedule()[1]['fields'].items()}
+        pg.get_by_label('Also send them by email to').click(); time.sleep(2)
+        e = sched()
+        check('email on: saved, names still not stored', e.get('email') is True and not e.get('emailDetails') and all('name' not in d for d in e['dates']) and 'Hidden Subscription' not in json.dumps(e))
+        pg.get_by_label('Include reminder names and amounts in emails').click(); time.sleep(2)
+        e = sched()
+        check('names in emails (confirmed): name and amount stored with the date', e.get('emailDetails') is True and e['dates'][0].get('name') == 'Hidden Subscription' and '777' in e['dates'][0].get('amount', ''), str(e['dates']))
+        pg.get_by_label('Include reminder names and amounts in emails').click(); time.sleep(2)
+        e = sched()
+        check('names off again: removed from the database', not e.get('emailDetails') and all('name' not in d for d in e['dates']) and 'Hidden Subscription' not in json.dumps(e))
+        pg.get_by_role('button', name='Turn off on this device').click(); pg.wait_for_selector('.toast:has-text("off on this device")', timeout=30000); time.sleep(1)
+        e = sched()
+        check('device off while email is on: schedule kept, no device left', schedule()[0] == 200 and not e.get('tokens') and e.get('email') is True, str(e.get('tokens')))
+        pg.get_by_label('Also send them by email to').click(); time.sleep(2)
+        check('email off with no device: the schedule is deleted', schedule()[0] == 404, str(schedule()[0]))
+        pg.get_by_role('button', name='Turn on for this device').click(); pg.wait_for_selector('.toast:has-text("on for this device")', timeout=60000); time.sleep(1)
 
         # turn off on the last device: the schedule is deleted
         pg.get_by_role('button', name='Turn off on this device').click(); pg.wait_for_selector('.toast:has-text("off on this device")', timeout=30000); time.sleep(1)

@@ -484,14 +484,14 @@ export async function pushUpdate(fields) {
     push = { ...(push || {}), ...fields };
 }
 
-/** Removes this device; with no device left, the whole record (and its dates) is deleted. */
+/** Removes this device (token null: none); with no device and no email left, the whole record is deleted. */
 export async function pushRemove(token) {
     if (token) {
         await fb.fs.setDoc(pushRef(), { tokens: fb.fs.arrayRemove(token), updated: Date.now() }, { merge: true });
         messaging().then(({ m, handle }) => m.deleteToken(handle)).catch(() => {});
     }
     const left = await loadPush();
-    if (!left || !(left.tokens || []).length) {
+    if (!left || (!(left.tokens || []).length && !left.email)) {
         await fb.fs.deleteDoc(pushRef()).catch(() => {});
         push = null;
     }

@@ -20,7 +20,7 @@ with sync_playwright() as p:
     pg.goto('http://localhost:8765/manifest.webmanifest')
     r = pg.evaluate("""async () => {
         const src = await (await fetch('/backend/push-sender.gs')).text();
-        const S = new Function(src + '; return { daysBetween, notifyToday, messagesFor, fieldsToObject, oneRenewal, TEXT };')();
+        const S = new Function(src + '; return { daysBetween, notifyToday, messagesFor, fieldsToObject, oneRenewal, TEXT, emailFor };')();
         const T = '2026-10-03';
         const m = (dates, extra = {}) => S.messagesFor({ dates, ...extra }, extra.today || T);
         const days = (n) => { const d = new Date(Date.UTC(2026, 9, 3 + n)); return d.toISOString().slice(0, 10); };
@@ -37,7 +37,11 @@ with sync_playwright() as p:
                 dates: { arrayValue: { values: [{ mapValue: { fields: { due: { stringValue: '2026-10-10' }, remind: { integerValue: '7' } } } }] } } }),
             leap: S.daysBetween('2028-02-28', '2028-03-01'),
             tomorrow: S.oneRenewal(1, '2026-10-04'), today: S.oneRenewal(0, '2026-10-03'), over: S.oneRenewal(-2, '2026-10-01'), over1: S.oneRenewal(-1, '2026-10-02'),
-            test: [S.TEXT.testTitle, S.TEXT.testBody]
+            test: [S.TEXT.testTitle, S.TEXT.testBody],
+            mailPlain: S.emailFor(m([{ due: days(1), remind: 30 }, { due: days(-1), remind: 30 }])),
+            mailNamed: S.emailFor(m([{ due: days(1), remind: 30, name: 'Car <insurance>', amount: '₹4,500' }])),
+            mailMonth: S.emailFor(m([{ due: '2026-11-02', remind: 30, name: 'Gym', amount: '' }], { today: '2026-11-01' })),
+            mailNone: S.emailFor([])
         };
     }""")
     b.close()
@@ -54,6 +58,11 @@ check('1st of the month: "November has started", last month October, opens Money
 check('1 January: last month is December', 'January has started' in r['jan'][0]['title'] and 'See how December went' in r['jan'][0]['body'], str(r['jan']))
 check('start of month switched off, or not the 1st: nothing', r['monthOff'] == [] and r['notFirst'] == [])
 check('test message wording', r['test'] == ['✅ LifeDesk notifications are on', 'Renewal reminders and a start-of-month nudge will appear here.'])
+mp, mn, mm = r['mailPlain'], r['mailNamed'], r['mailMonth']
+check('email without names: subject from the message, each renewal as "A renewal" with when, a link, the opt-in hint', mp['subject'] == '2 renewals need attention' and mp['html'].count('A renewal') == 2 and 'Due tomorrow · Sun, 4 Oct' in mp['html'] and 'Overdue by 1 day · was due Fri, 2 Oct' in mp['html'] and 'rahuljangid2002.github.io/lifedesk/#renewals' in mp['html'] and 'not in this email' in mp['html'], mp['subject'])
+check('email with names: name (HTML-escaped) and amount, subject without the emoji', mn['subject'] == 'Renewal due tomorrow' and 'Car &lt;insurance&gt;' in mn['html'] and '₹4,500' in mn['html'] and 'not in this email' not in mn['html'] and '- Car <insurance> (₹4,500): Due tomorrow · Sun, 4 Oct' in mn['text'], mn['text'][:160])
+check('1st of the month: one email with both the renewal and the month start', 'November has started' in mm['subject'] and mm['html'].count('Open LifeDesk') == 2, mm['subject'])
+check('nothing due: no email', r['mailNone'] is None)
 check('database values read back as plain values', r['fields'] == {'tz': 'Asia/Kolkata', 'renewals': True, 'tokens': ['a'], 'dates': [{'due': '2026-10-10', 'remind': 7}]}, str(r['fields']))
 check('days across a leap day', r['leap'] == 2)
 print(f'{sum(checks)}/{len(checks)} checks passed')
