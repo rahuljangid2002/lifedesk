@@ -17,7 +17,7 @@
  *     (overdue) and then once a week while it stays overdue;
  *   - on the 1st of the month, a start-of-month nudge.
  * The words are in TEXT below.
- * Messages go through Firebase Cloud Messaging (free). Devices that no longer exist are removed from tokens.
+ * Messages go through Firebase Cloud Messaging (free), as urgent, so phones deliver them at once and can wake the screen. Devices that no longer exist are removed from tokens.
  * Emails go from your Gmail (about 100 a day on a free account, shared with the email-code script); this script
  * stops emailing when fewer than EMAIL_RESERVE are left, so sign-up codes keep working.
  *
@@ -333,7 +333,7 @@ function deliver(tokens, messages) {
         method: 'post',
         contentType: 'application/json',
         headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJECT_ID },
-        payload: JSON.stringify({ message: { token: token, webpush: { headers: { Urgency: 'normal', TTL: '86400' }, data: { title: m.title, body: m.body, link: m.link, tag: m.tag } } } }),
+        payload: JSON.stringify({ message: { token: token, webpush: { headers: { Urgency: 'high', TTL: '86400' }, data: { title: m.title, body: m.body, link: m.link, tag: m.tag } } } }),
         muteHttpExceptions: true
       });
       const code = res.getResponseCode();
