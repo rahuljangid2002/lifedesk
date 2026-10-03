@@ -478,6 +478,15 @@ export async function pushAdd(token, fields) {
     return loadPush();
 }
 
+/** Lists this device under its new address (and drops its old one), without touching other devices. */
+export async function pushSwap(oldToken, newToken) {
+    await fb.fs.setDoc(pushRef(), { tokens: fb.fs.arrayUnion(newToken), updated: Date.now() }, { merge: true });
+    if (oldToken && oldToken !== newToken) {
+        await fb.fs.setDoc(pushRef(), { tokens: fb.fs.arrayRemove(oldToken) }, { merge: true });
+    }
+    return loadPush();
+}
+
 /** Saves settings or dates without touching the devices. */
 export async function pushUpdate(fields) {
     await fb.fs.setDoc(pushRef(), { ...fields, updated: Date.now() }, { merge: true });

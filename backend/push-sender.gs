@@ -262,7 +262,7 @@ function sendDueNowTest() {
   }
   const gone = deliver(s.tokens || [], messages);
   messages.forEach(function (m) { Logger.log('Sent: ' + m.title + ' – ' + m.body); });
-  Logger.log('To ' + ((s.tokens || []).length - gone.length) + ' device(s).');
+  Logger.log('To ' + ((s.tokens || []).length - gone.length) + ' of ' + (s.tokens || []).length + ' listed device(s)' + (gone.length ? '; ' + gone.length + ' no longer exist(s) and will be removed by the hourly job (open LifeDesk on that device to register it again)' : '') + '.');
   if (s.email) {
     Logger.log(sendEmail(list[0].path, messages) ? 'Email sent.' : 'Email NOT sent (see above).');
   } else {

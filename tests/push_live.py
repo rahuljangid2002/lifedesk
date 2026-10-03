@@ -95,6 +95,13 @@ with sync_playwright() as p:
         pg.locator('[data-pref="renewals"]').click(); time.sleep(2)
         check('renewal reminders back on: dates back', H.plain(schedule()[1]['fields']['dates']) == [{'due': iso(33), 'remind': 7}])
 
+        # the sender dropped this device's address (as it does for dead ones): the next open lists it again
+        tok = plain['tokens'][0]
+        H.rest(f'{H.DOCS}/users/{uid}/push/schedule?updateMask.fieldPaths=tokens', {'fields': {'tokens': {'arrayValue': {}}}}, token, method='PATCH')
+        check('test setup: address removed from the database', not H.plain(schedule()[1]['fields'].get('tokens', {'arrayValue': {}})))
+        pg.reload(); pg.wait_for_selector('.tool, main', timeout=40000); time.sleep(5)
+        check('next open: the device lists itself again', H.plain(schedule()[1]['fields']['tokens']) == [tok], str(len(H.plain(schedule()[1]['fields'].get('tokens', {'arrayValue': {}})))))
+
         # email: on, with and without names; a device can be turned off while email keeps the schedule
         sched = lambda: {k: H.plain(v) for k, v in schedule()[1]['fields'].items()}
         pg.get_by_label('Also send them by email to').click(); time.sleep(2)

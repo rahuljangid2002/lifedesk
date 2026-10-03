@@ -713,6 +713,24 @@ function syncPushSoon() {
     }, 1200);
 }
 
+/**
+ * Once per sign-in: a device that has notifications on checks that its address is still listed and current. The
+ * address changes or dies when the browser resets the background script, and the sender drops dead ones; without
+ * this the device would show "on" but get nothing.
+ */
+async function repairPushDevice() {
+    const saved = pushDevice();
+    if (!saved || !S.push || pushBlocker() || Notification.permission !== 'granted') {
+        return;
+    }
+    const token = await S.pushToken(PUSH.vapidKey);
+    if (token !== saved || !(S.push.tokens || []).includes(token)) {
+        await S.pushSwap(saved, token);
+        localStorage.setItem(pushSlot(), token);
+        render();
+    }
+}
+
 function notificationsCard() {
     if (S.isDemo) {
         return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">Off</span></div>
@@ -2266,7 +2284,7 @@ S.init((status) => {
     if (status === 'ready' && !S.isDemo) {
         if (pushFor !== S.user.uid) {
             pushFor = S.user.uid;
-            S.loadPush().then(() => (render(), syncPushSoon())).catch((e) => console.error(e));
+            S.loadPush().then(() => (render(), syncPushSoon(), repairPushDevice())).catch((e) => console.error(e));
         } else {
             syncPushSoon();
         }
