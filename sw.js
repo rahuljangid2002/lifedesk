@@ -74,7 +74,10 @@ async function showPush(p) {
     } catch (e) {
         // a key from another account or an old message: keep the plain wording
     }
-    return self.registration.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'lifedesk', renotify: true, data: { link: d.link || './' } });
+    return self.registration.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
+        // each one its own tag: replacing an older one with the same tag makes Chrome on the Mac briefly count none
+        // and add its own "This site has been updated in the background"
+        tag: `${d.tag || 'lifedesk'}-${Date.now()}`, data: { link: d.link || './' } });
 }
 self.addEventListener('push', (event) => {
     let p = {};
