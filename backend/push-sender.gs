@@ -5,8 +5,9 @@
  *   tokens     the notification address of each device that turned notifications on
  *   tz         their time zone, e.g. "Asia/Kolkata"
  *   renewals   true = renewal reminders;  monthStart  true = a nudge on the 1st of each month
- *   dates      [{ due: "2026-10-13", remind: 30 }] – the due date and remind-me days of each open reminder;
- *              no names, amounts or notes (those stay encrypted, so a message never says which reminder)
+ *   dates      [{ due: "2026-10-13", remind: 30, id, sealed }] – each open reminder's due date and remind-me days,
+ *              its id (for the link) and its name + amount SEALED with a key only the user's devices hold: this
+ *              script passes the sealed text on unread and the device opens it to name the reminder
  *   lastSent   the user's local date this script last handled them (written here, so nobody gets a second message)
  *
  * Once a day per user, from 9 in the morning their time, it sends what is due:
@@ -21,7 +22,6 @@
  */
 const PROJECT_ID = 'lifedesk-43dc1';
 const DATABASE_ID = 'default'; // same as firestoreDatabase in js/config.js
-const APP_URL = 'https://rahuljangid2002.github.io/lifedesk/';
 const SEND_FROM_HOUR = 9; // local time of each user
 
 // ---------- the words: change them here ----------
@@ -79,18 +79,30 @@ function oneRenewal(days, due) {
 }
 
 /**
+ * Adds the sealed name + amount of up to 6 reminders (opened on the device, which holds the key; the plain wording
+ * above is what shows when it cannot). Links are relative to the app ("#renewals/<id>" opens that reminder).
+ */
+function withItems(message, due) {
+  const items = due.filter(function (d) { return d.sealed; }).slice(0, 6).map(function (d) { return { s: d.sealed, d: d.days, due: d.due }; });
+  if (items.length === Math.min(due.length, 6)) {
+    message.items = JSON.stringify(items);
+  }
+  return message;
+}
+
+/**
  * The messages for one user on their local date `today` ("yyyy-mm-dd"). Returns [{ title, body, link, tag }].
  */
 function messagesFor(schedule, today) {
   const out = [];
   if (schedule.renewals !== false) {
     const due = (schedule.dates || [])
-      .map(function (d) { return { due: d.due, days: daysBetween(today, d.due), remind: Number(d.remind) || 0 }; })
+      .map(function (d) { return { due: d.due, days: daysBetween(today, d.due), remind: Number(d.remind) || 0, id: d.id, sealed: d.sealed }; })
       .filter(function (d) { return notifyToday(d.days, d.remind); })
       .sort(function (a, b) { return a.days - b.days; });
     if (due.length === 1) {
       const m = oneRenewal(due[0].days, due[0].due);
-      out.push({ title: m.title, body: m.body, link: APP_URL + '#renewals', tag: 'renewals' });
+      out.push(withItems({ title: m.title, body: m.body, link: '#renewals' + (due[0].id ? '/' + due[0].id : ''), tag: 'renewals' }, due));
     } else if (due.length > 1) {
       const groups = [];
       due.forEach(function (d) {
@@ -98,13 +110,13 @@ function messagesFor(schedule, today) {
         const g = groups.filter(function (x) { return x.label === label; })[0];
         if (g) g.n += 1; else groups.push({ label: label, n: 1 });
       });
-      out.push({ title: fill(TEXT.manyTitle, { count: due.length }), body: fill(TEXT.manyBody, { list: groups.map(function (g) { return g.label + ': ' + g.n; }).join(' · ') }),
-        link: APP_URL + '#renewals', tag: 'renewals' });
+      out.push(withItems({ title: fill(TEXT.manyTitle, { count: due.length }), body: fill(TEXT.manyBody, { list: groups.map(function (g) { return g.label + ': ' + g.n; }).join(' · ') }),
+        link: '#renewals', tag: 'renewals' }, due));
     }
   }
   if (schedule.monthStart !== false && today.slice(8) === '01') {
     const m = Number(today.slice(5, 7)) - 1;
-    out.push({ title: fill(TEXT.monthTitle, { month: MONTHS[m] }), body: fill(TEXT.monthBody, { lastMonth: MONTHS[(m + 11) % 12] }), link: APP_URL + '#home', tag: 'month-start' });
+    out.push({ title: fill(TEXT.monthTitle, { month: MONTHS[m] }), body: fill(TEXT.monthBody, { lastMonth: MONTHS[(m + 11) % 12] }), link: '#home', tag: 'month-start' });
   }
   return out;
 }
@@ -179,7 +191,7 @@ function sendTest() {
   if (!list.length) {
     throw new Error('Nobody has turned notifications on yet. Turn them on in LifeDesk (Account → Notifications) first.');
   }
-  const gone = deliver(list[0].data.tokens || [], [{ title: TEXT.testTitle, body: TEXT.testBody, link: APP_URL + '#more', tag: 'test' }]);
+  const gone = deliver(list[0].data.tokens || [], [{ title: TEXT.testTitle, body: TEXT.testBody, link: '#more', tag: 'test' }]);
   Logger.log('Test sent to ' + ((list[0].data.tokens || []).length - gone.length) + ' device(s)' + (gone.length ? '; ' + gone.length + ' no longer exist' : '') + '.');
 }
 
@@ -244,7 +256,7 @@ function deliver(tokens, messages) {
         method: 'post',
         contentType: 'application/json',
         headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJECT_ID },
-        payload: JSON.stringify({ message: { token: token, webpush: { headers: { Urgency: 'normal', TTL: '86400' }, data: { title: m.title, body: m.body, link: m.link, tag: m.tag } } } }),
+        payload: JSON.stringify({ message: { token: token, webpush: { headers: { Urgency: 'normal', TTL: '86400' }, data: { title: m.title, body: m.body, link: m.link, tag: m.tag, items: m.items || '' } } } }),
         muteHttpExceptions: true
       });
       const code = res.getResponseCode();

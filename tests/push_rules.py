@@ -37,7 +37,10 @@ with sync_playwright() as p:
                 dates: { arrayValue: { values: [{ mapValue: { fields: { due: { stringValue: '2026-10-10' }, remind: { integerValue: '7' } } } }] } } }),
             leap: S.daysBetween('2028-02-28', '2028-03-01'),
             tomorrow: S.oneRenewal(1, '2026-10-04'), today: S.oneRenewal(0, '2026-10-03'), over: S.oneRenewal(-2, '2026-10-01'), over1: S.oneRenewal(-1, '2026-10-02'),
-            test: [S.TEXT.testTitle, S.TEXT.testBody]
+            test: [S.TEXT.testTitle, S.TEXT.testBody],
+            sealedOne: m([{ due: days(1), remind: 30, id: 'r1', sealed: 'IV.CT1' }]),
+            sealedMany: m(Array.from({ length: 8 }, (_, i) => ({ due: days(0), remind: 3, id: 'r' + i, sealed: 'IV.CT' + i }))),
+            halfSealed: m([{ due: days(0), remind: 3, id: 'a', sealed: 'IV.X' }, { due: days(1), remind: 3, id: 'b' }])
         };
     }""")
     b.close()
@@ -54,6 +57,9 @@ check('1st of the month: "November has started", last month October, opens Money
 check('1 January: last month is December', 'January has started' in r['jan'][0]['title'] and 'See how December went' in r['jan'][0]['body'], str(r['jan']))
 check('start of month switched off, or not the 1st: nothing', r['monthOff'] == [] and r['notFirst'] == [])
 check('test message wording', r['test'] == ['✅ LifeDesk notifications are on', 'Renewal reminders and a start-of-month nudge will appear here.'])
+check('one reminder: link to that reminder, its sealed text passed on unread', r['sealedOne'][0]['link'] == '#renewals/r1' and r['sealedOne'][0]['items'] == '[{"s":"IV.CT1","d":1,"due":"2026-10-04"}]', str(r['sealedOne']))
+check('many: links to the list, at most 6 sealed items', r['sealedMany'][0]['link'] == '#renewals' and len(__import__('json').loads(r['sealedMany'][0]['items'])) == 6 and r['sealedMany'][0]['title'] == '🔔 8 renewals need attention', r['sealedMany'][0]['title'])
+check('a reminder saved before sealing existed: plain wording only (no half list)', 'items' not in r['halfSealed'][0] and 'items' not in r['one'][0], str(r['halfSealed']))
 check('database values read back as plain values', r['fields'] == {'tz': 'Asia/Kolkata', 'renewals': True, 'tokens': ['a'], 'dates': [{'due': '2026-10-10', 'remind': 7}]}, str(r['fields']))
 check('days across a leap day', r['leap'] == 2)
 print(f'{sum(checks)}/{len(checks)} checks passed')
