@@ -58,11 +58,9 @@ with sync_playwright() as p:
         f = doc.get('fields', {})
         plain = {k: H.plain(v) for k, v in f.items()}
         check('schedule: one device address, time zone, both kinds on', code == 200 and len(plain.get('tokens', [])) == 1 and len(plain['tokens'][0]) > 100 and plain.get('tz') and plain.get('renewals') is True and plain.get('monthStart') is True, json.dumps({k: v for k, v in plain.items() if k != 'tokens'}))
-        dates = plain.get('dates') or []
-        check('schedule: due dates and remind-me days, nearest first, each with its id and sealed name', [(d['due'], d['remind']) for d in dates] == [(iso(3), 7), (iso(12), 30)] and all(d.get('id') and d.get('sealed', '').count('.') == 1 for d in dates), str([(d['due'], d['remind']) for d in dates]))
-        check('this device holds the notification key for the service worker', pg.evaluate('''new Promise(r => { const o = indexedDB.open('lifedesk-notify', 1); o.onsuccess = () => { const q = o.result.transaction('keys').objectStore('keys').get('notify'); q.onsuccess = () => r(!!q.result); }; })'''))
+        check('schedule: only the due dates and remind-me days, nearest first', plain.get('dates') == [{'due': iso(3), 'remind': 7}, {'due': iso(12), 'remind': 30}], str(plain.get('dates')))
         raw = json.dumps(doc)
-        check('schedule: no reminder name or amount readable in it', not any(w in raw for w in ['Secret Policy', 'Hidden Subscription', 'Push Bank', '"777', '777.']))
+        check('schedule: no reminder name or amount in it', not any(w in raw for w in ['Secret Policy', 'Hidden Subscription', '777', 'Push Bank']))
         ids = pg.evaluate("import('./js/store.js').then(S => S.data.reminders.map(r => r.id))")
         rems = [H.rest(f'{H.DOCS}/users/{uid}/reminders/{i}', token=token)[1] for i in ids]
         check('reminders themselves stay encrypted', len(rems) == 2 and all(list(r['fields'].keys()) == ['enc'] for r in rems))
@@ -74,13 +72,10 @@ with sync_playwright() as p:
         sw = next(w for w in pg.context.service_workers if w.url.endswith('/sw.js'))
         # a push event as the browser would deliver it (made inside the worker; the browser's own one is the same)
         sw.evaluate('''(payload) => { const e = new PushEvent('push', { data: payload }); try { self.dispatchEvent(e); } catch (x) {} }''',
-                    json.dumps({'data': {'title': '🔔 Renewal due in 3 days', 'body': 'Due on …. Plan ahead, then mark it renewed in LifeDesk.', 'link': '#renewals/' + dates[0]['id'], 'tag': 'renewals',
-                                         'items': json.dumps([{'s': dates[0]['sealed'], 'd': 3, 'due': dates[0]['due']}])}}))
+                    json.dumps({'data': {'title': 'Renewal reminder', 'body': 'A renewal is due in 7 days. Open LifeDesk to see it.', 'link': 'http://localhost:8765/#renewals', 'tag': 'renewals'}}))
         time.sleep(1.5)
         notes = pg.evaluate("navigator.serviceWorker.ready.then(r => r.getNotifications()).then(l => l.map(n => ({ title: n.title, body: n.body, link: n.data && n.data.link })))")
-        check('device unseals the name and amount: "Hidden Subscription is due in 3 days", 777, link to it', any(n['title'] == '🔔 Hidden Subscription is due in 3 days' and '777' in n['body'] and n['link'] == '#renewals/' + dates[0]['id'] for n in notes), str(notes))
-        pg.goto(H.URL + '#renewals/' + dates[0]['id']); time.sleep(1)
-        check('the link opens Renewal reminders with that reminder highlighted', pg.locator('.acct-row.focus').count() == 1 and 'Hidden Subscription' in pg.locator('.acct-row.focus').inner_text())
+        check('service worker shows a pushed message with its title, text and screen', any(n['title'] == 'Renewal reminder' and 'due in 7 days' in n['body'] and n['link'].endswith('#renewals') for n in notes), str(notes))
 
         # dates follow edits: renew the subscription (monthly by default is yearly; set next date) and delete the policy
         pg.goto(H.URL + '#renewals'); pg.locator('.acct-row', has_text='Hidden Subscription').get_by_role('button', name='Renewed').click()
@@ -90,8 +85,7 @@ with sync_playwright() as p:
         pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.5)
         pg.locator('.acct-row', has_text='Secret Policy').get_by_role('button', name='Delete').click()
         time.sleep(4)
-        dd = lambda: [(d['due'], d['remind']) for d in H.plain(schedule()[1]['fields']['dates'])]
-        check('schedule: dates follow a renewal and a delete', dd() == [(iso(33), 7)], str(dd()))
+        check('schedule: dates follow a renewal and a delete', H.plain(schedule()[1]['fields']['dates']) == [{'due': iso(33), 'remind': 7}], str(H.plain(schedule()[1]['fields'].get('dates'))))
         check('renewals: banner gone once notifications are on', pg.locator('.notice', has_text='Get a notification').count() == 0)
 
         # switch renewal reminders off: the dates are removed
@@ -99,12 +93,11 @@ with sync_playwright() as p:
         s = {k: H.plain(v) for k, v in schedule()[1]['fields'].items()}
         check('renewal reminders off: dates emptied, month start kept', s.get('renewals') is False and s.get('dates') == [] and s.get('monthStart') is True, str({k: v for k, v in s.items() if k != 'tokens'}))
         pg.locator('[data-pref="renewals"]').click(); time.sleep(2)
-        check('renewal reminders back on: dates back', dd() == [(iso(33), 7)])
+        check('renewal reminders back on: dates back', H.plain(schedule()[1]['fields']['dates']) == [{'due': iso(33), 'remind': 7}])
 
         # turn off on the last device: the schedule is deleted
         pg.get_by_role('button', name='Turn off on this device').click(); pg.wait_for_selector('.toast:has-text("off on this device")', timeout=30000); time.sleep(1)
         check('turn off on the only device: the schedule is deleted from the database', schedule()[0] == 404, str(schedule()[0]))
-        check('turn off: this device forgets the notification key', not pg.evaluate('''new Promise(r => { const o = indexedDB.open('lifedesk-notify', 1); o.onsuccess = () => { const q = o.result.transaction('keys').objectStore('keys').get('notify'); q.onsuccess = () => r(!!q.result); }; })'''))
 
         # on again, then delete the account: everything goes
         pg.get_by_role('button', name='Turn on for this device').click(); pg.wait_for_selector('.toast:has-text("on for this device")', timeout=60000); time.sleep(1)

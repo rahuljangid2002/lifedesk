@@ -9,7 +9,6 @@ import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 import { currentReport, dashboards, reports } from './insights.js';
 import { netWorth, toCsv } from './reports.js';
 import { pushSettings as PUSH } from './config.js';
-import * as V from './vault.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -26,7 +25,7 @@ const state = {
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
-    renewals: { form: null, renew: null, showDone: false, focus: null, scrollTo: false },
+    renewals: { form: null, renew: null, showDone: false },
     push: { busy: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
@@ -693,52 +692,9 @@ function pushBlocker() {
     }
     return null;
 }
-// Names and amounts in notifications without the server reading them: each reminder's name and amount are sealed
-// with a notification key (AES-GCM). The key is kept in the user's encrypted settings (id 'notifyKey') and, on each
-// device with notifications on, in IndexedDB, where sw.js can read it to unseal a message just before showing it.
-const KEY_DB = 'lifedesk-notify';
-function keyStore(mode, fn) {
-    return new Promise((resolve, reject) => {
-        const open = indexedDB.open(KEY_DB, 1);
-        open.onupgradeneeded = () => open.result.createObjectStore('keys');
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-            const tx = open.result.transaction('keys', mode);
-            const req = fn(tx.objectStore('keys'));
-            tx.oncomplete = () => resolve(req.result);
-            tx.onerror = () => reject(tx.error);
-        };
-    });
-}
-const deviceKeySet = (text) => keyStore('readwrite', (s) => (text ? s.put(text, 'notify') : s.delete('notify'))).catch((e) => console.error(e));
-async function notifyKey() {
-    let doc = S.data.settings.find((x) => x.id === 'notifyKey');
-    if (!doc) {
-        doc = { id: 'notifyKey', key: V.keyToText(crypto.getRandomValues(new Uint8Array(32))) };
-        await S.save('settings', doc);
-    }
-    await deviceKeySet(doc.key);
-    return V.importKey(V.keyFromText(doc.key));
-}
-/** Open reminders as the sender needs them: due date, remind-me days, id (for the link) and the sealed name + amount. */
-const pushPlain = (on = !(S.push && S.push.renewals === false)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due)
-    .map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30), id: r.id, n: r.name, a: Number(r.amount) ? L.money(r.amount) : '' }))
-    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.n.localeCompare(b.n))));
-async function pushEntries(plain) {
-    if (!plain.length) {
-        return [];
-    }
-    const key = await notifyKey();
-    return Promise.all(plain.map(async (x) => ({ due: x.due, remind: x.remind, id: x.id, sealed: (await V.encryptDoc(key, { n: x.n, a: x.a })).enc })));
-}
+/** What the sender needs and nothing more: due date and remind-me days of each open reminder. */
+const pushDates = (on = !(S.push && S.push.renewals === false)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due).map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30) })).sort((a, b) => (a.due < b.due ? -1 : 1)));
 const pushZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-// sealing is random each time, so "changed?" is decided on this device from the plain values
-const sigSlot = () => `lifedesk-push-sig-${S.user.uid}`;
-const pushSig = (plain) => JSON.stringify([pushZone(), plain]);
-async function pushWriteDates(plain) {
-    await S.pushUpdate({ dates: await pushEntries(plain), tz: pushZone() });
-    localStorage.setItem(sigSlot(), pushSig(plain));
-}
 let pushTimer = null;
 /** Keeps the dates in the schedule in step with the reminders, from whichever device changes them. */
 function syncPushSoon() {
@@ -747,12 +703,9 @@ function syncPushSoon() {
         if (S.isDemo || !S.push || state.status !== 'ready') {
             return;
         }
-        const plain = pushPlain();
-        if (localStorage.getItem(sigSlot()) !== pushSig(plain)) {
-            await pushWriteDates(plain).catch((e) => console.error(e));
-        }
-        if (pushDevice()) {
-            notifyKey().catch((e) => console.error(e)); // this device can unseal names (also after a reinstall)
+        const dates = pushDates();
+        if (JSON.stringify(dates) !== JSON.stringify(S.push.dates || []) || S.push.tz !== pushZone()) {
+            await S.pushUpdate({ dates, tz: pushZone() }).catch((e) => console.error(e));
         }
     }, 1200);
 }
@@ -773,7 +726,7 @@ function notificationsCard() {
             <div class="split wrap"><button class="btn" data-action="pushTest" ${busy}>Show a test notification</button><button class="btn ghost danger" data-action="pushOff" ${busy}>Turn off on this device</button></div>`
             : `<small>Get a notification when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
             ${blocker ? `<small class="over">${esc(blocker)}</small>` : `<div class="split wrap"><button class="btn primary" data-action="pushOn" ${busy}>${icon('bell')} Turn on for this device</button></div>`}`}
-        <small>Privacy: to know when to notify you, the due dates of your reminders are kept without encryption. Names and amounts are sealed with a key only your devices hold, so the notification server cannot read them; your device opens them just before showing a notification. All of it is deleted when you turn notifications off on your last device.</small>
+        <small>Privacy: to know when to notify you, the due dates of your reminders are kept without encryption, with nothing else: no names, amounts or notes. They are deleted when you turn notifications off on your last device.</small>
     </section>`;
 }
 
@@ -822,7 +775,7 @@ function renewals() {
     const rows = remRows();
     const groups = [['overdue', 'Overdue'], ['soon', 'Due soon'], ['later', 'Later']];
     const f = st.form;
-    const row = (r) => `<div class="acct-row rem-${r.state} ${st.renew && st.renew.id === r.id ? 'open' : ''} ${st.focus === r.id ? 'focus' : ''}" data-rem="${r.id}">
+    const row = (r) => `<div class="acct-row rem-${r.state} ${st.renew && st.renew.id === r.id ? 'open' : ''}">
         <div class="a-name"><span class="row-icon">${icon('bell')}</span><span><b>${esc(r.name)}</b><small>${[esc(r.kind), esc(L.repeatLabel(r.repeat)), r.state === 'done' ? '' : `remind ${plural(Number(r.remindDays ?? 30), 'day')} before`].filter(Boolean).join(' · ')}</small></span></div>
         <div class="a-detail"><small>${dueWords(r)}</small>${r.notes ? `<small>${esc(r.notes)}</small>` : ''}</div>
         <div class="a-bal"><b class="big">${Number(r.amount) ? L.money(r.amount) : '–'}</b><small>${Number(r.amount) ? (Number(r.repeat) ? 'each time' : 'once') : 'no cost'}</small></div>
@@ -1116,17 +1069,6 @@ function render() {
             }
         }
     }
-    afterRender();
-}
-function afterRender() {
-    const r = state.renewals;
-    if (r.scrollTo && state.route === 'renewals') {
-        const el = app.querySelector('.acct-row.focus');
-        if (el) {
-            r.scrollTo = false;
-            el.scrollIntoView({ block: 'center' });
-        }
-    }
 }
 const toastHtml = () => (state.toast ? `<div class="toast ${state.toast.kind}" role="status">${esc(state.toast.message)}</div>` : '');
 
@@ -1145,7 +1087,6 @@ const actions = {
         toast(`Sign-in link sent to ${email}. Open it on this device.`);
     },
     async signOut() {
-        await deviceKeySet(null);
         state.vault = { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false };
         state.login = { mode: 'signin', step: 'form', name: '', email: '', password: '', code: '', show: false, busy: false };
         await S.signOut();
@@ -1350,7 +1291,6 @@ const actions = {
     },
     lockDevice() {
         if (window.confirm('Lock this device? Your data passphrase will be asked the next time. Nothing is deleted.')) {
-            deviceKeySet(null); // notifications keep coming, without names and amounts, until it is unlocked again
             S.lockDevice();
         }
     },
@@ -1432,9 +1372,7 @@ const actions = {
                 return toast(/permission|denied|abort/i.test(`${e.name} ${e.message}`) ? 'This browser window cannot receive notifications. Private or incognito windows cannot; open LifeDesk in a normal window and try again.' : `Notifications could not be turned on: ${e.message}`, 'warn');
             }
             const p = S.push || {};
-            const plain = pushPlain(p.renewals !== false);
-            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(), dates: await pushEntries(plain) });
-            localStorage.setItem(sigSlot(), pushSig(plain));
+            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(), dates: pushDates() });
             localStorage.setItem(pushSlot(), token);
             toast('Notifications are on for this device.');
         } finally {
@@ -1448,8 +1386,6 @@ const actions = {
         try {
             await S.pushRemove(pushDevice());
             localStorage.removeItem(pushSlot());
-            localStorage.removeItem(sigSlot());
-            await deviceKeySet(null);
             toast('Notifications are off on this device.');
         } finally {
             state.push.busy = false;
@@ -1459,10 +1395,7 @@ const actions = {
     async pushPref(el) {
         const key = el.dataset.pref;
         const value = !(S.push && S.push[key] !== false);
-        await S.pushUpdate({ [key]: value });
-        if (key === 'renewals') {
-            await pushWriteDates(pushPlain(value));
-        }
+        await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
         render();
     },
     async pushTest() {
@@ -2274,20 +2207,13 @@ window.addEventListener('resize', () => {
 });
 
 window.addEventListener('hashchange', () => {
-    readRoute();
+    state.route = window.location.hash.slice(1) || 'hub';
     window.scrollTo(0, 0);
     tipBox.hidden = true;
     render();
 });
 
-/** "#renewals/<id>" (from a notification) opens Renewal reminders with that reminder highlighted. */
-function readRoute() {
-    const [route, id] = window.location.hash.slice(1).split('/');
-    state.route = route || 'hub';
-    state.renewals.focus = route === 'renewals' && id ? id : null;
-    state.renewals.scrollTo = !!state.renewals.focus;
-}
-readRoute();
+state.route = window.location.hash.slice(1) || 'hub';
 render();
 let pushFor = null; // the user whose notification schedule has been read
 S.init((status) => {

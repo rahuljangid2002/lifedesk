@@ -28,63 +28,8 @@ self.addEventListener('fetch', (event) => {
     );
 });
 
-// Push notifications from the hourly sender (backend/push-sender.gs), also when LifeDesk is closed. A message carries
-// plain wording without names, plus each reminder sealed (name + amount) with the notification key, which only the
-// user's devices hold (IndexedDB, put there by the app). Here it is unsealed and the wording names the reminder;
-// without the key (device locked or signed out) the plain wording is shown. Every push shows a notification.
-const notifyKey = () => new Promise((resolve) => {
-    const open = indexedDB.open('lifedesk-notify', 1);
-    open.onupgradeneeded = () => open.result.createObjectStore('keys');
-    open.onerror = () => resolve(null);
-    open.onsuccess = () => {
-        const req = open.result.transaction('keys').objectStore('keys').get('notify');
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
-    };
-});
-const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-async function unseal(keyText, sealed) {
-    const key = await crypto.subtle.importKey('raw', bytes(keyText), 'AES-GCM', false, ['decrypt']);
-    const [iv, ct] = sealed.split('.');
-    return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(iv) }, key, bytes(ct))));
-}
-const dayText = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-/** Title and text naming the reminder(s); items: [{ n: name, a: amount text, d: days left, due }]. */
-function named(items, plainTitle) {
-    if (items.length === 1) {
-        const { n, a, d, due } = items[0];
-        const title = d < 0 ? `⚠️ ${n} is overdue` : d === 0 ? `⏰ ${n} is due today` : d === 1 ? `🔔 ${n} is due tomorrow` : `🔔 ${n} is due in ${d} days`;
-        const when = d < 0 ? `was due on ${dayText(due)} (${plural(-d, 'day')} ago)` : d === 0 ? `due today, ${dayText(due)}` : `due on ${dayText(due)}`;
-        const text = `${a ? `${a} · ` : ''}${when}. Tap to open it in LifeDesk.`;
-        return { title, body: text.charAt(0).toUpperCase() + text.slice(1) };
-    }
-    const short = (d) => (d < 0 ? 'overdue' : d === 0 ? 'today' : d === 1 ? 'tomorrow' : `in ${d} days`);
-    return { title: plainTitle, body: items.map((x) => `${x.n}${x.a ? ` (${x.a})` : ''} – ${short(x.d)}`).join(' · ') };
-}
-async function showPush(p) {
-    const d = { ...(p.notification || {}), ...(p.data || {}) };
-    let { title = 'LifeDesk', body = '' } = d;
-    try {
-        const key = d.items && (await notifyKey());
-        if (key) {
-            const items = await Promise.all(JSON.parse(d.items).map(async (x) => ({ ...(await unseal(key, x.s)), d: x.d, due: x.due })));
-            ({ title, body } = named(items, title));
-        }
-    } catch (e) {
-        // a key from another account or an old message: keep the plain wording
-    }
-    // each one its own tag: replacing an older one with the same tag makes Chrome briefly count none
-    const tag = `${d.tag || 'lifedesk'}-${Date.now()}`;
-    await self.registration.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag, data: { link: d.link || './' } });
-    // Chrome checks that a push showed something once this promise ends; on the Mac it can ask before macOS has
-    // listed the notification and then adds "This site has been updated in the background". Stay open until it is
-    // listed, and a moment longer.
-    for (let i = 0; i < 20 && !(await self.registration.getNotifications({ tag })).length; i += 1) {
-        await new Promise((r) => setTimeout(r, 100));
-    }
-    await new Promise((r) => setTimeout(r, 1500));
-}
+// Push notifications from the hourly sender (backend/push-sender.gs), also when LifeDesk is closed. Messages carry
+// title, body and the screen to open; every push shows a notification (browsers require it).
 self.addEventListener('push', (event) => {
     let p = {};
     try {
@@ -92,19 +37,17 @@ self.addEventListener('push', (event) => {
     } catch (e) {
         p = { data: { body: event.data ? event.data.text() : '' } };
     }
-    event.waitUntil(showPush(p));
+    const d = { ...(p.notification || {}), ...(p.data || {}) };
+    event.waitUntil(self.registration.showNotification(d.title || 'LifeDesk', {
+        body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'lifedesk', renotify: true, data: { link: d.link || './' } // renotify: a newer one with the same tag pops up again instead of replacing the old one quietly
+    }));
 });
-// Tapping it opens LifeDesk on that screen (links are relative to the app, e.g. "#renewals/<id>"), reusing an
-// open window when there is one.
+// Tapping it opens LifeDesk on that screen, reusing an open window when there is one.
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const link = new URL((event.notification.data && event.notification.data.link) || './', self.registration.scope).href;
     event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
         const open = list.find((c) => c.url.startsWith(self.registration.scope));
-        if (!open) {
-            return self.clients.openWindow(link);
-        }
-        // focus first (allowed only while handling the click), then move that window to the screen
-        return open.focus().then((c) => (c || open).navigate(link)).catch(() => self.clients.openWindow(link));
+        return open ? open.navigate(link).then((c) => (c || open).focus()) : self.clients.openWindow(link);
     }));
 });
