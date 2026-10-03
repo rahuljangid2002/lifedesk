@@ -74,10 +74,16 @@ async function showPush(p) {
     } catch (e) {
         // a key from another account or an old message: keep the plain wording
     }
-    return self.registration.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png',
-        // each one its own tag: replacing an older one with the same tag makes Chrome on the Mac briefly count none
-        // and add its own "This site has been updated in the background"
-        tag: `${d.tag || 'lifedesk'}-${Date.now()}`, data: { link: d.link || './' } });
+    // each one its own tag: replacing an older one with the same tag makes Chrome briefly count none
+    const tag = `${d.tag || 'lifedesk'}-${Date.now()}`;
+    await self.registration.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag, data: { link: d.link || './' } });
+    // Chrome checks that a push showed something once this promise ends; on the Mac it can ask before macOS has
+    // listed the notification and then adds "This site has been updated in the background". Stay open until it is
+    // listed, and a moment longer.
+    for (let i = 0; i < 20 && !(await self.registration.getNotifications({ tag })).length; i += 1) {
+        await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 1500));
 }
 self.addEventListener('push', (event) => {
     let p = {};
