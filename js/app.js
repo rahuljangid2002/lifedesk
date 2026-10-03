@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 import { currentReport, dashboards, reports } from './insights.js';
 import { netWorth, toCsv } from './reports.js';
+import { pushSettings as PUSH } from './config.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -25,6 +26,7 @@ const state = {
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false },
+    push: { busy: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
@@ -661,6 +663,73 @@ function payView() {
     </main>`;
 }
 
+// ---------- push notifications (renewal reminders, start of month) ----------
+// This device is "on" when it has saved its notification address here. The account-wide settings and the due dates
+// live in S.push (users/{uid}/push/schedule), the only unencrypted record.
+const pushSlot = () => `lifedesk-push-${S.user.uid}`;
+const pushDevice = () => {
+    try {
+        return localStorage.getItem(pushSlot());
+    } catch (e) {
+        return null;
+    }
+};
+const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+/** null when this browser can take notifications, otherwise why not, in words. */
+function pushBlocker() {
+    if (!PUSH.enabled) {
+        return 'Notifications are not set up for this site yet.';
+    }
+    if (isIos() && !isStandalone()) {
+        return 'On iPhone and iPad, first add LifeDesk to the Home Screen (Share → Add to Home Screen), open it from there, then turn this on.';
+    }
+    if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        return 'This browser cannot show notifications. Try Chrome, Edge, Firefox or Safari.';
+    }
+    if (Notification.permission === 'denied') {
+        return 'Notifications are blocked for LifeDesk in this browser. Allow them in the browser or phone settings, then try again.';
+    }
+    return null;
+}
+/** What the sender needs and nothing more: due date and remind-me days of each open reminder. */
+const pushDates = (on = !(S.push && S.push.renewals === false)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due).map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30) })).sort((a, b) => (a.due < b.due ? -1 : 1)));
+const pushZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+let pushTimer = null;
+/** Keeps the dates in the schedule in step with the reminders, from whichever device changes them. */
+function syncPushSoon() {
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(async () => {
+        if (S.isDemo || !S.push || state.status !== 'ready') {
+            return;
+        }
+        const dates = pushDates();
+        if (JSON.stringify(dates) !== JSON.stringify(S.push.dates || []) || S.push.tz !== pushZone()) {
+            await S.pushUpdate({ dates, tz: pushZone() }).catch((e) => console.error(e));
+        }
+    }, 1200);
+}
+
+function notificationsCard() {
+    if (S.isDemo) {
+        return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">Off</span></div>
+            <small>Sign in to get a notification when a renewal is due and at the start of each month. Demo mode has no account to send them to.</small></section>`;
+    }
+    const on = !!pushDevice() && !!S.push;
+    const p = S.push || {};
+    const busy = state.push.busy ? 'disabled' : '';
+    const blocker = on ? null : pushBlocker();
+    return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">${on ? 'On for this device' : 'Off on this device'}</span></div>
+        ${on ? `<label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: when one comes up, the day before, on the day, and if it is overdue</label>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>
+            <small>Sent around 9 in the morning, your time. ${(p.tokens || []).length > 1 ? `${(p.tokens || []).length} devices get them.` : 'Only this device gets them; turn them on on your other devices too.'}</small>
+            <div class="split wrap"><button class="btn" data-action="pushTest" ${busy}>Show a test notification</button><button class="btn ghost danger" data-action="pushOff" ${busy}>Turn off on this device</button></div>`
+            : `<small>Get a notification when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
+            ${blocker ? `<small class="over">${esc(blocker)}</small>` : `<div class="split wrap"><button class="btn primary" data-action="pushOn" ${busy}>${icon('bell')} Turn on for this device</button></div>`}`}
+        <small>Privacy: to know when to notify you, the due dates of your reminders are kept without encryption, with nothing else: no names, amounts or notes. They are deleted when you turn notifications off on your last device.</small>
+    </section>`;
+}
+
 // ---------- Renewal reminders (its own tool: data in the "reminders" collection) ----------
 const remRows = () => S.data.reminders.map((r) => ({ ...r, ...L.reminderStatus(r, today()) })).sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -738,6 +807,7 @@ function renewals() {
             <label class="span2">Notes (optional)<input type="text" value="${esc(f.notes)}" placeholder="e.g. policy number, where the papers are" data-model="renewals.form.notes"></label></div>
             <div class="split"><button class="btn" data-action="remCancel">Cancel</button><button class="btn primary" data-action="remSave">Save</button></div></section>`
             : `<div class="toolbar"><button class="btn primary" data-action="remNew">${icon('plus')} Add reminder</button></div>`}
+        ${!S.isDemo && !(pushDevice() && S.push) && c.total ? `<a class="notice" href="#more">${icon('bell')} Get a notification when a renewal is due, even with LifeDesk closed – turn on under Account</a>` : ''}
         ${c.total ? lists : `<div class="empty-state">${icon('bell')}<b>No reminders yet</b><small>Add insurance, subscriptions, documents like a passport or licence, a vehicle service or a warranty. LifeDesk shows each one when it is coming up.</small></div>`}
         ${done.length ? `<div class="toolbar"><button class="btn ghost" data-action="remShowDone">${st.showDone ? 'Hide' : 'Show'} done · ${done.length}</button></div>${st.showDone ? `<section class="list atable">${done.map(row).join('')}</section>` : ''}` : ''}
         <small>A reminder shows under Due soon from the number of days before its date you chose. Repeating ones move to their next date when you press Renewed.</small>
@@ -914,6 +984,7 @@ function more() {
         ${S.isDemo ? '' : `<section class="card"><div class="card-head"><h2>Privacy</h2><span class="pill">Encrypted</span></div>
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
+        ${notificationsCard()}
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
@@ -1279,6 +1350,57 @@ const actions = {
         if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
             await S.remove('assets', a.id);
         }
+    },
+    // push notifications
+    async pushOn() {
+        const blocker = pushBlocker();
+        if (blocker) {
+            return toast(blocker, 'warn');
+        }
+        state.push.busy = true;
+        render();
+        try {
+            if ((await Notification.requestPermission()) !== 'granted') {
+                return toast('Notifications were not allowed. Allow them in the browser or phone settings to turn this on.', 'warn');
+            }
+            let token;
+            try {
+                token = await S.pushToken(PUSH.vapidKey);
+            } catch (e) {
+                console.error(e);
+                // private / incognito windows refuse push without saying so; so do some locked-down browsers
+                return toast(/permission|denied|abort/i.test(`${e.name} ${e.message}`) ? 'This browser window cannot receive notifications. Private or incognito windows cannot; open LifeDesk in a normal window and try again.' : `Notifications could not be turned on: ${e.message}`, 'warn');
+            }
+            const p = S.push || {};
+            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(), dates: pushDates() });
+            localStorage.setItem(pushSlot(), token);
+            toast('Notifications are on for this device.');
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async pushOff() {
+        state.push.busy = true;
+        render();
+        try {
+            await S.pushRemove(pushDevice());
+            localStorage.removeItem(pushSlot());
+            toast('Notifications are off on this device.');
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async pushPref(el) {
+        const key = el.dataset.pref;
+        const value = !(S.push && S.push[key] !== false);
+        await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
+        render();
+    },
+    async pushTest() {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification('LifeDesk', { body: 'Notifications work on this device.', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'lifedesk-test', data: { link: './#more' } });
     },
     // renewal reminders
     remNew() {
@@ -2093,6 +2215,7 @@ window.addEventListener('hashchange', () => {
 
 state.route = window.location.hash.slice(1) || 'hub';
 render();
+let pushFor = null; // the user whose notification schedule has been read
 S.init((status) => {
     // Signed out (or not yet verified): forget the screen that was open, so the next sign-in starts on All tools.
     // A page reload while signed in never passes through here, so it stays on the screen it was on.
@@ -2101,12 +2224,22 @@ S.init((status) => {
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     state.status = status;
+    if (status === 'ready' && !S.isDemo) {
+        if (pushFor !== S.user.uid) {
+            pushFor = S.user.uid;
+            S.loadPush().then(() => (render(), syncPushSoon())).catch((e) => console.error(e));
+        } else {
+            syncPushSoon();
+        }
+    } else if (status !== 'ready') {
+        pushFor = null;
+    }
     render();
 }).catch((e) => {
     console.error(e);
     app.innerHTML = `<div class="loading"><p>Could not start: ${esc(e.message)}</p></div>`;
 });
 
-if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
 }

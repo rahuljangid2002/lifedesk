@@ -60,7 +60,7 @@ export async function init(cb) {
     ]);
     const fbApp = app.initializeApp(firebaseConfig);
     const db = fs.initializeFirestore(fbApp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }, firestoreDatabase);
-    fb = { auth, fs, db, handle: auth.getAuth(fbApp) };
+    fb = { auth, fs, db, app: fbApp, handle: auth.getAuth(fbApp) };
     // Coming back from the link in a sign-in email
     if (auth.isSignInWithEmailLink(fb.handle, window.location.href)) {
         const email = localStorage.getItem(EMAIL_KEY) || window.prompt('Confirm your email to finish signing in');
@@ -435,8 +435,66 @@ export async function deleteAccount() {
     unsubscribe.forEach((fn) => fn());
     unsubscribe = [];
     await fb.fs.deleteDoc(vaultRef()).catch(() => {});
+    await fb.fs.deleteDoc(pushRef()).catch(() => {});
     localStorage.removeItem(keySlot());
     await fb.auth.deleteUser(current);
+}
+
+// ---------- push notifications ----------
+// The one record kept unencrypted, and only after the user turns notifications on: users/{uid}/push/schedule with
+// the devices' notification addresses (tokens), the time zone, and the due dates of open reminders (no names,
+// amounts or notes). The hourly sender (backend/push-sender.gs) reads it to know when to notify; it writes lastSent.
+const pushRef = () => fb.fs.doc(fb.db, 'users', user.uid, 'push', 'schedule');
+export let push = null; // the schedule as last read or written, or null when notifications are off on every device
+
+export async function loadPush() {
+    push = null;
+    if (!isDemo && user) {
+        const snap = await fb.fs.getDoc(pushRef());
+        push = snap.exists() ? snap.data() : null;
+    }
+    return push;
+}
+
+async function messaging() {
+    const m = await import(`${SDK}/firebase-messaging.js`);
+    if (!(await m.isSupported())) {
+        throw new Error('This browser cannot receive notifications.');
+    }
+    return { m, handle: m.getMessaging(fb.app) };
+}
+
+/** Asks Firebase for this device's notification address. vapidKey empty = Firebase's default key. */
+export async function pushToken(vapidKey) {
+    const reg = await navigator.serviceWorker.register('sw.js');
+    await navigator.serviceWorker.ready;
+    const { m, handle } = await messaging();
+    return m.getToken(handle, { serviceWorkerRegistration: reg, ...(vapidKey ? { vapidKey } : {}) });
+}
+
+/** Adds this device and saves the settings and dates (merged, so the sender's lastSent stays). */
+export async function pushAdd(token, fields) {
+    await fb.fs.setDoc(pushRef(), { ...fields, tokens: fb.fs.arrayUnion(token), updated: Date.now() }, { merge: true });
+    return loadPush();
+}
+
+/** Saves settings or dates without touching the devices. */
+export async function pushUpdate(fields) {
+    await fb.fs.setDoc(pushRef(), { ...fields, updated: Date.now() }, { merge: true });
+    push = { ...(push || {}), ...fields };
+}
+
+/** Removes this device; with no device left, the whole record (and its dates) is deleted. */
+export async function pushRemove(token) {
+    if (token) {
+        await fb.fs.setDoc(pushRef(), { tokens: fb.fs.arrayRemove(token), updated: Date.now() }, { merge: true });
+        messaging().then(({ m, handle }) => m.deleteToken(handle)).catch(() => {});
+    }
+    const left = await loadPush();
+    if (!left || !(left.tokens || []).length) {
+        await fb.fs.deleteDoc(pushRef()).catch(() => {});
+        push = null;
+    }
 }
 
 // ---------- backup ----------

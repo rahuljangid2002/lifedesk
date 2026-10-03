@@ -36,3 +36,29 @@ stops at 90), 3 codes per address per 15 minutes.
 
 After editing the code: **Deploy → Manage deployments → pencil → Version: New version → Deploy**.
 The URL stays the same.
+
+# Push notifications (Google Apps Script, every hour)
+
+Renewal reminders and a start-of-month nudge reach the phone or computer even when LifeDesk is closed. The app
+asks for permission and saves the device's notification address with the reminders' due dates (no names, amounts
+or notes) in `users/{uid}/push/schedule`. `push-sender.gs` runs every hour, and from 9 in the morning in each
+user's own time zone sends what is due that day through Firebase Cloud Messaging. Both are free.
+
+It runs as **you** and must be set up from the Google account that owns the Firebase project. No private key.
+On iPhone and iPad, notifications work only after LifeDesk is added to the Home Screen (iOS 16.4 or later).
+
+## Set up (about 10 minutes, once)
+
+1. https://script.google.com (owner account) → **New project** → name it `LifeDesk push sender`.
+2. Replace `Code.gs` with all of `push-sender.gs`.
+3. **Project Settings** (gear) → tick **Show "appsscript.json" manifest file in editor**. In **Editor**, replace
+   `appsscript.json` with all of `push-sender.appsscript.json`. Save.
+4. Function drop-down → **setup** → **Run** → allow the permissions (same "unsafe" warning as the email-code
+   script: **Advanced** → **Go to LifeDesk push sender** → **Allow**).
+   The log must say `OK: the database can be read, and sendDue now runs every hour.`
+   If it says PROBLEM, copy that line to Claude.
+5. In LifeDesk (signed in): **Account & backup → Notifications → Turn on for this device**, allow notifications.
+6. Back in the script: function **sendTest** → **Run**. The device should show "LifeDesk test" within a minute.
+
+Nothing to deploy: the timer (Triggers, clock icon) runs `sendDue` every hour. Words of the messages: `TEXT` at
+the top of the script. To stop all notifications: delete the trigger.
