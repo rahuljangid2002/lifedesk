@@ -300,6 +300,46 @@ function sendDueOnce() {
   sendDue();
 }
 
+/**
+ * Run by hand: how many people use LifeDesk – counts only, no emails or names. Sign-ups per day (last 30 days),
+ * sign-in method, who came back, who finished set-up (data passphrase) and who turned notifications or email on.
+ * Automatic test accounts (@example.com) are left out.
+ */
+function userStats() {
+  const users = [];
+  let offset = 0;
+  for (;;) {
+    const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/projects/' + PROJECT_ID + '/accounts:query', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJECT_ID },
+      payload: JSON.stringify({ returnUserInfo: true, limit: '500', offset: String(offset) })
+    });
+    if (res.getResponseCode() !== 200) throw new Error('Cannot list users (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 300));
+    const page = JSON.parse(res.getContentText()).userInfo || [];
+    page.forEach(function (u) { if (!/@example\.com$/i.test(u.email || '')) users.push(u); });
+    if (page.length < 500) break;
+    offset += 500;
+  }
+  const tz = 'Asia/Kolkata';
+  const day = function (ms) { return Utilities.formatDate(new Date(Number(ms)), tz, 'yyyy-MM-dd'); };
+  const now = Date.now();
+  const since = function (days) { return now - days * 86400000; };
+  const google = users.filter(function (u) { return (u.providerUserInfo || []).some(function (p) { return p.providerId === 'google.com'; }); }).length;
+  const back = users.filter(function (u) { return Number(u.lastLoginAt) - Number(u.createdAt) > 3600000; }).length;
+  const active7 = users.filter(function (u) { return Number(u.lastLoginAt) > since(7); }).length;
+  const count = function (collection) {
+    const r = firestore('post', ':runQuery', { structuredQuery: { from: [{ collectionId: collection, allDescendants: true }], select: { fields: [{ fieldPath: '__name__' }] } } });
+    return r.getResponseCode() === 200 ? JSON.parse(r.getContentText()).filter(function (x) { return x.document; }).length : 'unknown';
+  };
+  const perDay = {};
+  users.filter(function (u) { return Number(u.createdAt) > since(30); }).forEach(function (u) { const d = day(u.createdAt); perDay[d] = (perDay[d] || 0) + 1; });
+  Logger.log('People with an account: ' + users.length + ' (Google ' + google + ', email + password ' + (users.length - google) + ')');
+  Logger.log('Joined in the last 7 days: ' + users.filter(function (u) { return Number(u.createdAt) > since(7); }).length + ' · last 30 days: ' + users.filter(function (u) { return Number(u.createdAt) > since(30); }).length);
+  Logger.log('Signed in during the last 7 days: ' + active7 + ' · came back after their first visit: ' + back);
+  Logger.log('Finished set-up (data passphrase): ' + count('vault') + ' · notifications or email on: ' + count('push') + ' (test accounts included in these two)');
+  Logger.log('Sign-ups per day (last 30 days): ' + (Object.keys(perDay).sort().map(function (d) { return d + ': ' + perDay[d]; }).join(', ') || 'none'));
+}
+
 // ---------- Google services ----------
 
 function firestore(method, path, body) {
