@@ -270,6 +270,35 @@ function sendDueNowTest() {
   }
 }
 
+/**
+ * Run by hand to test the REAL hourly job: clears today's "already sent" mark of the user who changed their
+ * notification settings most recently, and runs sendDue once, 5 minutes from now (the hourly timer keeps running).
+ * Add or change a reminder in LifeDesk first, e.g. one due tomorrow.
+ */
+function testRealRunIn5Minutes() {
+  const list = allSchedules().sort(function (a, b) { return (b.data.updated || 0) - (a.data.updated || 0); });
+  if (!list.length) {
+    throw new Error('Nobody has turned notifications on yet. Turn them on in LifeDesk (Account → Notifications) first.');
+  }
+  firestore('patch', '/' + list[0].path + '?updateMask.fieldPaths=lastSent', { fields: { lastSent: { stringValue: '' } } });
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendDueOnce') ScriptApp.deleteTrigger(t);
+  });
+  const at = new Date(Date.now() + 5 * 60 * 1000);
+  ScriptApp.newTrigger('sendDueOnce').timeBased().at(at).create();
+  Logger.log('Today\'s mark cleared for ' + (list[0].data.tokens || []).length + ' device(s)' + (list[0].data.email ? ' + email' : '') +
+    '. The real job runs once at about ' + Utilities.formatDate(at, list[0].data.tz || 'UTC', 'HH:mm') + ' (your time); Google may start it up to a few minutes late.' +
+    ' If the hourly job runs first, it sends instead – either way you get one message. See Executions (left menu) for its log.');
+}
+
+/** The one-off run made by testRealRunIn5Minutes: removes its own timer, then runs the real job. */
+function sendDueOnce() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendDueOnce') ScriptApp.deleteTrigger(t);
+  });
+  sendDue();
+}
+
 // ---------- Google services ----------
 
 function firestore(method, path, body) {
