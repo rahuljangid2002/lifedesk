@@ -425,39 +425,3 @@ export function validateEntry(e, data) {
     }
     return null;
 }
-
-// ---------- renewal reminders ----------
-export const REMINDER_KINDS = ['Insurance', 'Subscription', 'Document', 'Vehicle', 'Home & utilities', 'Warranty', 'Membership', 'Other'];
-/** How often a reminder repeats, in months (0 = one time only). */
-export const REPEATS = [[0, 'One time'], [1, 'Every month'], [3, 'Every 3 months'], [6, 'Every 6 months'], [12, 'Every year'], [24, 'Every 2 years'], [36, 'Every 3 years'], [60, 'Every 5 years'], [120, 'Every 10 years']];
-export const REMIND_DAYS = [1, 3, 7, 15, 30, 60, 90];
-export const repeatLabel = (months) => (REPEATS.find(([m]) => m === Number(months)) || [0, 'One time'])[1];
-
-/** Whole days from one date to another (negative when `to` is earlier). */
-export function daysBetween(from, to) {
-    const t = (iso) => Date.UTC(...iso.split('-').map((n, i) => Number(n) - (i === 1 ? 1 : 0)));
-    return Math.round((t(to) - t(from)) / 86400000);
-}
-
-/**
- * Where a reminder stands today: 'done' (one-time, renewed), 'overdue' (due date passed), 'soon' (inside its
- * remind-me window) or 'later'. days = days left until the due date (negative when overdue).
- */
-export function reminderStatus(r, today) {
-    if (r.done) {
-        return { state: 'done', days: null };
-    }
-    const days = daysBetween(today, r.due);
-    const state = days < 0 ? 'overdue' : days <= num(r.remindDays ?? 30) ? 'soon' : 'later';
-    return { state, days };
-}
-
-/** The due date after renewing: one cycle after the current due date, or null for a one-time reminder. */
-export function nextDue(r) {
-    return num(r.repeat) > 0 ? addMonthsToDate(r.due, num(r.repeat)) : null;
-}
-
-/** What the repeating reminders cost over a year (one-time ones are left out). */
-export function yearlyCost(reminders) {
-    return Math.round(reminders.filter((r) => !r.done && num(r.repeat) > 0).reduce((s, r) => s + (num(r.amount) * 12) / num(r.repeat), 0) * 100) / 100;
-}

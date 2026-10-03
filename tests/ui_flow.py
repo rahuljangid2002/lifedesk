@@ -32,7 +32,7 @@ with sync_playwright() as p:
     check('first visit asks for the currency', pg.locator('#welcome-currency option').count() > 100, str(pg.locator('#welcome-currency option').count()))
     pg.locator('#welcome-currency').select_option('USD'); pg.get_by_role('button', name='Continue').click()
     pg.wait_for_selector('.tool')
-    check('start screen lists Money and Renewal reminders', pg.locator('a.tool', has_text='Money').count() == 1 and pg.locator('a.tool', has_text='Renewal reminders').count() == 1)
+    check('start screen lists Money and a coming-soon tool', pg.locator('a.tool', has_text='Money').count() == 1 and pg.locator('.tool.soon').count() == 1)
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
 
@@ -263,7 +263,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#more'); pg.get_by_role('button', name='Remove sample data').click()
     pg.wait_for_selector('button:has-text("Load sample data")')
     after = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
-    check('sample removed: own entries untouched, sample loans, assets and reminders gone', len(after['entries']) == before and not after.get('loans') and not after.get('assets') and not after.get('reminders') and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
+    check('sample removed: own entries untouched, sample loans and assets gone', len(after['entries']) == before and not after.get('loans') and not after.get('assets') and not [a for a in after['accounts'] if a['id'].startswith('sample-')] and not [b for b in after['budgets'] if b.get('sample')], f"{len(after['entries'])} entries")
 
     # Appearance: Light / Dark / System
     bg = lambda: pg.evaluate("getComputedStyle(document.body).backgroundColor")
