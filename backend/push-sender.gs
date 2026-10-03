@@ -13,8 +13,8 @@
  *   lastSent   the user's local date this script last handled them (written here, so nobody gets a second message)
  *
  * Once a day per user, from 9 in the morning their time, it sends what is due:
- *   - a renewal reminder when one enters its remind-me window, the day before, on the day, the day after
- *     (overdue) and then once a week while it stays overdue;
+ *   - renewal reminders every day from each reminder's remind-me day, through its due date, and every day after
+ *     while it is overdue, until the user marks it Renewed in LifeDesk;
  *   - on the 1st of the month, a start-of-month nudge.
  * The words are in TEXT below.
  * Messages go through Firebase Cloud Messaging (free), as urgent, so phones deliver them at once and can wake the screen. Devices that no longer exist are removed from tokens.
@@ -61,12 +61,13 @@ function daysBetween(from, to) {
   return Math.round((t(to) - t(from)) / 86400000);
 }
 
-/** True on the days a reminder should notify: window start, day before, the day, day after, then weekly. */
+/**
+ * True on the days a reminder should notify: every day from its remind-me day (remind days before the due date)
+ * through the due date, and every day after it while it stays overdue – until the user presses Renewed in
+ * LifeDesk, which moves the due date (or ends a one-time reminder) and so stops it.
+ */
 function notifyToday(days, remind) {
-  if (days >= 0) {
-    return days === remind || days === 1 || days === 0;
-  }
-  return (-days) % 7 === 1;
+  return days <= Math.max(0, remind);
 }
 
 /** "Sat, 10 Oct" from "2026-10-10". */

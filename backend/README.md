@@ -42,7 +42,8 @@ The URL stays the same.
 Renewal reminders and a start-of-month nudge reach the phone or computer even when LifeDesk is closed. The app
 asks for permission and saves the device's notification address with the reminders' due dates (no names, amounts
 or notes) in `users/{uid}/push/schedule`. `push-sender.gs` runs every hour, and from 9 in the morning in each
-user's own time zone sends what is due that day through Firebase Cloud Messaging. Both are free.
+user's own time zone sends what is due that day through Firebase Cloud Messaging (and by email, if the user
+turned email on): every day from each reminder's remind-me day until the user marks it Renewed. Both are free.
 
 It runs as **you** and must be set up from the Google account that owns the Firebase project. No private key.
 On iPhone and iPad, notifications work only after LifeDesk is added to the Home Screen (iOS 16.4 or later).

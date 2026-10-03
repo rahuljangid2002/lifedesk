@@ -753,7 +753,7 @@ function notificationsCard() {
         ${mail ? `<label class="check"><input type="checkbox" data-action="emailDetails" ${p.emailDetails ? 'checked' : ''} ${busy}> Include reminder names and amounts in emails</label>
             <small>${p.emailDetails ? 'Names and amounts of your reminders are kept readable for the email sender. The rest of your data stays encrypted.' : 'Off: emails say when a renewal is due, not which one, because names and amounts are encrypted.'}</small>` : ''}
         ${on || mail ? `<b class="sub">What to send</b>
-            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: when one comes up, the day before, on the day, and if it is overdue</label>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: every day from the remind-me day until you press Renewed (also while overdue)</label>
             <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>` : ''}
         <small>Privacy: to know when to remind you, the due dates of your reminders are kept without encryption${p.emailDetails ? ', and so are their names and amounts (you chose to include them in emails)' : ', with nothing else: no names, amounts or notes'}. All of it is deleted when you turn off notifications on your last device and email.</small>
     </section>`;
@@ -839,7 +839,7 @@ function renewals() {
         ${!S.isDemo && !(pushDevice() && S.push) && c.total ? `<a class="notice" href="#more">${icon('bell')} Get a notification when a renewal is due, even with LifeDesk closed – turn on under Account</a>` : ''}
         ${c.total ? lists : `<div class="empty-state">${icon('bell')}<b>No reminders yet</b><small>Add insurance, subscriptions, documents like a passport or licence, a vehicle service or a warranty. LifeDesk shows each one when it is coming up.</small></div>`}
         ${done.length ? `<div class="toolbar"><button class="btn ghost" data-action="remShowDone">${st.showDone ? 'Hide' : 'Show'} done · ${done.length}</button></div>${st.showDone ? `<section class="list atable">${done.map(row).join('')}</section>` : ''}` : ''}
-        <small>A reminder shows under Due soon from the number of days before its date you chose. Repeating ones move to their next date when you press Renewed.</small>
+        <small>A reminder shows under Due soon from the number of days before its date you chose. With notifications or email on (Account → Notifications), you get a reminder every morning from then until you press Renewed. Repeating ones then move to their next date.</small>
     </main>`;
 }
 
