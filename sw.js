@@ -39,7 +39,7 @@ self.addEventListener('push', (event) => {
     }
     const d = { ...(p.notification || {}), ...(p.data || {}) };
     event.waitUntil(self.registration.showNotification(d.title || 'LifeDesk', {
-        body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'lifedesk', data: { link: d.link || './' }
+        body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'lifedesk', renotify: true, data: { link: d.link || './' } // renotify: a newer one with the same tag pops up again instead of replacing the old one quietly
     }));
 });
 // Tapping it opens LifeDesk on that screen, reusing an open window when there is one.
