@@ -50,6 +50,24 @@ OVERLAY = """
 """
 
 
+VOICE_STAND = """
+window.__say = [];
+class FakeRecognition {
+    start() { setTimeout(() => this.onstart && this.onstart(), 20); this._t = setTimeout(() => {
+        const text = window.__say.shift();
+        if (text === undefined || text === '') { return; }
+        const result = [{ transcript: text }]; result.isFinal = true;
+        this.onresult && this.onresult({ resultIndex: 0, results: [result] });
+        this.onend && this.onend();
+    }, 2600); }
+    stop() { clearTimeout(this._t); this.onend && this.onend(); }
+    abort() { clearTimeout(this._t); }
+}
+window.SpeechRecognition = FakeRecognition; window.webkitSpeechRecognition = FakeRecognition;
+Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { cancel() {}, getVoices() { return []; }, speak(u) { setTimeout(() => u.onend && u.onend(), 40); } } });
+"""
+
+
 def caption(page, text):
     page.evaluate("t => { const c = document.getElementById('demo-cap'); if (c) { c.textContent = t; c.style.display = t ? 'block' : 'none'; } }", text)
 
@@ -97,7 +115,7 @@ display:flex;align-items:center;justify-content:center;box-shadow:0 20px 50px rg
 
 # ---------------- scenes ----------------
 def s_title(page):
-    start(page, card('title', 'LifeDesk', 'One login. Your everyday tools. Money first.',
+    start(page, card('title', 'LifeDesk', 'One login. Your everyday tools.',
                      ['Works in any browser', 'Phone and desktop', 'Any currency', 'Encrypted on your device', 'Free to host']), 0.6)
     time.sleep(3)  # the logo moves slightly, so the recorder keeps capturing frames of the card
 
@@ -131,12 +149,12 @@ def s_login(page):
 
 def s_hub(page):
     start(page, DEMO + '#hub')
-    caption(page, 'All tools: Money today, renewal reminders next')
+    caption(page, 'All tools: Account Management and Renewal reminders')
     time.sleep(4)
     page.locator('a.tool').first.hover()
     time.sleep(2.5)
     tap(page, page.locator('a.tool').first, 1.2)
-    caption(page, 'Money home: this month at a glance')
+    caption(page, 'Home: this month at a glance')
     time.sleep(3.5)
     scroll(page, 330)
     caption(page, 'Net worth: balance, money owed to you and assets, less loans')
@@ -332,12 +350,58 @@ def s_mobile(page):
     time.sleep(3.5)
     scroll(page, 500, steps=25)
     time.sleep(1.5)
-    tap(page, page.locator('.tabbar a', has_text='Add'), 2.5)
+    tap(page, page.locator('.tabbar a.add'), 1.8)
+    caption(page, 'The plus button: type an entry, or speak it')
+    time.sleep(2.2)
+    tap(page, page.get_by_role('menuitem', name='Type an entry'), 2.5)
+    caption(page, '')
     tap(page, page.locator('.tabbar a', has_text='Daily'), 2.5)
     nav(page, 'insights', 1.5)
     caption(page, 'Dashboards on the phone')
     scroll(page, 700, steps=35)
     time.sleep(2.5)
+
+
+def s_voice(page):
+    start(page, DEMO + '#home')
+    account = page.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).accounts.filter(a => a.kind === 'bank' && !a.closed)[0].name")
+    page.evaluate('(l) => { window.__say = l; }', [f'Spent 450 on groceries from {account} and 200 on petrol from cash'])
+    caption(page, 'Voice entry: say it instead of typing it, in English or Hindi')
+    time.sleep(3)
+    tap(page, page.locator('.shortcut', has_text='Voice entry'), 1.2)
+    caption(page, '"Spent 450 on groceries from the bank, and 200 on petrol from cash"')
+    page.wait_for_selector('.voice-review', timeout=20000)
+    time.sleep(1.5)
+    caption(page, 'Two entries understood. Nothing is saved until you confirm')
+    time.sleep(4.5)
+    tap(page, page.locator('.voice-review .row .icon-btn.edit').first, 1.2)
+    caption(page, 'Change the amount, category, account or date first')
+    time.sleep(3.5)
+    tap(page, page.get_by_role('button', name='Done'), 1.2)
+    tap(page, page.locator('.voice').get_by_role('button', name='Save all 2'), 1)
+    caption(page, 'Saved, with Undo')
+    time.sleep(4)
+
+
+def s_renew(page):
+    start(page, DEMO + '#renewals')
+    if page.get_by_role('button', name='Add sample reminders').count():
+        tap(page, page.get_by_role('button', name='Add sample reminders'), 1.5)
+    page.evaluate('window.scrollTo(0, 0)')
+    caption(page, 'Renewal reminders: insurance, subscriptions, documents and bills in one list')
+    time.sleep(5)
+    scroll(page, 380)
+    caption(page, 'Overdue, due soon and later, with the yearly cost')
+    time.sleep(4)
+    scroll(page, -380)
+    tap(page, page.get_by_role('button', name='Renewed').first, 1.5)
+    caption(page, 'Renewed: moves to the next date and can record the payment')
+    time.sleep(4.5)
+    tap(page, page.get_by_role('button', name='Cancel').first, 1)
+    nav(page, 'more', 1.2)
+    page.locator('.card', has_text='Notifications').first.scroll_into_view_if_needed()
+    caption(page, 'A notification and an email every morning until it is renewed')
+    time.sleep(5)
 
 
 def s_outro(page):
@@ -347,10 +411,11 @@ def s_outro(page):
 
 
 SCENES = [
-    ('title', s_title, 'card', "This is LifeDesk: one login for your everyday tools. The first tool is Money, a personal finance app that runs in any browser, on a phone or a desktop, in any currency. Everything in this demo is made-up sample data."),
+    ('title', s_title, 'card', "This is LifeDesk: one login for your everyday tools. The first tool is Account Management, a personal finance app that runs in any browser, on a phone or a desktop, in any currency. Everything in this demo is made-up sample data."),
     ('login', s_login, 'login', "You sign in with an email and password, or with Google. A new account confirms its email with a six digit code. Then you choose a data passphrase. Your data is encrypted on your own device before it is saved, so nobody else can read it, not even the people who run LifeDesk. You also get a recovery code, shown once, in case you forget the passphrase."),
-    ('hub', s_hub, 'app', "After signing in, you land on All tools. Money is ready today, and renewal reminders are next. Money home shows this month's income, expense and net balance. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
+    ('hub', s_hub, 'app', "After signing in, you land on All tools. There are two tools: Account Management, and Renewal reminders. The home screen shows this month's income, expense and net balance. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
     ('add', s_add, 'app', "Add Entry handles eight kinds of entry in one form. Type the amount and a description, and the category is filled in for you, from keywords and from what you chose before. Pick the account, and save. Every recent entry has a pencil, so a mistake can be corrected, or deleted, and all balances follow."),
+    ('voice', s_voice, 'voice', "You can also speak an entry, in English or Hindi. Say several entries in one sentence. LifeDesk shows what it understood, asks for anything that is missing, and saves nothing until you confirm. You can change an entry first, and undo it after saving. Voice entry works in Chrome, Edge and Safari."),
     ('emi', s_emi, 'app', "When you buy something valuable, choose Asset. If you bought it on E M I, tick the box and enter the E M I and the number of months. The interest rate is worked out as you type. Saving creates the asset and its loan. My assets then shows what each thing cost, what it is worth, the loan left, and the interest paid and still to pay."),
     ('pay', s_pay, 'app', "The Payments screen puts every E M I and credit card bill in one place. Paying an E M I records it as an expense. A card bill can be paid in full, or in part, and everything paid is listed below."),
     ('daily', s_daily, 'app', "Daily Expenses lists every entry date by date, with the total for each day, the average per day and the highest day. You can filter by category, account or text, or switch between spending, income and all entries."),
@@ -359,8 +424,9 @@ SCENES = [
     ('reports', s_reports, 'app', "There are eighteen reports. Choose a report and a period, such as last month or the whole year. Each report is a table with totals, and it can be downloaded as a file that opens in any spreadsheet."),
     ('people', s_people, 'app', "People and Loans shows who owes you, and whom you owe. Open a person to record money returned, or lent again, in one step, and to see the full history."),
     ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance."),
+    ('renew', s_renew, 'app', "Renewal reminders keeps insurance, subscriptions, documents and bills in one list, grouped into overdue, due soon and later. Press Renewed and it moves to its next date. With notifications turned on, you get a reminder on your phone, and by email if you like, every morning until it is renewed."),
     ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You can change your currency, and either convert every amount at today's exchange rate, or keep the numbers as they are. You can also add categories, download a backup, and load or remove the sample data."),
-    ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a bar at the bottom. Add it to the home screen, and it opens like any other app."),
+    ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a floating bar at the bottom, and screens that slide like a phone's own apps. The plus button adds an entry by typing or by voice. Add it to the home screen, and it opens like any other app."),
     ('outro', s_outro, 'card', "That is LifeDesk. Your data is encrypted and private to you, and it is free to host. Thank you for watching."),
 ]
 
@@ -393,8 +459,10 @@ def record(pw, name, fn, kind):
     vdir = os.path.join(WORK, f'v_{name}')
     shutil.rmtree(vdir, ignore_errors=True)
     ctx = browser.new_context(viewport={'width': vw, 'height': vh}, record_video_dir=vdir, record_video_size={'width': out_w, 'height': out_h}, device_scale_factor=MSCALE if MOBILE else 1,
-                              storage_state=STATE if kind in ('app', 'phone') else None, color_scheme='light')
+                              storage_state=STATE if kind in ('app', 'phone', 'voice') else None, color_scheme='light')
     ctx.add_init_script(OVERLAY)
+    if kind == 'voice':
+        ctx.add_init_script(VOICE_STAND)  # the browser's listening and speaking are replaced, so the scene needs no microphone
     if kind == 'login':
         # the code email is not really sent in the demo: the code service is answered here, and a throw-away
         # account is created so the real passphrase screens can be shown (deleted again in main)

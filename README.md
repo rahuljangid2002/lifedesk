@@ -2,26 +2,31 @@
 
 **Live:** https://rahuljangid2002.github.io/lifedesk/ · demo without login: add `?demo=1`
 
-One login, several everyday tools. The first tool is **Money** (the same personal finance app as the Salesforce
-version); **Renewal reminders** and others come later. It is a web app that installs on a phone like an app.
+One login, several everyday tools: **Account Management** (called Money at first; the same personal finance app as the
+Salesforce version) and **Renewal reminders**. It is a web app that installs on a phone like an app, with an
+iPhone-like look, voice entry in English and Hindi, and reminders by notification and email.
 Plain HTML, CSS and JavaScript: no build step, so it can be hosted free on GitHub Pages.
 
-## What is in version 1
+## What is in it
 
-The start screen lists the tools. Money has these screens:
+The start screen lists the tools. Account Management has these screens:
 
 | Screen | What it does |
 |---|---|
-| Money Home | This month's income, expense and net balance; money in hand; accounts; budget progress; people |
+| Home | This month's income, expense and net balance; money in hand; accounts; budget progress; people |
 | Add Entry | Expense, Income, Transfer, Lent, Got Back, Borrowed, Repaid; category suggested from the description; recent entries with edit and delete |
 | Daily Expenses | Every entry date by date with the day's total; a month or custom dates; filters and search |
 | Budget | Amount per category per month; last month and 3-month average; copy last month; tap a category to see its expenses |
 | Payments | EMIs (due, overdue, pay early) and credit card bills (full or part) in one place, with what was paid recently. An EMI paid is an expense; a card bill is a transfer |
 | Dashboards | Monthly (opening and closing balance, income, expense, savings, spend by category, budget vs actual, daily spend, spend by account, top 10 expenses), Yearly (income vs expense by month, net balance trend, top categories, income by source; the year can start in any month) and Balances (by account, by card, by person) |
-| Reports | 15 reports as tables with totals and CSV download: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, all entries |
+| Reports | 18 reports as tables with totals and CSV download: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, all entries |
 | People & Loans | Who owes you and whom you owe; history; quick "got back / gave more / paid back / borrowed more"; status |
 | My Accounts | Banks, wallets and credit cards with limits; close or delete; pay a card bill in full or in part |
 | Account | Currency; add categories; download or restore a backup file; **load or remove sample data** (made-up history from 1 March 2025 to today); sign out; delete my account |
+| Voice entry | Speak an entry (English or Hindi) from the + button, "Speak it" on Add Entry or the Home shortcut; several entries in one sentence; asks for what is missing; nothing is saved before you confirm; edit first, Undo after. Uses the browser's own speech recognition (Chrome, Edge, Safari) |
+| Renewal reminders (second tool) | Insurance, subscriptions, documents, warranties and bills with a due date, repeat and "remind me … days before"; Overdue / Due soon / Later; Renewed moves to the next date and can record the payment |
+| Notifications | Account → Notifications: push notifications per device and an optional email, every morning from the chosen day until Renewed; a start-of-month reminder |
+| Offline | A screen when the connection drops (Try again / Continue offline); changes are sent when back online |
 
 Net balance = bank + cash − credit card owed − money owed to people.
 
@@ -107,11 +112,13 @@ Sign-in method, and set `phoneOtp: true` in `js/config.js` (the login screen the
 
 ```
 index.html            page shell
-css/app.css           styling
+css/app.css           layout and colour tokens
+css/ios.css           the look and the movement (large titles, frosted bars, sheets, screen transitions, offline screen, toasts, voice sheet)
 js/config.js          Firebase settings and which sign-in buttons to show
 js/store.js           data layer: demo (browser) or Firebase (login + Firestore)
 js/logic.js           calculations: balances, month summary, budget, people, validation
-js/app.js             start screen (TOOLS), Money screens and navigation
+js/app.js             start screen (TOOLS), all screens, navigation, toasts, notifications, the voice sheet
+js/voice.js           voice entry rules (no screen code): numbers, type, account, category, date, questions, yes / no
 js/seed.js            starter categories with keywords
 js/icons.js           line icons
 js/reports.js         figures for dashboards and reports (pure calculations), CSV
@@ -119,18 +126,20 @@ js/charts.js          small chart kit (bars, columns, line, meters; table twin a
 js/insights.js        Dashboards and Reports screens
 js/sample.js          sample data generator (ids start with "sample-")
 firestore.rules       database security rules (paste into Firebase)
-backend/              Google Apps Script that emails and checks the sign-up codes
+backend/              Google Apps Scripts: sign-up codes (email-codes.gs) and the hourly reminder sender (push-sender.gs)
+tools/                local servers: serve_dev.py (127.0.0.1:8765, no cache), serve_app.py (app files only, for a phone test)
 sw.js, manifest.webmanifest, icons/   install on a phone and open offline
-tests/ui_flow.py      end-to-end check in demo mode
+tests/                ui_flow, renewals, offline, voice_rules, voice_ui, voice_close, add_steady (demo mode); live_login, encryption, push_live (real Firebase); push_rules
 ```
 
 ## Data layout (Firestore)
 
 Everything a user owns is under `users/{user id}/...`, and the rules give each user access to that area only.
-Money uses `accounts | categories | entries | people | budgets/{YYYY-MM}`, plus `settings/prefs` (currency). Balances are always calculated from the
+Account Management uses `accounts | categories | entries | people | budgets/{YYYY-MM} | loans | assets`, Renewal reminders uses `reminders`, plus `settings/prefs` (currency)
+and `push/schedule` (device tokens, time zone and reminder dates for the sender; the only document that is not encrypted). Balances are always calculated from the
 entries, so editing or deleting an entry can never leave a balance out of date.
 
-## Adding a tool later (e.g. renewal reminders)
+## Adding a tool (as Renewal reminders was)
 
 1. Give it its own collection names (e.g. `reminders`) and add them to `COLLECTIONS` in `js/store.js`.
 2. Put its calculations in their own file next to `js/logic.js`.
@@ -140,8 +149,12 @@ No database rule change is needed: the rules already cover everything under the 
 ## Test
 
 ```bash
-python3 -m http.server 8765 &
+python3 tools/serve_dev.py &                          # 127.0.0.1:8765, never cached
 ../3-Demo/demo/.venv/bin/python tests/ui_flow.py      # demo mode, every screen
 ../3-Demo/demo/.venv/bin/python tests/live_login.py   # real Firebase sign-up with a stand-in code service; deletes its test account
 ../3-Demo/demo/.venv/bin/python tests/encryption.py   # real Firebase: passphrase, what the database stores, second device, recovery
+../3-Demo/demo/.venv/bin/python tests/renewals.py     # renewal reminders
+../3-Demo/demo/.venv/bin/python tests/voice_ui.py     # voice entry with stand-ins for listening and speaking (also voice_rules, voice_close)
+../3-Demo/demo/.venv/bin/python tests/offline.py      # the offline screen
+../3-Demo/demo/.venv/bin/python tests/add_steady.py   # Add Entry stays steady
 ```

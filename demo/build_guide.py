@@ -22,9 +22,10 @@ DEMO = URL + '?demo=1'
 TODAY = datetime.date.today().strftime('%-d %B %Y')
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
-INTRO = ('LifeDesk is a web app with one login and several everyday tools. The first tool is Money: accounts, entries, daily expenses, '
-         'a monthly budget, people and loans, dashboards and reports. It works in any browser on a phone or a desktop, in any currency, '
-         'and can be added to a phone\'s home screen.')
+INTRO = ('LifeDesk is a web app with one login and several everyday tools. Account Management covers accounts, entries (typed or spoken), '
+         'daily expenses, a monthly budget, people and loans, dashboards and reports. Renewal reminders keeps insurance, subscriptions, '
+         'documents and bills in one list and reminds you by notification and email. It works in any browser on a phone or a desktop, '
+         'in any currency, and can be added to a phone\'s home screen.')
 NOTE = ('Every name, amount and date in this guide is made-up sample data, loaded with the app\'s own "Load sample data" button in demo mode. '
         'No real account or real figures are shown.')
 
@@ -44,9 +45,11 @@ SECTIONS = [
         'If both the passphrase and the recovery code are lost, the data cannot be recovered by anyone.',
     ]),
     ('All tools', ['03_hub'], [
-        'One login, several tools. Money is ready; Renewal reminders is shown as coming soon.',
-        'The Money tile shows the net balance and this month\'s spending.',
-        'On a wide screen the menu is on the left; on a phone there is a bar at the bottom.',
+        'One login, several tools: Account Management and Renewal reminders.',
+        'The Account Management tile shows the net balance and this month\'s spending; the Renewal reminders tile shows what is overdue or due soon.',
+        'A notice at the top appears when a renewal is overdue or due soon; tap it to open the list.',
+        'On a wide screen the menu is on the left; on a phone each tool has its own bar at the bottom.',
+        'The look is the same everywhere: a large title, white cards on a soft grey background, and screens that slide in and back like a phone\'s own apps.',
     ]),
     ('Money home and net worth', ['04_home'], [
         'This month\'s income, expense and net balance, with money in hand, card owed and money owed to people.',
@@ -59,6 +62,18 @@ SECTIONS = [
         'The category is filled in from the description: from keywords, from what you chose for the same or a similar description before, or from the category\'s name.',
         'Account chips show each balance; a credit card shows what it owes.',
         'Recent entries are listed beside the form. The pencil opens an entry to change or delete it; balances, budget and people follow.',
+        'A short message at the top confirms every save, change and delete.',
+        '"Speak it" starts voice entry (next page).',
+    ]),
+    ('Voice entry', ['m_voice_menu', 'm_voice', 'm_voice_edit'], [
+        'Say an entry instead of typing it, in English or Hindi: "Spent 450 on groceries from HDFC".',
+        'Start it from the + of the bottom bar (tap and choose "Speak an entry", or press and hold +), from "Speak it" on Add Entry, or from the Voice entry shortcut on Home.',
+        'Several entries can be said in one sentence. Anything missing is asked for: how much, which account, which category, who.',
+        'An account or bank that does not exist is not guessed: the assistant says so and asks which of your accounts to use.',
+        'Nothing is saved until you confirm: say "yes" or tap Save. The pencil changes the amount, category, account, date or description first; "make it 500" changes it by voice.',
+        'After saving, the message at the top has Undo.',
+        'The sheet closes with Close, a tap outside it, the phone\'s Back button or Escape.',
+        'It uses the browser\'s own speech recognition, so it works in Chrome and Edge (computer and Android) and Safari (iPhone, iPad, Mac), not in Firefox. The voice (female or male) is chosen on the Account page.',
     ]),
     ('Buying on EMI and assets', ['22_emi_form', '23_assets'], [
         'Choose Asset for something valuable you bought; the description becomes its name in My assets.',
@@ -108,6 +123,21 @@ SECTIONS = [
         'Choose the period: this month, last month, last 3 months, this year, last year, all time, or custom dates.',
         'Download CSV opens in any spreadsheet.',
     ]),
+    ('Renewal reminders', ['r_renewals', 'r_form'], [
+        'One list for things that come up for renewal: insurance, subscriptions, documents, warranties and bills.',
+        'Each reminder has a name, a kind, a due date, how often it repeats (or once), an optional amount, and how many days before to start reminding.',
+        'The list is grouped into Overdue, Due soon and Later, with the yearly cost of everything that repeats.',
+        '"Renewed" moves a repeating reminder to its next date and can record the payment as an expense at the same time. Undo is offered.',
+        'Sample reminders can be loaded to try it, and removed again.',
+    ]),
+    ('Notifications and email reminders', ['n_account'], [
+        'Account → Notifications: "Turn on for this device" lets this phone or computer receive reminders even when LifeDesk is closed. Each device is turned on separately.',
+        'Renewals: one reminder every morning (from 9 am, your time) from the day you chose until you press Renewed.',
+        'Start of the month: an optional reminder to look at the budget.',
+        'Email: the same reminders can also be sent to your sign-in address, with or without the names and amounts.',
+        'Notifications never contain your data: they only say that something is due. The names and amounts stay encrypted in the app.',
+        'A private or incognito window cannot receive notifications; the app says so.',
+    ]),
     ('People & Loans', ['16_people'], [
         'Who owes you and whom you owe, with the amount still outstanding and a status: Active, Settled or Bad Debt.',
         'Open a person for quick actions (got money back, gave more, paid back, borrowed more), phone, notes and the full history.',
@@ -122,13 +152,21 @@ SECTIONS = [
     ('Account, appearance and currency', ['19_account', '20_dark', '21_currency'], [
         'Appearance: System (follows the device), Light or Dark.',
         'Currency: pick another one and either convert every saved amount at today\'s exchange rate (the rate can be changed; a backup download is optional) or keep the numbers and change only the symbol.',
+        'Notifications and email reminders, and the voice of the voice assistant (female or male, with a "Hear it" button), are set here.',
         'Add your own categories with keywords for the suggestion.',
         'Download a backup file or restore one. Load or remove the sample data. Delete my account and data.',
     ]),
     ('On a phone', ['m_home', 'm_add', 'm_dash'], [
-        'The same app with a bar at the bottom: Home, Daily, Add, Budget, Account.',
+        'The same app with a floating bar at the bottom: Home, Daily, + (add), Budget, More.',
+        'Screens slide in from the right and back to the left; forms open as a sheet from the bottom; the title stays in a frosted bar when you scroll.',
+        'The Back link at the top, and the phone\'s own Back button, return to the screen you came from.',
         'Open the address in the phone\'s browser and choose "Add to Home screen": it opens like any other app.',
-        'The app\'s screens open without a connection; changes made offline are sent when the phone is back online.',
+    ]),
+    ('Without a connection', ['m_offline', 'm_offline_chip'], [
+        'When the connection drops, a screen says so, with "Try again" and "Continue offline".',
+        'Continue offline: the app keeps working with what is already on the device, and a small "Offline" chip stays in the corner.',
+        'Changes made offline are sent by themselves when the connection is back; a message confirms it.',
+        'The app also opens without a connection once it has been opened before on that device.',
     ]),
 ]
 
@@ -138,8 +176,28 @@ FACTS = [
     ('Sign-in', 'Email + password with an emailed code at sign-up, or Google'),
     ('Privacy', 'Data is encrypted on the device with a passphrase; only the user can read it. A lost passphrase and recovery code cannot be recovered.'),
     ('Cost', 'Free to use; hosted on free services'),
-    ('Not included yet', 'Changing an EMI plan, recurring bills, receipts, month-end email, mobile-number sign-in, renewal reminders'),
+    ('Voice entry', 'English and Hindi; Chrome, Edge and Safari (the browser does the listening)'),
+    ('Reminders', 'A notification and an optional email every morning until a renewal is marked Renewed'),
+    ('Not included yet', 'Changing an EMI plan, recurring bills, receipts, month-end email, mobile-number sign-in'),
 ]
+
+
+VOICE_STAND = """
+window.__say = [];
+class FakeRecognition {
+    start() { setTimeout(() => this.onstart && this.onstart(), 20); this._t = setTimeout(() => {
+        const text = window.__say.shift();
+        if (text === undefined || text === '') { return; }
+        const result = [{ transcript: text }]; result.isFinal = true;
+        this.onresult && this.onresult({ resultIndex: 0, results: [result] });
+        this.onend && this.onend();
+    }, 150); }
+    stop() { clearTimeout(this._t); this.onend && this.onend(); }
+    abort() { clearTimeout(this._t); }
+}
+window.SpeechRecognition = FakeRecognition; window.webkitSpeechRecognition = FakeRecognition;
+Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { cancel() {}, getVoices() { return []; }, speak(u) { setTimeout(() => u.onend && u.onend(), 40); } } });
+"""
 
 
 def take_shots():
@@ -193,12 +251,20 @@ def take_shots():
         pg.get_by_label('Kind of asset').select_option('Vehicle'); pg.get_by_label('Bought on EMI / finance').check(); time.sleep(0.2)
         pg.get_by_label('EMI per month').fill('5500'); pg.get_by_label('Number of EMIs').fill('24'); time.sleep(0.3)
         pg.locator('.pane-head').scroll_into_view_if_needed(); pg.mouse.wheel(0, 330); time.sleep(0.5); shot('22_emi_form')
+        go('renewals'); time.sleep(0.4)
+        if pg.get_by_role('button', name='Add sample reminders').count():
+            pg.get_by_role('button', name='Add sample reminders').click(); time.sleep(1)
+        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(4); shot('r_renewals')
+        pg.get_by_role('button', name='Add reminder').first.click(); time.sleep(0.8); shot('r_form')
+        pg.get_by_role('button', name='Cancel').first.click(); time.sleep(0.3)
         go('people'); pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.5); shot('16_people')
         go('accounts'); shot('17_accounts')
         pg.get_by_role('button', name='Pay bill').click(); pg.get_by_role('button', name='Partial').click()
         pg.locator('.a-panel input[type=number]').fill('5000'); pg.locator('.a-panel').scroll_into_view_if_needed(); time.sleep(0.4); shot('18_pay_card')
         pg.get_by_role('button', name='Cancel').click()
         go('more'); shot('19_account')
+        pg.locator('.card', has_text='Notifications').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('n_account')
+        pg.evaluate('window.scrollTo(0, 0)')
         pg.get_by_role('button', name='Dark', exact=True).click(); go('home'); shot('20_dark')
         go('more'); pg.get_by_role('button', name='Light', exact=True).click()
         pg.locator('[data-currency]').select_option('USD'); time.sleep(4); shot('21_currency')
@@ -211,6 +277,20 @@ def take_shots():
         mp = m.new_page()
         for route, name in (('home', 'm_home'), ('add', 'm_add'), ('insights', 'm_dash')):
             mp.goto(DEMO + '#' + route); time.sleep(0.9); shot(name, mp)
+        # without a connection
+        mp.goto(DEMO + '#home'); time.sleep(0.9); m.set_offline(True); mp.wait_for_selector('.offline'); time.sleep(0.8); shot('m_offline', mp)
+        mp.get_by_role('button', name='Continue offline').click(); time.sleep(0.6); shot('m_offline_chip', mp)
+        m.set_offline(False); time.sleep(1.5); m.close()
+
+        # voice entry: the browser's listening and speaking are replaced by stand-ins that "hear" the lines given here
+        v = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=3, storage_state=state, color_scheme='light')
+        v.add_init_script(VOICE_STAND)
+        vp = v.new_page(); vp.goto(DEMO + '#home'); vp.wait_for_selector('.tabbar'); time.sleep(4.5)
+        vp.locator('.tabbar a.add').click(); time.sleep(0.6); shot('m_voice_menu', vp)
+        account = vp.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).accounts.filter(a => a.kind === 'bank' && !a.closed)[0].name")
+        vp.evaluate('(l) => { window.__say = l; }', [f'Spent 450 on groceries from {account} and 200 on petrol from cash'])
+        vp.get_by_role('menuitem', name='Speak an entry').click(); vp.wait_for_selector('.voice-review'); time.sleep(0.8); shot('m_voice', vp)
+        vp.locator('.voice-review .row .icon-btn').first.click(); time.sleep(0.6); shot('m_voice_edit', vp)
         b.close()
 
 
@@ -221,7 +301,7 @@ def build_docx(path):
         s.left_margin = s.right_margin = Cm(1.8); s.top_margin = s.bottom_margin = Cm(1.6)
     d.styles['Normal'].font.name = 'Helvetica'; d.styles['Normal'].font.size = Pt(10.5)
     t = d.add_paragraph(); r = t.add_run('LifeDesk'); r.bold = True; r.font.size = Pt(30); r.font.color.rgb = navy
-    t = d.add_paragraph(); r = t.add_run('Demo Guide: one login, your everyday tools. Money first.'); r.font.size = Pt(15); r.font.color.rgb = blue
+    t = d.add_paragraph(); r = t.add_run('Demo Guide: one login, your everyday tools.'); r.font.size = Pt(15); r.font.color.rgb = blue
     t = d.add_paragraph(); r = t.add_run(f'Rahul Jangid · {TODAY}'); r.font.color.rgb = grey
     d.add_paragraph(INTRO)
     p = d.add_paragraph(); r = p.add_run(NOTE); r.italic = True; r.font.color.rgb = grey
@@ -270,7 +350,7 @@ img.trio {{ width: 54%; margin: 5px auto; }}
 .phones {{ display: flex; gap: 4%; justify-content: center; }} .phones img {{ width: 29%; margin: 8px 0; }}
 table {{ border-collapse: collapse; width: 100%; }} td {{ border: 1px solid #D8DDE6; padding: 7px 9px; vertical-align: top; }} td:first-child {{ font-weight: 700; width: 24%; background: #EAF1FF; }}
 </style></head><body>
-<div class="cover"><h1>LifeDesk</h1><p>Demo Guide: one login, your everyday tools. Money first.</p><p>Rahul Jangid · {e(TODAY)}</p></div>
+<div class="cover"><h1>LifeDesk</h1><p>Demo Guide: one login, your everyday tools.</p><p>Rahul Jangid · {e(TODAY)}</p></div>
 <p>{e(INTRO)}</p><p class="note">{e(NOTE)}</p><img src="file://{SHOTS}/04_home.png">"""]
     for i, (title, shots, points) in enumerate(SECTIONS, start=1):
         parts.append(f'<div class="sec"><h2>{i}. {e(title)}</h2><ul>' + ''.join(f'<li>{e(p)}</li>' for p in points) + '</ul>')
