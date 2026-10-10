@@ -32,6 +32,7 @@ with sync_playwright() as p:
     check('first visit asks for the currency', pg.locator('#welcome-currency option').count() > 100, str(pg.locator('#welcome-currency option').count()))
     pg.locator('#welcome-currency').select_option('USD'); pg.get_by_role('button', name='Continue').click()
     pg.wait_for_selector('.tool')
+    check('choosing the currency confirms with a message', 'Currency set to USD.' in pg.locator('.toast').inner_text())
     check('start screen lists Account Management and Renewal reminders', pg.locator('a.tool', has_text='Account Management').count() == 1 and pg.locator('a.tool', has_text='Renewal reminders').count() == 1)
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)

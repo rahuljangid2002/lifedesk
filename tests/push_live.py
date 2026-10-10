@@ -64,7 +64,10 @@ with sync_playwright() as p:
         ids = pg.evaluate("import('./js/store.js').then(S => S.data.reminders.map(r => r.id))")
         rems = [H.rest(f'{H.DOCS}/users/{uid}/reminders/{i}', token=token)[1] for i in ids]
         check('reminders themselves stay encrypted', len(rems) == 2 and all(list(r['fields'].keys()) == ['enc'] for r in rems))
-        pg.locator('.card', has_text='Notifications').screenshot(path=__import__('os').path.join(__import__('os').path.dirname(__file__), 'out', 'push_card_on.png'))
+        try:  # a picture for the record; the screen redraws when a message disappears, which can interrupt it
+            pg.locator('.card', has_text='Notifications').screenshot(path=__import__('os').path.join(__import__('os').path.dirname(__file__), 'out', 'push_card_on.png'), timeout=5000)
+        except Exception:
+            pass
         check('Account: card says on for this device, with both choices', pg.locator('.card', has_text='Notifications').locator('.pill').inner_text() == 'This device' and pg.locator('[data-pref]').count() == 2)
 
         # a message pushed to the service worker is shown, and opens the right screen

@@ -1302,6 +1302,7 @@ const actions = {
         await actions.vaultRun(async (v) => {
             v.code = await S.createPassphrase(v.pass);
             v.pass = v.pass2 = '';
+            toast('Passphrase set. Your data is now encrypted.');
         });
     },
     vaultSaved() {
@@ -1332,6 +1333,7 @@ const actions = {
         await actions.vaultRun(async (v) => {
             if (await S.unlock(v.pass)) {
                 v.pass = '';
+                toast('Unlocked.');
             } else {
                 toast('That passphrase is not right.', 'warn');
             }
@@ -1354,10 +1356,13 @@ const actions = {
     lockDevice() {
         if (window.confirm('Lock this device? Your data passphrase will be asked the next time. Nothing is deleted.')) {
             S.lockDevice();
+            toast('This device is locked.');
         }
     },
     async welcomeSave() {
-        await S.save('settings', { id: 'prefs', currency: document.getElementById('welcome-currency').value });
+        const currency = document.getElementById('welcome-currency').value;
+        await S.save('settings', { id: 'prefs', currency });
+        toast(`Currency set to ${currency}.`);
     },
 
     // add entry
@@ -1411,6 +1416,7 @@ const actions = {
         const a = byId(S.data.assets, el.dataset.id);
         if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
             await S.remove('assets', a.id);
+            toast(`${a.name} deleted.`);
         }
     },
     goBack(el, event) {
@@ -1462,7 +1468,7 @@ const actions = {
         const key = el.dataset.pref;
         const value = !(S.push && S.push[key] !== false);
         await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
-        render();
+        toast(`${key === 'renewals' ? 'Renewal reminders' : 'Start-of-month reminder'} turned ${value ? 'on' : 'off'}.`);
     },
     async emailToggle() {
         const value = !(S.push && S.push.email);
@@ -1490,7 +1496,7 @@ const actions = {
             return render();
         }
         await S.pushUpdate({ emailDetails: value, dates: pushDates(undefined, value) });
-        render();
+        toast(value ? 'Emails will include reminder names and amounts.' : 'Emails will no longer include names and amounts.');
     },
     async pushTest() {
         const reg = await navigator.serviceWorker.ready;
@@ -1570,7 +1576,9 @@ const actions = {
         toast(`${r.name} renewed${repeating ? `, next due ${longDate(f.next)}` : ''}${f.record ? ` · ${L.money(f.amount)} recorded` : ''}.`);
     },
     async remUndo(el) {
-        await S.save('reminders', { ...byId(S.data.reminders, el.dataset.id), done: false });
+        const r = byId(S.data.reminders, el.dataset.id);
+        await S.save('reminders', { ...r, done: false });
+        toast(`${r.name} is open again.`);
     },
     remShowDone() {
         state.renewals.showDone = !state.renewals.showDone;
@@ -1598,6 +1606,7 @@ const actions = {
         const r = byId(S.data.reminders, el.dataset.id);
         if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Account Management stays.`)) {
             await S.remove('reminders', r.id);
+            toast(`${r.name} deleted.`);
         }
     },
     emiToggle() {
@@ -1869,12 +1878,14 @@ const actions = {
     async personStatus(el) {
         const p = byId(S.data.people, state.people.selected);
         await S.save('people', { ...p, status: el.dataset.status });
+        toast(`${p.name} marked ${el.dataset.status}.`);
     },
     async personDelete(el) {
         const p = byId(S.data.people, el.dataset.id);
         if (window.confirm(`Delete ${p.name}?`)) {
             state.people.selected = null;
             await S.remove('people', p.id);
+            toast(`${p.name} deleted.`);
         }
     },
 
@@ -1936,7 +1947,9 @@ const actions = {
         }
     },
     async accountReopen(el) {
-        await S.save('accounts', { ...byId(S.data.accounts, el.dataset.id), active: true });
+        const a = byId(S.data.accounts, el.dataset.id);
+        await S.save('accounts', { ...a, active: true });
+        toast(`${a.name} reopened.`);
     },
     accountsClosed() {
         state.accounts.showClosed = !state.accounts.showClosed;
@@ -2231,6 +2244,7 @@ app.addEventListener('change', async (event) => {
         if (el.dataset.personField) {
             const p = byId(S.data.people, el.dataset.id);
             await S.save('people', { ...p, [el.dataset.personField]: el.value.trim() });
+            toast(`${p.name} saved.`);
         }
         if ('currency' in el.dataset) {
             const from = L.currentFormat().currency;

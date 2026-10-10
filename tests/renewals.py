@@ -127,12 +127,14 @@ with sync_playwright() as p:
     check('one-time: moves to Done, no entry added', 'Show done · 1' in pg.locator('main').inner_text() and len(db()['entries']) == before and row('Passport').count() == 0)
     pg.get_by_role('button', name='Show done · 1').click(); time.sleep(0.2)
     row('Passport').get_by_role('button', name='Undo').click(); time.sleep(0.3)
+    check('undo confirms with a message', 'Passport is open again.' in pg.locator('.toast').inner_text())
     check('undo: passport is back under Later', 'rem-later' in row('Passport').get_attribute('class'))
 
     # edit and delete
     row('Car insurance').get_by_role('button', name='Edit').click(); pg.get_by_label('Amount (optional)').fill('600'); pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
     check('edit: yearly cost becomes 600 + 480 = 1,080', money(stat('Yearly cost')) == 1080, stat('Yearly cost'))
     row('Passport').get_by_role('button', name='Delete').click(); time.sleep(0.3)
+    check('delete confirms with a message', 'Passport deleted.' in pg.locator('.toast').inner_text())
     check('delete: passport is gone', row('Passport').count() == 0 and len(db()['reminders']) == 2)
 
     # currency conversion includes reminder amounts
