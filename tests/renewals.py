@@ -150,16 +150,27 @@ with sync_playwright() as p:
     check('desktop: side menu has Renewal reminders, marked as open', 'on' in (pg.locator('.side a[href="#renewals"]').get_attribute('class') or ''))
     shot('r2_renewals_desktop')
 
-    # sample data adds seven reminders, removing it takes them away again
+    # sample data adds nine reminders, removing it takes them away again
     pg.goto(URL + '#more'); pg.get_by_role('button', name='Load sample data').click()
     pg.wait_for_selector('button:has-text("Remove sample data")', timeout=30000)
     sample = [x for x in db()['reminders'] if x['id'].startswith('sample-')]
-    check('sample: 7 reminders, one overdue and some due soon', len(sample) == 7, str(len(sample)))
+    check('sample: 9 reminders', len(sample) == 9, str(len(sample)))
     pg.goto(URL + '#renewals'); time.sleep(0.3); shot('r3_renewals_sample')
     check('sample: overdue health insurance shows first', pg.locator('.acct-row').first.inner_text().startswith('Health insurance (sample)'))
     pg.goto(URL + '#more'); pg.get_by_role('button', name='Remove sample data').click()
     pg.wait_for_selector('button:has-text("Load sample data")', timeout=30000)
     check('sample removed: only my 2 reminders are left', len(db()['reminders']) == 2)
+
+    # sample reminders alone, from the Renewal reminders screen: no money sample is added
+    entries_before = len(db()['entries'])
+    pg.goto(URL + '#renewals'); pg.get_by_role('button', name='Add sample reminders').click(); time.sleep(0.6)
+    d = db(); sample = {x['name']: x for x in d['reminders'] if x['id'].startswith('sample-')}
+    due = lambda n: sample[n]['due']
+    check('sample reminders only: 9 added, no money entries or accounts', len(sample) == 9 and len(d['entries']) == entries_before and not [a for a in d['accounts'] if a['id'].startswith('sample-')] and all(x['accountId'] is None for x in sample.values()), f"{len(sample)} reminders, {len(d['entries']) - entries_before} entries")
+    check('sample dates: overdue 3 days, today, tomorrow, in 2 days, in 7 days (remind 7), in 10 days (remind 7)', [due('Health insurance (sample)'), due('Electricity bill (sample)'), due('Car insurance (sample)'), due('Streaming plan (sample)'), due('Phone plan (sample)'), due('Gym membership (sample)')] == [iso(-3), iso(0), iso(1), iso(2), iso(7), iso(10)] and sample['Phone plan (sample)']['remindDays'] == 7 and sample['Gym membership (sample)']['remindDays'] == 7)
+    check('screen: gym (window opens in 3 days) is under Later, the phone plan (opens today) under Due soon', 'rem-later' in row('Gym membership (sample)').get_attribute('class') and 'rem-soon' in row('Phone plan (sample)').get_attribute('class') and 'rem-overdue' in row('Health insurance (sample)').get_attribute('class'))
+    pg.get_by_role('button', name='Remove sample reminders').click(); time.sleep(0.6)
+    check('sample reminders removed: my 2 are left, the Add button is back', len(db()['reminders']) == 2 and pg.get_by_role('button', name='Add sample reminders').count() == 1)
 
     check('no errors in the browser console', not errors, str(errors[:3]))
     b.close()

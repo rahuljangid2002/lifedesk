@@ -775,6 +775,9 @@ function dueWords(r) {
     return `${r.state === 'soon' ? `<b class="soon">${when}</b>` : when} · ${longDate(r.due)}`;
 }
 
+/** [collection, id] pairs of the sample reminders now in the data. */
+const sampleReminders = () => sampleDocs(S.data).filter(([c]) => c === 'reminders');
+
 /** Hub figure and notice: how many reminders need attention. */
 function renewalCounts() {
     const rows = remRows();
@@ -835,7 +838,9 @@ function renewals() {
             <label>Usually paid from (optional)<select data-model="renewals.form.accountId"><option value="">No account</option>${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === f.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
             <label class="span2">Notes (optional)<input type="text" value="${esc(f.notes)}" placeholder="e.g. policy number, where the papers are" data-model="renewals.form.notes"></label></div>
             <div class="split"><button class="btn" data-action="remCancel">Cancel</button><button class="btn primary" data-action="remSave">Save</button></div></section>`
-            : `<div class="toolbar"><button class="btn primary" data-action="remNew">${icon('plus')} Add reminder</button></div>`}
+            : `<div class="toolbar"><div class="split wrap"><button class="btn primary" data-action="remNew">${icon('plus')} Add reminder</button>${sampleReminders().length
+                ? `<button class="btn ghost danger" data-action="remSampleRemove">Remove sample reminders</button>`
+                : `<button class="btn" data-action="remSampleLoad">Add sample reminders</button>`}</div></div>`}
         ${!S.isDemo && !(pushDevice() && S.push) && c.total ? `<a class="notice" href="#more">${icon('bell')} Get a notification when a renewal is due, even with LifeDesk closed – turn on under Account</a>` : ''}
         ${c.total ? lists : `<div class="empty-state">${icon('bell')}<b>No reminders yet</b><small>Add insurance, subscriptions, documents like a passport or licence, a vehicle service or a warranty. LifeDesk shows each one when it is coming up.</small></div>`}
         ${done.length ? `<div class="toolbar"><button class="btn ghost" data-action="remShowDone">${st.showDone ? 'Hide' : 'Show'} done · ${done.length}</button></div>${st.showDone ? `<section class="list atable">${done.map(row).join('')}</section>` : ''}` : ''}
@@ -1538,6 +1543,24 @@ const actions = {
     remShowDone() {
         state.renewals.showDone = !state.renewals.showDone;
         render();
+    },
+    // made-up reminders only (Account → Sample data adds these too, with the money sample)
+    async remSampleLoad() {
+        const pairs = buildSample(S.data, today(), L.currentFormat().currency).filter(([c]) => c === 'reminders')
+            .map(([c, doc]) => [c, { ...doc, accountId: byId(S.data.accounts, doc.accountId) ? doc.accountId : null }]);
+        if (!window.confirm(`Add ${pairs.length} sample reminders?\nMade-up ones dated from today: one overdue, one due today, one tomorrow, one in 2 days, and others later. Your own reminders stay as they are, and you can remove the sample ones here.`)) {
+            return;
+        }
+        await S.saveAll(pairs);
+        toast(`${pairs.length} sample reminders added.`);
+    },
+    async remSampleRemove() {
+        const pairs = sampleReminders();
+        if (!window.confirm(`Remove the ${pairs.length} sample reminders? Your own reminders are kept.`)) {
+            return;
+        }
+        await S.removeMany(pairs);
+        toast('Sample reminders removed.');
     },
     async remDelete(el) {
         const r = byId(S.data.reminders, el.dataset.id);
