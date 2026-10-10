@@ -28,6 +28,9 @@ const PROJECT_ID = 'lifedesk-43dc1';
 const DATABASE_ID = 'default'; // same as firestoreDatabase in js/config.js
 const APP_URL = 'https://rahuljangid2002.github.io/lifedesk/';
 const SEND_FROM_HOUR = 9; // local time of each user
+// For diagnose() only: the sign-in email of the account to look at. Empty = the account that changed its notification
+// settings most recently.
+const CHECK_EMAIL = '';
 const EMAIL_RESERVE = 25; // emails a day kept free for sign-up codes
 const EMAIL_COLOURS = { brandDark: '#0b1324', brand: '#1b2a4a', accent: '#2563eb', text: '#101828', muted: '#667085', line: '#e3e6eb', page: '#f4f5f7', red: '#b42318', orange: '#b54708' };
 
@@ -341,7 +344,8 @@ function userStats() {
 }
 
 /**
- * Run by hand when reminders do not arrive: for the user who changed their notification settings most recently, logs
+ * Run by hand when reminders do not arrive: for the account in CHECK_EMAIL (or, when that is empty, the one that
+ * changed its notification settings most recently), logs
  * the settings, each reminder date and whether it notifies today, what would be sent, the email address (masked),
  * Gmail sends left today, and whether the hourly timer exists. Sends nothing and changes nothing.
  */
@@ -352,12 +356,24 @@ function diagnose() {
   const all = allSchedules();
   Logger.log('Users with notifications or email on: ' + all.length);
   if (!all.length) return;
-  const pick = all.sort(function (a, b) { return (b.data.updated || 0) - (a.data.updated || 0); })[0];
+  let pick = all.sort(function (a, b) { return (b.data.updated || 0) - (a.data.updated || 0); })[0];
+  if (CHECK_EMAIL) {
+    const uid = uidOf(CHECK_EMAIL);
+    if (!uid) {
+      Logger.log('No LifeDesk account signs in with ' + CHECK_EMAIL + '. Check the spelling of CHECK_EMAIL at the top of the script.');
+      return;
+    }
+    pick = all.filter(function (x) { return x.path.split('/')[1] === uid; })[0];
+    if (!pick) {
+      Logger.log(CHECK_EMAIL + ' has an account, but notifications and email are OFF on it (nothing is stored). Turn them on under Account → Notifications in LifeDesk.');
+      return;
+    }
+  }
   const s = pick.data;
   const now = new Date();
   const tz = s.tz || 'UTC';
   const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
-  Logger.log('Most recent user – time zone ' + tz + ', local time ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm') + ', settings last changed ' + (s.updated ? Utilities.formatDate(new Date(s.updated), tz, 'yyyy-MM-dd HH:mm') : 'unknown'));
+  Logger.log((CHECK_EMAIL ? 'Account ' + CHECK_EMAIL : 'Most recently changed account') + ' – time zone ' + tz + ', local time ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm') + ', settings last changed ' + (s.updated ? Utilities.formatDate(new Date(s.updated), tz, 'yyyy-MM-dd HH:mm') : 'unknown'));
   Logger.log('Devices listed: ' + (s.tokens || []).length + ' · email: ' + (s.email === true ? 'ON' : 'OFF') + ' · names in email: ' + (s.emailDetails === true ? 'ON' : 'OFF') +
     ' · renewal reminders: ' + (s.renewals !== false ? 'ON' : 'OFF') + ' · month start: ' + (s.monthStart !== false ? 'ON' : 'OFF'));
   Logger.log('Last handled by the hourly job on: ' + (s.lastSent || 'never') + (s.lastSent === today ? ' (today: it will not send again today)' : ''));
@@ -406,6 +422,19 @@ function emailOf(path) {
   });
   const user = res.getResponseCode() === 200 ? (JSON.parse(res.getContentText()).users || [])[0] : null;
   return user && user.email && user.emailVerified !== false ? user.email : null;
+}
+
+/** The user id of the account that signs in with this email, or null. */
+function uidOf(email) {
+  const res = UrlFetchApp.fetch('https://identitytoolkit.googleapis.com/v1/projects/' + PROJECT_ID + '/accounts:lookup', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJECT_ID },
+    payload: JSON.stringify({ email: [email.trim()] }),
+    muteHttpExceptions: true
+  });
+  const user = res.getResponseCode() === 200 ? (JSON.parse(res.getContentText()).users || [])[0] : null;
+  return user ? user.localId : null;
 }
 
 /** Emails the day's messages; 1 when sent, 0 when not (nothing to send, no address, or the daily limit is near). */
