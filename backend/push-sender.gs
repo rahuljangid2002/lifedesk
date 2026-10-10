@@ -340,6 +340,38 @@ function userStats() {
   Logger.log('Sign-ups per day (last 30 days): ' + (Object.keys(perDay).sort().map(function (d) { return d + ': ' + perDay[d]; }).join(', ') || 'none'));
 }
 
+/**
+ * Run by hand when reminders do not arrive: for the user who changed their notification settings most recently, logs
+ * the settings, each reminder date and whether it notifies today, what would be sent, the email address (masked),
+ * Gmail sends left today, and whether the hourly timer exists. Sends nothing and changes nothing.
+ */
+function diagnose() {
+  const timers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  Logger.log('Hourly timer for sendDue: ' + (timers.indexOf('sendDue') >= 0 ? 'YES' : 'NO – run setup') + ' (timers: ' + (timers.join(', ') || 'none') + ')');
+  Logger.log('Gmail sends left today: ' + MailApp.getRemainingDailyQuota() + ' (email is skipped at ' + EMAIL_RESERVE + ' or fewer)');
+  const all = allSchedules();
+  Logger.log('Users with notifications or email on: ' + all.length);
+  if (!all.length) return;
+  const pick = all.sort(function (a, b) { return (b.data.updated || 0) - (a.data.updated || 0); })[0];
+  const s = pick.data;
+  const now = new Date();
+  const tz = s.tz || 'UTC';
+  const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  Logger.log('Most recent user – time zone ' + tz + ', local time ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm') + ', settings last changed ' + (s.updated ? Utilities.formatDate(new Date(s.updated), tz, 'yyyy-MM-dd HH:mm') : 'unknown'));
+  Logger.log('Devices listed: ' + (s.tokens || []).length + ' · email: ' + (s.email === true ? 'ON' : 'OFF') + ' · names in email: ' + (s.emailDetails === true ? 'ON' : 'OFF') +
+    ' · renewal reminders: ' + (s.renewals !== false ? 'ON' : 'OFF') + ' · month start: ' + (s.monthStart !== false ? 'ON' : 'OFF'));
+  Logger.log('Last handled by the hourly job on: ' + (s.lastSent || 'never') + (s.lastSent === today ? ' (today: it will not send again today)' : ''));
+  if (!(s.dates || []).length) Logger.log('No open reminders are stored for this user (none exist, all are renewed, or LifeDesk has not been opened since they were added).');
+  (s.dates || []).forEach(function (d) {
+    const days = daysBetween(today, d.due);
+    Logger.log('Reminder due ' + d.due + ' (remind ' + d.remind + ' days before): ' + (days < 0 ? 'overdue by ' + plural(-days, 'day') : days === 0 ? 'due today' : 'due in ' + plural(days, 'day')) + ' – ' + (notifyToday(days, Number(d.remind) || 0) ? 'NOTIFIES TODAY' : 'not today'));
+  });
+  const messages = messagesFor(s, today);
+  Logger.log(messages.length ? 'Would send today: ' + messages.map(function (m) { return m.title; }).join(' | ') : 'Nothing to send today.');
+  const to = emailOf(pick.path);
+  Logger.log('Email address on the account: ' + (to ? to.replace(/^(.{2}).*(@.*)$/, '$1***$2') : 'NONE FOUND or not verified – no email can be sent'));
+}
+
 // ---------- Google services ----------
 
 function firestore(method, path, body) {
