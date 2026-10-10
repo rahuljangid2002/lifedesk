@@ -353,6 +353,18 @@ function welcome() {
     </div>`;
 }
 
+// Back links return to the screen the user came from. trail = the screens visited, in order; going back pops it.
+const trail = [];
+const SCREEN_NAMES = { hub: 'LifeDesk', home: 'Home', menu: 'More', add: 'Add entry', daily: 'Daily', budget: 'Budget', pay: 'Payments', insights: 'Dashboards', reports: 'Reports',
+    people: 'People & Loans', accounts: 'My accounts', assets: 'My assets', renewals: 'Renewal reminders', more: 'Account & backup' };
+/** The link at the top of an inner screen: to the previous screen when there is one, otherwise to `fallback`. */
+function backLink(fallback) {
+    const prev = trail.length > 1 ? trail[trail.length - 2] : null;
+    return prev
+        ? `<a class="back" href="#${prev}" data-action="goBack">${icon('chevLeft')} ${esc(SCREEN_NAMES[prev] || 'Back')}</a>`
+        : `<a class="back" href="#${fallback}">${icon('chevLeft')} ${esc(SCREEN_NAMES[fallback])}</a>`;
+}
+
 /** Tools on the start screen. ready: false shows the tile as coming soon. */
 const TOOLS = [
     { id: 'money', name: 'Account Management', icon: 'coins', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
@@ -603,6 +615,7 @@ function assetsView() {
         <div class="a-actions"><button class="btn" data-action="assetEdit" data-id="${a.id}">Edit</button><button class="btn ghost danger" data-action="assetDelete" data-id="${a.id}">Delete</button></div>
     </div>`).join('');
     return `<header class="hero">
+        ${backLink('menu')}
         <small class="eyebrow">My assets</small><h1>What you own</h1>
         <div class="stats">${stat('Worth now', L.money(sum(owned, (a) => Number(a.value))))}${stat('Loans on assets', L.money(sum(owned, (a) => (a.loan ? a.loan.principalLeft : 0))))}${stat('Net value', L.money(sum(owned, (a) => a.net)))}</div>
     </header>
@@ -648,6 +661,7 @@ function payView() {
             ${p && p.cardId === a.id ? `<div class="a-panel">${payForm(a, a.owed)}</div>` : ''}
         </div>`).join('');
     return `<header class="hero">
+        ${backLink('menu')}
         <small class="eyebrow">Payments</small><h1>EMIs and card bills</h1>
         <div class="stats">${stat('EMIs due now', L.money(sum(dueNow, (d) => Number(d.loan.emi))))}${stat('Card owed', L.money(sum(cards, (a) => a.owed)))}${stat('Paid this month', L.money(sum(paid.filter((e) => L.monthKey(e.date) === month), (e) => Number(e.amount))))}</div>
     </header>
@@ -859,6 +873,7 @@ function loansView() {
         <div class="a-actions">${l.left ? `<button class="btn primary" data-action="payEmi" data-id="${l.id}">Pay EMI</button>` : ''}<button class="btn ghost danger" data-action="loanDelete" data-id="${l.id}">Delete</button></div>
     </div>`).join('');
     return `<header class="hero">
+        ${backLink('menu')}
         <small class="eyebrow">People &amp; Loans</small><h1>Loans on EMI</h1>
         <div class="stats">${stat('Still to pay', L.money(loans.reduce((t, l) => t + l.outstanding, 0)))}${stat('EMI per month', L.money(loans.filter((l) => l.left).reduce((t, l) => t + Number(l.emi), 0)))}${stat('Loans', loans.length)}</div>
     </header>
@@ -913,6 +928,7 @@ function people() {
         })
         .join('');
     return `<header class="hero">
+        ${backLink('menu')}
         <small class="eyebrow">People &amp; Loans</small><h1>Who owes whom</h1>
         <div class="stats">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}${stat('People', S.data.people.length)}</div>
     </header>
@@ -957,6 +973,7 @@ function accounts() {
         return items.length ? `<h3>${title}</h3><section class="list atable">${items.map(row).join('')}</section>` : '';
     };
     return `<header class="hero">
+        ${backLink('menu')}
         <small class="eyebrow">My accounts</small><h1>Banks, cash and credit cards</h1>
         <div class="stats">${stat('Bank + cash', L.money(t.inHand))}${stat('Card owed', L.money(t.cardOwed))}${stat('Net balance', L.money(t.net))}</div>
     </header>
@@ -1025,7 +1042,7 @@ function menu() {
 
 function more() {
     const f = L.currentFormat();
-    return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
+    return `<header class="hero">${backLink('hub')}<small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
     <main class="dash">
         ${S.isDemo ? `<div class="notice span">Demo mode: your data is saved only in this browser.</div>` : ''}
         <section class="card"><div class="card-head"><h2>Appearance</h2></div>
@@ -1053,7 +1070,7 @@ function more() {
 }
 
 // helpers the dashboard and report screens share with the rest
-const kit = { today, icon, stat, monthNav, entryRow };
+const kit = { today, icon, stat, monthNav, entryRow, back: () => backLink('menu') };
 const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
@@ -1395,6 +1412,10 @@ const actions = {
         if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
             await S.remove('assets', a.id);
         }
+    },
+    goBack(el, event) {
+        event.preventDefault(); // the browser's own back keeps its history in step (the link's address is the fallback)
+        window.history.back();
     },
     // push notifications
     async pushOn() {
@@ -2101,6 +2122,16 @@ const actions = {
     }
 };
 
+/** Keeps the trail in step with the address: a step back to the previous screen pops it, anything else adds to it. */
+function trackRoute() {
+    const r = SCREENS[state.route] ? state.route : 'hub';
+    if (trail[trail.length - 2] === r) {
+        trail.pop();
+    } else if (trail[trail.length - 1] !== r) {
+        trail.push(r);
+    }
+}
+
 // ---------- events ----------
 function setPath(path, value) {
     const keys = path.split('.');
@@ -2299,12 +2330,14 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
+    trackRoute();
     window.scrollTo(0, 0);
     tipBox.hidden = true;
     render();
 });
 
 state.route = window.location.hash.slice(1) || 'hub';
+trackRoute();
 render();
 let pushFor = null; // the user whose notification schedule has been read
 S.init((status) => {
@@ -2313,6 +2346,8 @@ S.init((status) => {
     if (['signedOut', 'unverified', 'needPassphrase', 'locked'].includes(status) && state.route !== 'hub') {
         state.route = 'hub';
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        trail.length = 0;
+        trail.push('hub');
     }
     state.status = status;
     if (status === 'ready' && !S.isDemo) {

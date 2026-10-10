@@ -172,7 +172,7 @@ const TABS = [['monthly', 'Monthly', monthly], ['yearly', 'Yearly', yearly], ['b
 export function dashboards(st, h) {
     const tab = TABS.find((t) => t[0] === st.tab) || TABS[0];
     const view = tab[2](st, h);
-    return `<header class="hero"><small class="eyebrow ${tab[0] === 'monthly' ? 'center' : ''}">Dashboards</small>${view.hero}</header>
+    return `<header class="hero">${h.back()}<small class="eyebrow ${tab[0] === 'monthly' ? 'center' : ''}">Dashboards</small>${view.hero}</header>
     <main>
         <div class="filterbar"><div class="seg">${TABS.map(([id, label]) => `<button class="${id === tab[0] ? 'on' : ''}" data-action="insTab" data-tab="${id}">${label}</button>`).join('')}</div>
             ${view.filters || ''}</div>
@@ -251,7 +251,7 @@ export function reports(st, h) {
     } else if (report.period === 'year') {
         control = `<label class="pick"><span>Year</span><select data-model="reports.year" data-rerender>${R.yearsWithData(S.data, start, today).map((y) => `<option value="${y.key}" ${y.key === params.year.key ? 'selected' : ''}>${y.label}</option>`).join('')}</select></label>`;
     }
-    return `<header class="hero"><small class="eyebrow">Reports</small><h1>${esc(report.name)}</h1><p class="hero-sub">${esc(report.about)}</p></header>
+    return `<header class="hero">${h.back()}<small class="eyebrow">Reports</small><h1>${esc(report.name)}</h1><p class="hero-sub">${esc(report.about)}</p></header>
     <main>
         <div class="toolbar">
             <div class="filterbar"><label class="pick"><span>Report</span><select data-model="reports.id" data-rerender>${R.REPORTS.map((r) => `<option value="${r.id}" ${r.id === report.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>${control}</div>
