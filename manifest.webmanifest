@@ -1,7 +1,7 @@
 {
     "name": "LifeDesk",
     "short_name": "LifeDesk",
-    "description": "Money, budget, people and loans, with more everyday tools to come.",
+    "description": "Account management, budget, renewal reminders and more everyday tools.",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",

@@ -65,7 +65,7 @@ with sync_playwright() as p:
 
     pg.goto(URL + '#renewals'); time.sleep(0.2)
     check('renewals: empty state explains what to add', 'No reminders yet' in pg.locator('main').inner_text())
-    check('renewals: no Money bottom bar on this tool', pg.locator('.tabbar').count() == 0)
+    check('renewals: no Account Management bottom bar on this tool', pg.locator('.tabbar').count() == 0)
 
     def add(name, kind, days, repeat, amount, remind, notes=''):
         pg.get_by_role('button', name='Add reminder').click()

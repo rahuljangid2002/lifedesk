@@ -32,7 +32,7 @@ with sync_playwright() as p:
     check('first visit asks for the currency', pg.locator('#welcome-currency option').count() > 100, str(pg.locator('#welcome-currency option').count()))
     pg.locator('#welcome-currency').select_option('USD'); pg.get_by_role('button', name='Continue').click()
     pg.wait_for_selector('.tool')
-    check('start screen lists Money and Renewal reminders', pg.locator('a.tool', has_text='Money').count() == 1 and pg.locator('a.tool', has_text='Renewal reminders').count() == 1)
+    check('start screen lists Account Management and Renewal reminders', pg.locator('a.tool', has_text='Account Management').count() == 1 and pg.locator('a.tool', has_text='Renewal reminders').count() == 1)
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
 
@@ -117,10 +117,23 @@ with sync_playwright() as p:
     check('delete: net 7,700', money(stat('Net balance')) == 7700, stat('Net balance'))
 
     pg.goto(URL); pg.wait_for_selector('.tool')
-    check('start screen shows the Money figure', '7,700' in pg.locator('a.tool', has_text='Money').inner_text())
-    pg.locator('a.tool', has_text='Money').click()
+    check('start screen shows the Account Management figure', '7,700' in pg.locator('a.tool', has_text='Account Management').inner_text())
+    pg.locator('a.tool', has_text='Account Management').click()
     pg.wait_for_selector('.tabbar')
-    check('Money tile opens Money home', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1, pg.url)
+    check('Account Management tile opens its home, named in the header', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1 and pg.locator('.hero .eyebrow').inner_text().lower() == 'account management', pg.url)
+    # the bottom bar is the tool's own: its last tab is More (the tool's other screens), not the LifeDesk account page
+    check('bottom bar: Home, Daily, Add, Budget, More', [t.strip() for t in pg.locator('.tabbar a').all_inner_texts()] == ['Home', 'Daily', 'Add', 'Budget', 'More'], str(pg.locator('.tabbar a').all_inner_texts()))
+    pg.locator('.tabbar a', has_text='More').click(); time.sleep(0.3)
+    links = pg.locator('main .row b').all_inner_texts()
+    check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Payments', 'Dashboards', 'Reports', 'People & Loans', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))
+    pg.locator('main .row', has_text='My assets').click(); time.sleep(0.3)
+    check('More → My assets opens it', pg.url.endswith('#assets'))
+    pg.goto(URL + '#menu'); pg.get_by_role('button', name='＋ Add').click(); pg.locator('#nc-name').fill('Pets'); pg.locator('#nc-keys').fill('vet, pet food'); pg.get_by_role('button', name='Add category').click(); time.sleep(0.3)
+    check('More: a category can be added there', any(c['name'] == 'Pets' for c in pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).categories")))
+    pg.goto(URL + '#more'); time.sleep(0.3)
+    acct = pg.locator('main').inner_text()
+    check('Account & backup: a LifeDesk page, without the tool\'s bottom bar, links or categories', pg.locator('.tabbar').count() == 0 and pg.locator('.back', has_text='LifeDesk').count() == 1 and 'Categories' not in acct and 'Dashboards' not in acct and 'Notifications' in acct and 'Backup' in acct)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')
     pg.goto(URL); pg.wait_for_selector('.tool'); shot('0_hub')
 
     # Sample data: load, look, remove
@@ -293,11 +306,11 @@ with sync_playwright() as p:
     pg.set_viewport_size({'width': 1366, 'height': 850}); pg.goto(URL + '#home'); pg.wait_for_selector('.side')
     check('desktop: side menu shown, bottom bar hidden', pg.locator('.side').is_visible() and not pg.locator('.tabbar').is_visible())
     check('desktop: no sideways scrolling', pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
-    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'more', 'hub']:
+    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'menu', 'more', 'hub']:
         pg.goto(URL + '#' + r); time.sleep(0.3); shot('d_' + r)
     pg.set_viewport_size({'width': 390, 'height': 844})
     wide = []
-    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'more']:
+    for r in ['home', 'add', 'daily', 'budget', 'people', 'accounts', 'menu', 'more']:
         pg.goto(URL + '#' + r); time.sleep(0.3)
         if not pg.evaluate('document.documentElement.scrollWidth <= window.innerWidth'):
             wide.append(r)

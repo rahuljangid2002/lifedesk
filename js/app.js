@@ -355,7 +355,7 @@ function welcome() {
 
 /** Tools on the start screen. ready: false shows the tile as coming soon. */
 const TOOLS = [
-    { id: 'money', name: 'Money', icon: 'coins', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
+    { id: 'money', name: 'Account Management', icon: 'coins', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
     { id: 'reminders', name: 'Renewal reminders', icon: 'bell', route: 'renewals', ready: true, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
 ];
 
@@ -398,7 +398,7 @@ function home() {
     const recent = [...S.data.entries].sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1)).slice(0, 5);
     return `<header class="hero">
         <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
-        <small class="eyebrow">Money</small><h1>${L.monthLabel(key)}</h1>
+        <small class="eyebrow">Account Management</small><h1>${L.monthLabel(key)}</h1>
         <div class="stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}</div>
         <p class="hero-sub">Money in hand ${L.money(t.inHand)}${t.cardOwed ? ` · Card owed ${L.money(t.cardOwed)}` : ''}${t.owedToPeople ? ` · Owed to people ${L.money(t.owedToPeople)}` : ''}</p>
     </header>
@@ -792,7 +792,7 @@ function renewForm(r) {
         ${Number(r.repeat) > 0
             ? `<label>Next due date<input type="date" value="${esc(f.next)}" data-model="renewals.renew.next"></label><small>${esc(L.repeatLabel(r.repeat))}: worked out from the current due date. Change it if the new period starts on another day.</small>`
             : '<small>This is a one-time reminder. After renewing, it moves to Done.</small>'}
-        <label class="check"><input type="checkbox" data-action="remRecord" ${f.record ? 'checked' : ''}> Record the payment in Money as an expense</label>
+        <label class="check"><input type="checkbox" data-action="remRecord" ${f.record ? 'checked' : ''}> Record the payment in Account Management as an expense</label>
         ${f.record ? `<div class="grid3">
             <label>Amount paid<input type="number" inputmode="decimal" min="0" value="${esc(f.amount)}" data-model="renewals.renew.amount"></label>
             <label>Paid from<select data-model="renewals.renew.accountId"><option value="">Choose an account</option>${pays.map((a) => `<option value="${a.id}" ${a.id === f.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
@@ -1007,6 +1007,22 @@ function currencyChange(from) {
         <div class="split wrap"><button class="btn primary" data-action="currencyConvert" ${busy}>Convert amounts</button><button class="btn" data-action="currencyKeep" ${busy}>Keep the numbers</button><button class="btn ghost" data-action="currencyCancel" ${busy}>Cancel</button></div></div>`;
 }
 
+/** Account Management → More: the tool's screens that are not on the bottom bar, and its categories. */
+function menu() {
+    const link = (route, ic, label, about) => `<a class="row" href="#${route}"><span class="row-icon">${icon(ic)}</span><span class="row-text"><b>${label}</b><small>${about}</small></span>${icon('chevRight')}</a>`;
+    return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account Management</small><h1>More</h1></header>
+    <main class="dash">
+        <section class="card span"><div class="list inner flush">
+            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '18 tables with totals and CSV download')}
+            ${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
+        </div></section>
+        <section class="card"><div class="card-head"><h2>Categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
+            ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
+            <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
+        <a class="card link span" href="#more"><div class="card-head"><span><b>Account &amp; backup</b><small>Sign-in, notifications, currency, appearance, backup</small></span>${icon('chevRight')}</div></a>
+    </main>`;
+}
+
 function more() {
     const f = L.currentFormat();
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account &amp; backup</small><h1>${esc(S.user.name)}</h1><p class="hero-sub">${esc(S.user.contact)}</p></header>
@@ -1023,11 +1039,6 @@ function more() {
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
             <small>Example: ${L.money(1234567.5)} · ${L.dateText(today(), { day: 'numeric', month: 'long', year: 'numeric' })}. Pick another currency to convert your amounts at today's rate, or to change only the symbol.</small></section>
-        <section class="card"><div class="card-head"><h2>Money</h2></div>
-            <a class="row nav-row" href="#home">Money home ${icon('chevRight')}</a><a class="row nav-row" href="#pay">Payments ${icon('chevRight')}</a><a class="row nav-row" href="#insights">Dashboards ${icon('chevRight')}</a><a class="row nav-row" href="#reports">Reports ${icon('chevRight')}</a><a class="row nav-row" href="#people">People &amp; Loans ${icon('chevRight')}</a><a class="row nav-row" href="#accounts">My Accounts ${icon('chevRight')}</a><a class="row nav-row" href="#assets">My assets ${icon('chevRight')}</a></section>
-        <section class="card"><div class="card-head"><h2>Money categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
-            ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
-            <small>${S.data.categories.filter((c) => c.type === 'expense').length} expense and ${S.data.categories.filter((c) => c.type === 'income').length} income categories</small></section>
         <section class="card"><div class="card-head"><h2>Backup</h2></div>
             <div class="split wrap"><button class="btn" data-action="exportData">Download my data</button><label class="btn file">Restore from file<input type="file" accept="application/json" data-file="import" hidden></label></div>
             <small>${S.data.entries.length} entries · ${S.data.accounts.length} accounts · ${S.data.people.length} people</small></section>
@@ -1043,14 +1054,14 @@ function more() {
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
-const NO_TABS = ['hub', 'renewals']; // the bottom bar belongs to Money
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
-const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
+const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
+    ['Account Management', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
     ['Renewals', [['renewals', 'bell', 'Renewal reminders']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
@@ -1564,7 +1575,7 @@ const actions = {
     },
     async remDelete(el) {
         const r = byId(S.data.reminders, el.dataset.id);
-        if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Money stays.`)) {
+        if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Account Management stays.`)) {
             await S.remove('reminders', r.id);
         }
     },
