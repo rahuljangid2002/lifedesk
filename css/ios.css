@@ -626,3 +626,113 @@ input[type='checkbox']:disabled {
         box-shadow: none;
     }
 }
+
+/* ---------- offline screen, in the same look ----------
+   A quiet page with one white card (dark card in dark mode), a large title, the app's own buttons and a grouped list
+   of tips. Layout and movement come from app.css; only the surface changes here. */
+.offline {
+    color: var(--text);
+    background: var(--bg);
+}
+.offline-glow {
+    opacity: 0.16;
+    filter: blur(90px);
+}
+.offline-glow.b {
+    background: var(--brand);
+    opacity: 0.1;
+}
+.offline-glow.c {
+    display: none;
+}
+.offline-card {
+    padding: 2.25rem 1.5rem 1.4rem;
+    border: 0;
+    border-radius: 1.75rem;
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: var(--shadow-up);
+}
+.offline-art .ring {
+    border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+}
+.offline-icon {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 82%, #fff), var(--brand));
+    box-shadow: 0 12px 26px color-mix(in srgb, var(--brand) 38%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.offline-chip {
+    color: var(--red);
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    border-color: color-mix(in srgb, var(--red) 28%, transparent);
+}
+.offline-chip i,
+.net-chip i {
+    background: var(--red);
+}
+.offline h1 {
+    color: var(--text);
+    font-size: 2.05rem;
+    font-weight: 800;
+    letter-spacing: -0.032em;
+}
+.offline p {
+    color: var(--muted);
+}
+.offline-btn {
+    min-height: 3.1rem;
+    border: 0;
+    border-radius: 1rem;
+    background: var(--surface-2);
+    color: var(--brand-ink);
+    font-weight: 600;
+}
+.offline-btn:hover {
+    background: color-mix(in srgb, var(--muted) 16%, var(--surface-2));
+}
+.offline-btn:focus-visible {
+    outline-color: var(--brand);
+}
+.offline-btn.primary {
+    color: var(--on-brand);
+    background: var(--brand);
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 16px color-mix(in srgb, var(--brand) 30%, transparent);
+}
+.offline-btn.primary:hover {
+    background-color: var(--brand-ink);
+}
+:root[data-theme='dark'] .offline-btn.primary:hover {
+    background-color: var(--brand);
+}
+.offline-btn .spin {
+    border-color: rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+}
+.offline-tips {
+    border: 0;
+    border-radius: 1.1rem;
+    background: var(--surface-2);
+    color: var(--text);
+}
+.offline-tips li::before {
+    background: var(--brand);
+}
+.offline-foot {
+    color: var(--muted);
+}
+.offline-foot .dots i {
+    background: var(--brand);
+}
+.net-chip {
+    border: 1px solid var(--hair);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+    color: var(--text);
+    box-shadow: 0 8px 22px rgba(16, 24, 40, 0.16);
+    transition: transform 0.22s var(--ease);
+}
+.net-chip:active {
+    transform: scale(0.95);
+}
