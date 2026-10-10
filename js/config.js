@@ -30,3 +30,8 @@ export const loginMethods = {
     emailLink: false, // one-time sign-in link by email (the free plan sends only a few a day)
     phoneOtp: false // needs the Firebase Blaze plan (SMS is charged); switch on later
 };
+
+// Push notifications: renewal reminders and the start of each month, also when LifeDesk is closed.
+// The sender is backend/push-sender.gs (see backend/README.md). vapidKey: Firebase console → Project settings →
+// Cloud Messaging → Web Push certificates (a public key, not a secret); empty uses Firebase's default key.
+export const pushSettings = { enabled: true, vapidKey: '' };

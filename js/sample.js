@@ -247,13 +247,24 @@ export function buildSample(data, today, currency) {
             pairs.push(['budgets', { id: key, lines, sample: true }]);
         }
     }
+    // ---------- renewal reminders, dated from today so some are always due ----------
+    const inDays = (n) => { const d = new Date(`${today}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const reminder = (key, name, kind, days, repeat, amount, remindDays, notes = '') =>
+        pairs.push(['reminders', { id: `${PREFIX}rem-${key}`, name, kind, due: inDays(days), repeat, amount, remindDays, notes, accountId: bank, done: false, createdAt: stamp }]);
+    reminder('health', 'Health insurance (sample)', 'Insurance', -3, 12, amt(420), 30, 'Policy no. HI-000123');
+    reminder('stream', 'Streaming plan (sample)', 'Subscription', 4, 1, amt(8), 7);
+    reminder('car-ins', 'Car insurance (sample)', 'Insurance', 12, 12, amt(260), 30, 'Policy no. MV-000456');
+    reminder('phone', 'Phone plan (sample)', 'Subscription', 21, 3, amt(30), 7);
+    reminder('service', 'Car service (sample)', 'Vehicle', 48, 6, amt(90), 15);
+    reminder('passport', 'Passport renewal (sample)', 'Document', 140, 120, amt(60), 90, 'Book the appointment early');
+    reminder('warranty', 'Laptop warranty ends (sample)', 'Warranty', 260, 0, 0, 30);
     return pairs;
 }
 
 /** [collection, id] pairs of everything the sample created. */
 export function sampleDocs(data) {
     const out = [];
-    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets']) {
+    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets', 'reminders']) {
         for (const doc of data[c]) {
             if (isSample(doc)) {
                 out.push([c, doc.id]);

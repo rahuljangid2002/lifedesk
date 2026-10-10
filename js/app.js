@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 import { currentReport, dashboards, reports } from './insights.js';
 import { netWorth, toCsv } from './reports.js';
+import { pushSettings as PUSH } from './config.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -24,6 +25,8 @@ const state = {
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
+    renewals: { form: null, renew: null, showDone: false },
+    push: { busy: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
@@ -353,15 +356,16 @@ function welcome() {
 /** Tools on the start screen. ready: false shows the tile as coming soon. */
 const TOOLS = [
     { id: 'money', name: 'Money', icon: 'coins', route: 'home', ready: true, about: 'Accounts, daily expenses, budget, people and loans' },
-    { id: 'reminders', name: 'Renewal reminders', icon: 'bell', route: null, ready: false, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
+    { id: 'reminders', name: 'Renewal reminders', icon: 'bell', route: 'renewals', ready: true, about: 'Insurance, subscriptions, documents and bills that come up for renewal' }
 ];
 
 function hub() {
     const t = L.totals(S.data);
     const m = L.monthSummary(S.data, thisMonth());
+    const rc = renewalCounts();
     const tiles = TOOLS.map((tool) =>
         tool.ready
-            ? `<a class="tool" href="#${tool.route}"><span class="tool-icon">${icon(tool.icon)}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small>${tool.id === 'money' ? `<small class="tool-figure">Net balance ${L.money(t.net)} · spent ${L.money(m.expense)} this month</small>` : ''}</span><span class="tool-go">${icon('chevRight')}</span></a>`
+            ? `<a class="tool" href="#${tool.route}"><span class="tool-icon">${icon(tool.icon)}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small>${tool.id === 'money' ? `<small class="tool-figure">Net balance ${L.money(t.net)} · spent ${L.money(m.expense)} this month</small>` : ''}${tool.id === 'reminders' ? `<small class="tool-figure">${rc.total ? [rc.overdue ? `${rc.overdue} overdue` : '', rc.soon ? `${rc.soon} due soon` : '', !rc.overdue && !rc.soon ? 'Nothing due soon' : ''].filter(Boolean).join(' · ') : 'Add your first reminder'}</small>` : ''}</span><span class="tool-go">${icon('chevRight')}</span></a>`
             : `<div class="tool soon"><span class="tool-icon">${icon(tool.icon)}</span><span class="tool-text"><b>${tool.name}</b><small>${tool.about}</small></span><span class="pill">Coming soon</span></div>`
     ).join('');
     return `<header class="hero">
@@ -370,6 +374,7 @@ function hub() {
     </header>
     <main>
         ${S.isDemo ? `<div class="notice">Demo mode: your data is saved only in this browser.</div>` : ''}
+        ${rc.overdue || rc.soon ? `<a class="notice" href="#renewals">${[rc.overdue ? `${plural(rc.overdue, 'renewal')} overdue` : '', rc.soon ? `${plural(rc.soon, 'renewal')} due soon` : ''].filter(Boolean).join(' · ')} – tap to see</a>` : ''}
         <h3>Your tools</h3>
         <div class="cards">${tiles}</div>
         <a class="card link" href="#more"><div class="card-head"><span><b>Account &amp; backup</b><small>${esc(S.user.contact)}</small></span>${icon('chevRight')}</div></a>
@@ -658,6 +663,186 @@ function payView() {
     </main>`;
 }
 
+// ---------- push notifications (renewal reminders, start of month) ----------
+// This device is "on" when it has saved its notification address here. The account-wide settings and the due dates
+// live in S.push (users/{uid}/push/schedule), the only unencrypted record.
+const pushSlot = () => `lifedesk-push-${S.user.uid}`;
+const pushDevice = () => {
+    try {
+        return localStorage.getItem(pushSlot());
+    } catch (e) {
+        return null;
+    }
+};
+const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+/** null when this browser can take notifications, otherwise why not, in words. */
+function pushBlocker() {
+    if (!PUSH.enabled) {
+        return 'Notifications are not set up for this site yet.';
+    }
+    if (isIos() && !isStandalone()) {
+        return 'On iPhone and iPad, first add LifeDesk to the Home Screen (Share → Add to Home Screen), open it from there, then turn this on.';
+    }
+    if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        return 'This browser cannot show notifications. Try Chrome, Edge, Firefox or Safari.';
+    }
+    if (Notification.permission === 'denied') {
+        return 'Notifications are blocked for LifeDesk in this browser. Allow them in the browser or phone settings, then try again.';
+    }
+    return null;
+}
+/** What the sender needs and nothing more: due date and remind-me days of each open reminder. */
+// With "include names and amounts in emails" ticked, name and amount go along as plain text (the email server must read them).
+const pushDates = (on = !(S.push && S.push.renewals === false), named = !!(S.push && S.push.email && S.push.emailDetails)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due)
+    .map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30), ...(named ? { name: r.name, amount: Number(r.amount) ? L.money(r.amount) : '' } : {}) }))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : String(a.name || '').localeCompare(String(b.name || '')))));
+const pushZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+let pushTimer = null;
+/** Keeps the dates in the schedule in step with the reminders, from whichever device changes them. */
+function syncPushSoon() {
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(async () => {
+        if (S.isDemo || !S.push || state.status !== 'ready') {
+            return;
+        }
+        const dates = pushDates();
+        if (JSON.stringify(dates) !== JSON.stringify(S.push.dates || []) || S.push.tz !== pushZone()) {
+            await S.pushUpdate({ dates, tz: pushZone() }).catch((e) => console.error(e));
+        }
+    }, 1200);
+}
+
+/**
+ * Once per sign-in: a device that has notifications on checks that its address is still listed and current. The
+ * address changes or dies when the browser resets the background script, and the sender drops dead ones; without
+ * this the device would show "on" but get nothing.
+ */
+async function repairPushDevice() {
+    const saved = pushDevice();
+    if (!saved || !S.push || pushBlocker() || Notification.permission !== 'granted') {
+        return;
+    }
+    const token = await S.pushToken(PUSH.vapidKey);
+    if (token !== saved || !(S.push.tokens || []).includes(token)) {
+        await S.pushSwap(saved, token);
+        localStorage.setItem(pushSlot(), token);
+        render();
+    }
+}
+
+function notificationsCard() {
+    if (S.isDemo) {
+        return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">Off</span></div>
+            <small>Sign in to get a notification or email when a renewal is due and at the start of each month. Demo mode has no account to send them to.</small></section>`;
+    }
+    const on = !!pushDevice() && !!S.push;
+    const p = S.push || {};
+    const mail = !!p.email;
+    const busy = state.push.busy ? 'disabled' : '';
+    const blocker = on ? null : pushBlocker();
+    const pill = [on ? 'This device' : '', mail ? 'Email' : ''].filter(Boolean).join(' + ') || 'Off';
+    return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">${pill}</span></div>
+        <small>Around 9 in the morning, your time, when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
+        <b class="sub">On this device</b>
+        ${on ? `<small>${(p.tokens || []).length > 1 ? `On. ${(p.tokens || []).length} devices get them.` : 'On. Only this device gets them; turn them on on your other devices too.'}</small>
+            <div class="split wrap"><button class="btn" data-action="pushTest" ${busy}>Show a test notification</button><button class="btn ghost danger" data-action="pushOff" ${busy}>Turn off on this device</button></div>`
+            : blocker ? `<small class="over">${esc(blocker)}</small>` : `<div class="split wrap"><button class="btn primary" data-action="pushOn" ${busy}>${icon('bell')} Turn on for this device</button></div>`}
+        <b class="sub">By email</b>
+        <label class="check"><input type="checkbox" data-action="emailToggle" ${mail ? 'checked' : ''} ${busy}> Also send them by email to ${esc(S.user.contact)}</label>
+        ${mail ? `<label class="check"><input type="checkbox" data-action="emailDetails" ${p.emailDetails ? 'checked' : ''} ${busy}> Include reminder names and amounts in emails</label>
+            <small>${p.emailDetails ? 'Names and amounts of your reminders are kept readable for the email sender. The rest of your data stays encrypted.' : 'Off: emails say when a renewal is due, not which one, because names and amounts are encrypted.'}</small>` : ''}
+        ${on || mail ? `<b class="sub">What to send</b>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: every day from the remind-me day until you press Renewed (also while overdue)</label>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>` : ''}
+        <small>Privacy: to know when to remind you, the due dates of your reminders are kept without encryption${p.emailDetails ? ', and so are their names and amounts (you chose to include them in emails)' : ', with nothing else: no names, amounts or notes'}. All of it is deleted when you turn off notifications on your last device and email.</small>
+    </section>`;
+}
+
+// ---------- Renewal reminders (its own tool: data in the "reminders" collection) ----------
+const remRows = () => S.data.reminders.map((r) => ({ ...r, ...L.reminderStatus(r, today()) })).sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.name.localeCompare(b.name)));
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** "Due in 4 days", "Due today", "Overdue by 3 days": the state in words, not left to colour. */
+function dueWords(r) {
+    if (r.state === 'done') {
+        return `Renewed${r.lastRenewed ? ` ${longDate(r.lastRenewed)}` : ''} · no repeat`;
+    }
+    if (r.state === 'overdue') {
+        return `<span class="over">Overdue by ${plural(-r.days, 'day')}</span> · was due ${longDate(r.due)}`;
+    }
+    const when = r.days === 0 ? 'Due today' : r.days === 1 ? 'Due tomorrow' : `Due in ${plural(r.days, 'day')}`;
+    return `${r.state === 'soon' ? `<b class="soon">${when}</b>` : when} · ${longDate(r.due)}`;
+}
+
+/** Hub figure and notice: how many reminders need attention. */
+function renewalCounts() {
+    const rows = remRows();
+    return { overdue: rows.filter((r) => r.state === 'overdue').length, soon: rows.filter((r) => r.state === 'soon').length, total: rows.filter((r) => r.state !== 'done').length };
+}
+
+function renewForm(r) {
+    const f = state.renewals.renew;
+    const pays = activeAccounts();
+    const cats = S.data.categories.filter((c) => c.type === 'expense').sort((a, b) => a.name.localeCompare(b.name));
+    return `<div class="form">
+        ${Number(r.repeat) > 0
+            ? `<label>Next due date<input type="date" value="${esc(f.next)}" data-model="renewals.renew.next"></label><small>${esc(L.repeatLabel(r.repeat))}: worked out from the current due date. Change it if the new period starts on another day.</small>`
+            : '<small>This is a one-time reminder. After renewing, it moves to Done.</small>'}
+        <label class="check"><input type="checkbox" data-action="remRecord" ${f.record ? 'checked' : ''}> Record the payment in Money as an expense</label>
+        ${f.record ? `<div class="grid3">
+            <label>Amount paid<input type="number" inputmode="decimal" min="0" value="${esc(f.amount)}" data-model="renewals.renew.amount"></label>
+            <label>Paid from<select data-model="renewals.renew.accountId"><option value="">Choose an account</option>${pays.map((a) => `<option value="${a.id}" ${a.id === f.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+            <label>Category<select data-model="renewals.renew.categoryId"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
+            <small>Saved with today's date, so it shows in Daily expenses, the budget and reports.</small>` : ''}
+        <div class="split"><button class="btn" data-action="remRenewCancel">Cancel</button><button class="btn primary" data-action="remRenewSave">Mark renewed</button></div>
+    </div>`;
+}
+
+function renewals() {
+    const st = state.renewals;
+    const rows = remRows();
+    const groups = [['overdue', 'Overdue'], ['soon', 'Due soon'], ['later', 'Later']];
+    const f = st.form;
+    const row = (r) => `<div class="acct-row rem-${r.state} ${st.renew && st.renew.id === r.id ? 'open' : ''}">
+        <div class="a-name"><span class="row-icon">${icon('bell')}</span><span><b>${esc(r.name)}</b><small>${[esc(r.kind), esc(L.repeatLabel(r.repeat)), r.state === 'done' ? '' : `remind ${plural(Number(r.remindDays ?? 30), 'day')} before`].filter(Boolean).join(' · ')}</small></span></div>
+        <div class="a-detail"><small>${dueWords(r)}</small>${r.notes ? `<small>${esc(r.notes)}</small>` : ''}</div>
+        <div class="a-bal"><b class="big">${Number(r.amount) ? L.money(r.amount) : '–'}</b><small>${Number(r.amount) ? (Number(r.repeat) ? 'each time' : 'once') : 'no cost'}</small></div>
+        <div class="a-actions">${r.state === 'done'
+            ? `<button class="btn" data-action="remUndo" data-id="${r.id}">Undo</button>`
+            : `<button class="btn ${r.state === 'later' ? '' : 'primary'}" data-action="remRenewOpen" data-id="${r.id}">Renewed</button><button class="btn" data-action="remEdit" data-id="${r.id}">Edit</button>`}<button class="btn ghost danger" data-action="remDelete" data-id="${r.id}">Delete</button></div>
+        ${st.renew && st.renew.id === r.id ? `<div class="a-panel">${renewForm(r)}</div>` : ''}
+    </div>`;
+    const lists = groups.map(([key, title]) => {
+        const list = rows.filter((r) => r.state === key);
+        return list.length ? `<h3>${title} · ${list.length}</h3><section class="list atable">${list.map(row).join('')}</section>` : '';
+    }).join('');
+    const done = rows.filter((r) => r.state === 'done');
+    const c = renewalCounts();
+    return `<header class="hero">
+        <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
+        <small class="eyebrow">Renewal reminders</small><h1>What comes up next</h1>
+        <div class="stats">${stat('Overdue', c.overdue)}${stat('Due soon', c.soon)}${stat('Yearly cost', L.money(L.yearlyCost(S.data.reminders)))}</div>
+    </header>
+    <main>
+        ${f ? `<section class="card form"><h3>${f.id ? 'Edit reminder' : 'New reminder'}</h3>
+            <div class="grid3"><label>Name<input type="text" value="${esc(f.name)}" placeholder="e.g. Car insurance" data-model="renewals.form.name"></label>
+            <label>Kind<select data-model="renewals.form.kind">${L.REMINDER_KINDS.map((x) => `<option ${x === f.kind ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+            <label>Due or expiry date<input type="date" value="${esc(f.due)}" data-model="renewals.form.due"></label>
+            <label>Repeats<select data-model="renewals.form.repeat">${L.REPEATS.map(([m, label]) => `<option value="${m}" ${m === Number(f.repeat) ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+            <label>Amount (optional)<input type="number" inputmode="decimal" min="0" value="${esc(f.amount)}" data-model="renewals.form.amount"></label>
+            <label>Remind me<select data-model="renewals.form.remindDays">${L.REMIND_DAYS.map((d) => `<option value="${d}" ${d === Number(f.remindDays) ? 'selected' : ''}>${plural(d, 'day')} before</option>`).join('')}</select></label>
+            <label>Usually paid from (optional)<select data-model="renewals.form.accountId"><option value="">No account</option>${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === f.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+            <label class="span2">Notes (optional)<input type="text" value="${esc(f.notes)}" placeholder="e.g. policy number, where the papers are" data-model="renewals.form.notes"></label></div>
+            <div class="split"><button class="btn" data-action="remCancel">Cancel</button><button class="btn primary" data-action="remSave">Save</button></div></section>`
+            : `<div class="toolbar"><button class="btn primary" data-action="remNew">${icon('plus')} Add reminder</button></div>`}
+        ${!S.isDemo && !(pushDevice() && S.push) && c.total ? `<a class="notice" href="#more">${icon('bell')} Get a notification when a renewal is due, even with LifeDesk closed – turn on under Account</a>` : ''}
+        ${c.total ? lists : `<div class="empty-state">${icon('bell')}<b>No reminders yet</b><small>Add insurance, subscriptions, documents like a passport or licence, a vehicle service or a warranty. LifeDesk shows each one when it is coming up.</small></div>`}
+        ${done.length ? `<div class="toolbar"><button class="btn ghost" data-action="remShowDone">${st.showDone ? 'Hide' : 'Show'} done · ${done.length}</button></div>${st.showDone ? `<section class="list atable">${done.map(row).join('')}</section>` : ''}` : ''}
+        <small>A reminder shows under Due soon from the number of days before its date you chose. With notifications or email on (Account → Notifications), you get a reminder every morning from then until you press Renewed. Repeating ones then move to their next date.</small>
+    </main>`;
+}
+
 function loansView() {
     const s = state.people;
     const loans = loanRows().sort((a, b) => b.outstanding - a.outstanding);
@@ -828,6 +1013,7 @@ function more() {
         ${S.isDemo ? '' : `<section class="card"><div class="card-head"><h2>Privacy</h2><span class="pill">Encrypted</span></div>
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
+        ${notificationsCard()}
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
@@ -852,14 +1038,15 @@ function more() {
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
-const NO_TABS = ['hub'];
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const NO_TABS = ['hub', 'renewals']; // the bottom bar belongs to Money
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['more', 'user', 'Account']];
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
     ['Money', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
+    ['Renewals', [['renewals', 'bell', 'Renewal reminders']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
 
@@ -1191,6 +1378,171 @@ const actions = {
         const a = byId(S.data.assets, el.dataset.id);
         if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
             await S.remove('assets', a.id);
+        }
+    },
+    // push notifications
+    async pushOn() {
+        const blocker = pushBlocker();
+        if (blocker) {
+            return toast(blocker, 'warn');
+        }
+        state.push.busy = true;
+        render();
+        try {
+            if ((await Notification.requestPermission()) !== 'granted') {
+                return toast('Notifications were not allowed. Allow them in the browser or phone settings to turn this on.', 'warn');
+            }
+            let token;
+            try {
+                token = await S.pushToken(PUSH.vapidKey);
+            } catch (e) {
+                console.error(e);
+                // private / incognito windows refuse push without saying so; so do some locked-down browsers
+                return toast(/permission|denied|abort/i.test(`${e.name} ${e.message}`) ? 'This browser window cannot receive notifications. Private or incognito windows cannot; open LifeDesk in a normal window and try again.' : `Notifications could not be turned on: ${e.message}`, 'warn');
+            }
+            const p = S.push || {};
+            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(), dates: pushDates() });
+            localStorage.setItem(pushSlot(), token);
+            toast('Notifications are on for this device.');
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async pushOff() {
+        state.push.busy = true;
+        render();
+        try {
+            await S.pushRemove(pushDevice());
+            localStorage.removeItem(pushSlot());
+            toast('Notifications are off on this device.');
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async pushPref(el) {
+        const key = el.dataset.pref;
+        const value = !(S.push && S.push[key] !== false);
+        await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
+        render();
+    },
+    async emailToggle() {
+        const value = !(S.push && S.push.email);
+        state.push.busy = true;
+        render();
+        try {
+            if (value) {
+                const p = S.push || {};
+                await S.pushUpdate({ enabled: true, email: true, emailDetails: false, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(),
+                    dates: pushDates(p.renewals !== false, false) });
+                toast(`Reminders will also be emailed to ${S.user.contact}.`);
+            } else {
+                await S.pushUpdate({ email: false, emailDetails: false, dates: pushDates(undefined, false) });
+                await S.pushRemove(null); // deletes the schedule when no device is left either
+                toast('Email reminders are off.');
+            }
+        } finally {
+            state.push.busy = false;
+            render();
+        }
+    },
+    async emailDetails() {
+        const value = !(S.push && S.push.emailDetails);
+        if (value && !window.confirm('Include reminder names and amounts in emails?\nTo write them into the email, they are kept readable for the email sender (only the names and amounts of reminders). Everything else stays encrypted.')) {
+            return render();
+        }
+        await S.pushUpdate({ emailDetails: value, dates: pushDates(undefined, value) });
+        render();
+    },
+    async pushTest() {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification('✅ Notifications work on this device', { body: 'Renewal reminders and a start-of-month nudge will appear here.', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'lifedesk-test', data: { link: './#more' } });
+    },
+    // renewal reminders
+    remNew() {
+        state.renewals.form = { id: null, name: '', kind: 'Insurance', due: '', repeat: 12, amount: '', remindDays: 30, accountId: (defaultAccount() || {}).id || '', notes: '' };
+        state.renewals.renew = null;
+        render();
+    },
+    remEdit(el) {
+        state.renewals.form = { ...byId(S.data.reminders, el.dataset.id) };
+        state.renewals.renew = null;
+        render();
+        window.scrollTo(0, 0);
+    },
+    remCancel() {
+        state.renewals.form = null;
+        render();
+    },
+    async remSave() {
+        const f = state.renewals.form;
+        if (!String(f.name).trim()) {
+            return toast('Enter a name.', 'warn');
+        }
+        if (!f.due) {
+            return toast('Choose the due or expiry date.', 'warn');
+        }
+        if (Number(f.amount) < 0) {
+            return toast('The amount cannot be below zero.', 'warn');
+        }
+        const doc = { ...f, id: f.id || S.newId(), name: String(f.name).trim(), notes: String(f.notes || '').trim(), repeat: Number(f.repeat) || 0, amount: Number(f.amount) || 0,
+            remindDays: Number(f.remindDays) || 0, accountId: f.accountId || null, done: false, createdAt: f.createdAt || Date.now() };
+        state.renewals.form = null;
+        await S.save('reminders', doc);
+        toast(`${doc.name} saved.`);
+    },
+    remRenewOpen(el) {
+        const r = byId(S.data.reminders, el.dataset.id);
+        const account = byId(S.data.accounts, r.accountId) && byId(S.data.accounts, r.accountId).active !== false ? r.accountId : (defaultAccount() || {}).id || '';
+        state.renewals.renew = { id: r.id, next: L.nextDue(r) || '', record: Number(r.amount) > 0, amount: Number(r.amount) || '', accountId: account,
+            categoryId: L.suggestCategory(S.data.categories, `${r.name} ${r.kind}`, 'expense', S.data.entries) || '' };
+        state.renewals.form = null;
+        render();
+    },
+    remRenewCancel() {
+        state.renewals.renew = null;
+        render();
+    },
+    remRecord() {
+        state.renewals.renew.record = !state.renewals.renew.record;
+        render();
+    },
+    async remRenewSave() {
+        const f = state.renewals.renew;
+        const r = byId(S.data.reminders, f.id);
+        const repeating = Number(r.repeat) > 0;
+        if (repeating && !f.next) {
+            return toast('Choose the next due date.', 'warn');
+        }
+        if (repeating && f.next <= r.due) {
+            return toast('The next due date must be after the current one.', 'warn');
+        }
+        const pairs = [['reminders', repeating ? { ...r, due: f.next, lastRenewed: today() } : { ...r, done: true, lastRenewed: today() }]];
+        if (f.record) {
+            const entry = { id: S.newId(), type: 'expense', amount: Number(f.amount), date: today(), description: `${r.name} – renewed`, accountId: f.accountId, toAccountId: null,
+                categoryId: f.categoryId, personId: null, reminderId: r.id, notes: '', createdAt: Date.now() };
+            const problem = L.validateEntry(entry, S.data);
+            if (problem) {
+                return toast(problem, 'warn');
+            }
+            pairs.push(['entries', entry]);
+        }
+        state.renewals.renew = null;
+        await S.saveAll(pairs);
+        toast(`${r.name} renewed${repeating ? `, next due ${longDate(f.next)}` : ''}${f.record ? ` · ${L.money(f.amount)} recorded` : ''}.`);
+    },
+    async remUndo(el) {
+        await S.save('reminders', { ...byId(S.data.reminders, el.dataset.id), done: false });
+    },
+    remShowDone() {
+        state.renewals.showDone = !state.renewals.showDone;
+        render();
+    },
+    async remDelete(el) {
+        const r = byId(S.data.reminders, el.dataset.id);
+        if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Money stays.`)) {
+            await S.remove('reminders', r.id);
         }
     },
     emiToggle() {
@@ -1620,6 +1972,7 @@ const actions = {
         S.data.budgets.forEach((b) => pairs.push(['budgets', { ...b, lines: Object.fromEntries(Object.entries(b.lines || {}).map(([k, v]) => [k, x(v)])) }]));
         S.data.loans.forEach((l) => pairs.push(['loans', { ...l, price: x(l.price), downPayment: x(l.downPayment), financed: x(l.financed), emi: x(l.emi) }]));
         S.data.assets.forEach((a) => pairs.push(['assets', { ...a, price: x(a.price), value: x(a.value) }]));
+        S.data.reminders.forEach((r) => pairs.push(['reminders', { ...r, amount: x(r.amount) }]));
         pairs.push(['settings', { ...(S.prefs() || { id: 'prefs' }), currency: to }]);
         state.more.busy = true;
         render();
@@ -1919,6 +2272,7 @@ window.addEventListener('hashchange', () => {
 
 state.route = window.location.hash.slice(1) || 'hub';
 render();
+let pushFor = null; // the user whose notification schedule has been read
 S.init((status) => {
     // Signed out (or not yet verified): forget the screen that was open, so the next sign-in starts on All tools.
     // A page reload while signed in never passes through here, so it stays on the screen it was on.
@@ -1927,12 +2281,22 @@ S.init((status) => {
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
     state.status = status;
+    if (status === 'ready' && !S.isDemo) {
+        if (pushFor !== S.user.uid) {
+            pushFor = S.user.uid;
+            S.loadPush().then(() => (render(), syncPushSoon(), repairPushDevice())).catch((e) => console.error(e));
+        } else {
+            syncPushSoon();
+        }
+    } else if (status !== 'ready') {
+        pushFor = null;
+    }
     render();
 }).catch((e) => {
     console.error(e);
     app.innerHTML = `<div class="loading"><p>Could not start: ${esc(e.message)}</p></div>`;
 });
 
-if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
 }
