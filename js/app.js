@@ -9,6 +9,7 @@ import { SAMPLE_START, buildSample, sampleDocs } from './sample.js';
 import { currentReport, dashboards, reports } from './insights.js';
 import { netWorth, toCsv } from './reports.js';
 import { pushSettings as PUSH } from './config.js';
+import * as Voice from './voice.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -28,6 +29,8 @@ const state = {
     renewals: { form: null, renew: null, showDone: false },
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
+    voice: { open: false, lang: 'en', phase: 'idle', interim: '', note: '', log: [], review: null },
+    addMenu: false, // the choice above the + of the bottom bar: type or speak
     net: { offline: !navigator.onLine, dismissed: false, checking: false, failedStart: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
@@ -97,14 +100,15 @@ function errorText(e) {
     return AUTH_ERRORS[e && e.code] || (e && e.message) || 'Something went wrong.';
 }
 
-function toast(message, kind = 'ok') {
-    state.toast = { message, kind };
+/** A message at the top. action = { label, run }: a button in it (such as Undo); the message then stays longer. */
+function toast(message, kind = 'ok', action = null) {
+    state.toast = { message, kind, action };
     render();
     window.clearTimeout(toast.timer);
     toast.timer = window.setTimeout(() => {
         state.toast = null;
         render();
-    }, 3200);
+    }, action ? 8000 : 3200);
 }
 
 function blankEntry(keep) {
@@ -459,6 +463,7 @@ function home() {
             <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
             <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
             <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
+            <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
         </div>
         ${dueEmis().length ? `<a class="notice span" href="#pay">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
@@ -512,7 +517,7 @@ function addEntry() {
         <div class="pane">
             ${editing ? `<div class="banner"><div><b>Editing an entry</b><small>${esc(f.label)}</small></div><button class="btn" data-action="cancelEdit">Cancel</button></div>` : ''}
             ${editing ? '' : dueList()}
-            <div class="pane-head"><h2>${editing ? 'Edit entry' : 'New entry'}</h2><small>${L.TYPES[f.type].hint}</small></div>
+            <div class="pane-head"><h2>${editing ? 'Edit entry' : 'New entry'}</h2><small>${L.TYPES[f.type].hint}</small>${editing ? '' : `<button class="btn voice-btn" data-action="voiceOpen">${icon('mic')} Speak it</button>`}</div>
             <div class="type-grid">${tiles}</div>
             <label class="amount ${L.TYPES[f.type].sign > 0 ? 'in' : L.TYPES[f.type].sign < 0 ? 'out' : ''}"><span>${esc(L.symbol())}</span><input inputmode="decimal" type="number" min="0" step="0.01" placeholder="0" value="${esc(f.amount)}" data-model="add.amount" aria-label="Amount"></label>
             <div class="grid2">
@@ -1088,6 +1093,11 @@ function more() {
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
         ${notificationsCard()}
+        <section class="card"><div class="card-head"><h2>Voice assistant</h2><span class="pill">${voiceBlocker() ? 'Not in this browser' : 'Ready'}</span></div>
+            <small>The voice that asks the questions when you speak an entry.</small>
+            <div class="seg">${[['female', 'Female voice'], ['male', 'Male voice']].map(([k, label]) => `<button class="${voiceGender() === k ? 'on' : ''}" data-action="voiceGender" data-gender="${k}" aria-pressed="${voiceGender() === k}">${label}</button>`).join('')}</div>
+            <small>Tap one to hear it. It uses the voices of this device: where there is none of that kind for the language, the nearest one is used, pitched lower or higher. Saved on this device only.</small>
+            ${voiceBlocker() ? '<small>Speaking an entry works in Chrome and Edge (computer and Android) and Safari (iPhone, iPad, Mac).</small>' : ''}</section>
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
@@ -1159,13 +1169,21 @@ function render() {
     const fresh = state.fresh ? 'fresh' : ''; // only the first drawing after moving to a screen
     state.fresh = false;
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
-    const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`).join('')}`).join('');
+    const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>${r === 'add' ? `<button class="side-voice" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>` : ''}`).join('')}`).join('');
     app.innerHTML = `<div class="app">
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
         <div class="navbar" aria-hidden="true"></div>
         <div class="shell ${fresh}">${screen()}</div>
-        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon(ic)}</span>${label}</a>`).join('')}</nav>`}
-    </div>${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
+        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => (r === 'add'
+            ? `<a href="#add" class="add ${state.route === r ? 'on' : ''} ${state.addMenu ? 'open' : ''}" data-action="addMenu" aria-haspopup="menu" aria-expanded="${!!state.addMenu}" title="Add an entry: tap to choose, hold to speak"><span>${icon(ic)}</span>${label}</a>`
+            : `<a href="#${r}" class="${state.route === r ? 'on' : ''}"><span>${icon(ic)}</span>${label}</a>`)).join('')}</nav>
+            ${state.addMenu ? `<button class="add-menu-back" data-action="addMenuClose" aria-label="Close the menu"></button>
+            <div class="add-menu" role="menu" aria-label="Add an entry">
+                <button role="menuitem" data-action="addMenuVoice"><span class="mi speak">${icon('mic')}</span><span><b>Speak an entry</b><small>Say it in English or हिन्दी</small></span></button>
+                <a role="menuitem" href="#add" data-action="addMenuType"><span class="mi">${icon('edit')}</span><span><b>Type an entry</b><small>Fill in the form yourself</small></span></a>
+                <small class="add-menu-tip">Tip: press and hold + to speak straight away</small>
+            </div>` : ''}`}
+    </div>${voiceSheet()}${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
     if (focus) {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {
@@ -1178,6 +1196,436 @@ function render() {
     markEntered();
     fillNavbar();
 }
+// ---------- voice entry ----------
+// The browser listens and speaks (Web Speech API: no service is added by LifeDesk); js/voice.js turns the words into
+// an entry and says what to ask. Nothing is stored until everything an entry needs has been said.
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const VOICE_TEXT = {
+    en: { idle: 'Tap the microphone to speak', starting: 'Get ready…', listening: 'Your turn: speak now', asking: 'LifeDesk is speaking', saving: 'Saving…',
+        sub: { starting: 'Opening the microphone', asking: 'Please wait, then answer. Tap the circle to answer now.', saving: 'One moment' }, assistant: 'LifeDesk', noSpeech: "I didn't hear anything. Tap the microphone and speak.",
+        blocked: "The microphone is blocked for LifeDesk. Allow it in the browser's site settings, then tap the microphone.", network: 'Voice entry needs an internet connection.',
+        noMic: 'No microphone was found on this device.', failed: 'Listening did not work this time. Tap the microphone to try again.',
+        examples: ['Spent 450 on groceries from HDFC', 'Received 50,000 salary', 'Lent 2,000 to Shubham yesterday', 'Spent 300 on petrol and 120 on milk'], tryTitle: 'Try saying', you: 'You', by: 'saved by voice',
+        takeTime: 'Take your time. Tap the microphone when you have finished.', heardAs: 'I heard', tapInstead: 'Tap Save or Cancel below', confirmHint: 'Say “yes” to save, or “no”', female: 'Female voice', male: 'Male voice', sample: 'This is how I will sound.',
+        reviewOne: 'Check it before saving', reviewMany: 'Check these {n} entries before saving', save: 'Save', saveAll: 'Save all {n}', cancel: 'Cancel', declined: 'Okay, nothing was saved.' },
+    hi: { idle: 'बोलने के लिए माइक दबाएं', starting: 'तैयार हो जाइए…', listening: 'अब आपकी बारी: बोलिए', asking: 'LifeDesk बोल रहा है', saving: 'सेव कर रहा हूँ…',
+        sub: { starting: 'माइक खुल रहा है', asking: 'रुकिए, फिर जवाब दीजिए। अभी जवाब देने के लिए गोले को दबाएं।', saving: 'एक क्षण' }, assistant: 'LifeDesk', noSpeech: 'कुछ सुनाई नहीं दिया। माइक दबाकर बोलिए।',
+        blocked: 'LifeDesk के लिए माइक बंद है। ब्राउज़र की साइट सेटिंग में अनुमति दें, फिर माइक दबाएं।', network: 'वॉइस एंट्री के लिए इंटरनेट चाहिए।',
+        noMic: 'इस डिवाइस पर माइक नहीं मिला।', failed: 'इस बार सुनना नहीं हो पाया। दोबारा माइक दबाएं।',
+        examples: ['किराने पर 450 रुपये खर्च किए', '50,000 सैलरी मिली', 'शुभम को कल 2,000 उधार दिए', 'पेट्रोल पर 300 और दूध पर 120 रुपये खर्च किए'], tryTitle: 'ऐसे बोलिए', you: 'आप', by: 'वॉइस से सेव हुआ',
+        takeTime: 'आराम से बोलिए। पूरा होने पर माइक दबाएं।', heardAs: 'मैंने सुना', tapInstead: 'नीचे सेव या रद्द दबाएं', confirmHint: 'सेव करने के लिए “हाँ” बोलिए, या “नहीं”', female: 'महिला आवाज़', male: 'पुरुष आवाज़', sample: 'मेरी आवाज़ ऐसी होगी।',
+        reviewOne: 'सेव करने से पहले जांच लें', reviewMany: 'सेव करने से पहले ये {n} एंट्री जांच लें', save: 'सेव करें', saveAll: 'सभी {n} सेव करें', cancel: 'रद्द करें', declined: 'ठीक है, कुछ सेव नहीं हुआ।' }
+};
+let voiceSession = null;
+let voiceRec = null;
+const voiceLang = () => {
+    try {
+        return localStorage.getItem('lifedesk-voice-lang') || ((navigator.language || '').toLowerCase().startsWith('hi') ? 'hi' : 'en');
+    } catch (e) {
+        return 'en';
+    }
+};
+/** null when this browser can do voice entry, otherwise why not. */
+const voiceBlocker = () => (!window.isSecureContext ? 'insecure' : !SpeechRec ? 'unsupported' : null);
+const voiceCtx = () => ({ accounts: activeAccounts(), categories: S.data.categories, people: S.data.people, entries: S.data.entries, today: today(),
+    defaultAccountId: (defaultAccount() || {}).id || null, suggest: (d, t) => L.suggestCategory(S.data.categories, d, t, S.data.entries) });
+
+const voiceGender = () => {
+    try {
+        return localStorage.getItem('lifedesk-voice-gender') === 'male' ? 'male' : 'female';
+    } catch (e) {
+        return 'female';
+    }
+};
+// Browsers do not say whether a voice is male or female, so the well-known voice names are recognised. Where the
+// device has no voice of the kind chosen for the language, the nearest voice is used at a lower or higher pitch.
+const FEMALE_VOICES = /female|woman|samantha|veena|lekha|karen|moira|tessa|fiona|victoria|allison|ava|susan|zira|heera|kalpana|swara|neerja|aditi|raveena|priya|sangeeta|kiyara|isha|nicky|kathy|serena|catherine|google हिन्दी|google us english/i;
+const MALE_VOICES = /(^|[^e])male|\bman\b|daniel|rishi|alex|fred|\btom\b|david|mark|ravi|hemant|madhur|prabhat|aaron|arthur|gordon|oliver|james|george|ralph|albert|bruce|eddy|reed|rocko/i;
+function voicePick(lang, gender) {
+    const all = window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function' ? window.speechSynthesis.getVoices() : [];
+    const code = Voice.LANGS[lang].code.toLowerCase();
+    const forLang = all.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2)))
+        .sort((a, b) => Number(b.lang.replace('_', '-').toLowerCase() === code) - Number(a.lang.replace('_', '-').toLowerCase() === code));
+    const isMale = (v) => MALE_VOICES.test(v.name) && !/female/i.test(v.name);
+    const isFemale = (v) => FEMALE_VOICES.test(v.name);
+    const exact = forLang.find(gender === 'male' ? isMale : isFemale);
+    if (exact) {
+        return { voice: exact, pitch: 1 };
+    }
+    const other = forLang.find((v) => !(gender === 'male' ? isFemale(v) : isMale(v))) || forLang[0] || null;
+    return { voice: other, pitch: gender === 'male' ? 0.72 : 1.18 };
+}
+if (window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function') {
+    window.speechSynthesis.getVoices(); // browsers load their list of voices only after it is first asked for
+}
+
+let voiceTone = null;
+/** "Your turn": a small vibration, and a short two-note chime (not on Android, whose microphone makes its own sound). */
+function voiceCue(quiet) {
+    if (navigator.vibrate) {
+        navigator.vibrate(18);
+    }
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (quiet || !Ctx) {
+        return;
+    }
+    try {
+        voiceTone = voiceTone || new Ctx();
+        const now = voiceTone.currentTime;
+        [[880, 0], [1320, 0.09]].forEach(([hz, at]) => {
+            const osc = voiceTone.createOscillator();
+            const gain = voiceTone.createGain();
+            osc.frequency.value = hz;
+            gain.gain.setValueAtTime(0.0001, now + at);
+            gain.gain.exponentialRampToValueAtTime(0.12, now + at + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.11);
+            osc.connect(gain).connect(voiceTone.destination);
+            osc.start(now + at);
+            osc.stop(now + at + 0.12);
+        });
+    } catch (e) {
+        // no sound on this device: the screen still shows whose turn it is
+    }
+}
+let voiceSpeakTimer = null;
+let voiceLastSaid = ''; // what the assistant last spoke: the microphone may pick it up again
+/**
+ * Speaks, then calls `then` once. Some phones never report that speaking has ended, so the end is also noticed
+ * directly (the browser says whether it is still speaking); without that, the microphone opened seconds late and
+ * the user's quick "yes" was missed.
+ */
+function voiceSay(text, then) {
+    window.clearInterval(voiceSpeakTimer);
+    const done = () => {
+        window.clearInterval(voiceSpeakTimer);
+        if (then) {
+            const next = then;
+            then = null;
+            next();
+        }
+    };
+    const synth = window.speechSynthesis;
+    if (!synth || !window.SpeechSynthesisUtterance) {
+        return window.setTimeout(done, 500);
+    }
+    synth.cancel();
+    voiceLastSaid = text;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = Voice.LANGS[state.voice.lang].code;
+    const pick = voicePick(state.voice.lang, voiceGender());
+    if (pick.voice) {
+        u.voice = pick.voice;
+    }
+    u.pitch = pick.pitch;
+    u.onend = done;
+    u.onerror = done;
+    synth.speak(u);
+    const began = Date.now();
+    let spoke = false;
+    voiceSpeakTimer = window.setInterval(() => {
+        const speaking = synth.speaking === true || synth.pending === true;
+        spoke = spoke || speaking;
+        const waited = Date.now() - began;
+        // finished speaking, or it never started (blocked or no voice), or the longest it could take has passed
+        // (about 13 letters a second; some phones go on reporting "speaking" long after they have stopped)
+        if ((spoke && !speaking) || (!spoke && waited > 1200 && typeof synth.speaking === 'boolean') || waited > 900 + text.length * 95) {
+            done();
+        }
+    }, 120);
+    return null;
+}
+
+// How long the microphone waits (milliseconds). before = for the user to start speaking; pause = of silence after
+// the last word before the sentence is taken as finished (2 seconds, for a sentence and for an answer alike).
+const VOICE_WAIT = { before: 30000, pause: 2000, beforeAnswer: 20000, pauseAnswer: 2000 };
+let voiceSilence = null; // the timer that ends the sentence after a pause
+let voiceUserStop = false; // the user tapped the microphone to finish
+
+function voiceStop() {
+    window.clearTimeout(voiceSilence);
+    if (voiceRec) {
+        voiceRec.onresult = voiceRec.onerror = voiceRec.onend = null;
+        try {
+            voiceRec.abort();
+        } catch (e) {
+            // already stopped
+        }
+        voiceRec = null;
+    }
+}
+
+/**
+ * Listens for one sentence (or one answer). The browser's recogniser gives up after a few seconds of silence; here
+ * it is started again, quietly, until the user has had time to think and speak, and a sentence ends only after a
+ * real pause or a tap on the microphone.
+ */
+function voiceListen() {
+    const v = state.voice;
+    if (!v.open) {
+        return;
+    }
+    voiceStop();
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    const answering = v.log.length > 0 && v.log[v.log.length - 1].who === 'app' && !v.log[v.log.length - 1].kind; // a question was just asked
+    const patience = answering ? VOICE_WAIT.beforeAnswer : VOICE_WAIT.before;
+    const pause = answering ? VOICE_WAIT.pauseAnswer : VOICE_WAIT.pause;
+    const started = Date.now();
+    const t = VOICE_TEXT[v.lang];
+    let kept = ''; // from earlier runs of the recogniser in this same turn
+    let done = false;
+    let problem = '';
+    voiceUserStop = false;
+
+    const finish = (heard) => {
+        if (done) {
+            return;
+        }
+        done = true;
+        voiceStop();
+        v.interim = '';
+        if (heard) {
+            return voiceHeard(heard);
+        }
+        v.phase = 'idle';
+        // while entries are waiting for a yes, silence is not a problem: the Save button is right there
+        v.note = problem || (v.review ? '' : t.noSpeech);
+        return render();
+    };
+    // Chrome on Android cannot keep listening through a pause (and repeats itself when asked to): there, each run
+    // of the recogniser hears one stretch of speech, and it is started again while the user may still be going on.
+    const oneStretch = /Android/i.test(navigator.userAgent);
+    let lastHeardAt = 0;
+    const live = () => {
+        if (!done && v.phase !== 'listening') {
+            v.phase = 'listening'; // shown only once the microphone is really open
+            render();
+            voiceCue(oneStretch);
+        }
+    };
+    const begin = () => {
+        const rec = new SpeechRec();
+        voiceRec = rec;
+        rec.lang = Voice.LANGS[v.lang].code;
+        rec.interimResults = true;
+        rec.continuous = !oneStretch; // do not stop at the first short pause
+        rec.maxAlternatives = 1;
+        let said = '';
+        rec.onstart = live;
+        rec.onaudiostart = live;
+        rec.onresult = (event) => {
+            const pieces = [];
+            for (let i = 0; i < event.results.length; i += 1) {
+                pieces.push(event.results[i][0].transcript);
+            }
+            said = Voice.joinHeard(pieces);
+            v.interim = Voice.joinHeard([kept, said]);
+            lastHeardAt = Date.now();
+            live();
+            const box = document.getElementById('voice-interim'); // only the words are redrawn while speaking
+            if (box) {
+                box.textContent = v.interim;
+            }
+            window.clearTimeout(voiceSilence);
+            voiceSilence = window.setTimeout(() => finish(v.interim), pause);
+        };
+        rec.onerror = (event) => {
+            problem = event.error === 'not-allowed' || event.error === 'service-not-allowed' ? t.blocked : event.error === 'network' ? t.network : event.error === 'audio-capture' ? t.noMic : problem;
+        };
+        rec.onend = () => {
+            if (done || voiceRec !== rec) {
+                return;
+            }
+            kept = Voice.joinHeard([kept, said]);
+            if (problem || voiceUserStop) {
+                return finish(kept); // cannot listen at all, or stopped by the user
+            }
+            if (kept) {
+                // spoken, and this run of the recogniser has ended. Where a run is one stretch of speech, the user may
+                // only have paused: listen on until the pause has lasted (the timer set at the last word ends it).
+                return oneStretch && Date.now() - lastHeardAt < pause ? begin() : finish(kept);
+            }
+            if (Date.now() - started >= patience) {
+                return finish(''); // waited long enough
+            }
+            return begin(); // nothing said yet and the recogniser gave up: keep listening while the user thinks
+        };
+        try {
+            rec.start();
+        } catch (e) {
+            problem = t.failed;
+            finish('');
+        }
+    };
+    v.phase = 'starting';
+    v.note = '';
+    v.interim = '';
+    render();
+    begin();
+    window.setTimeout(() => {
+        if (!done && voiceRec) {
+            live(); // a browser that does not report the microphone opening
+        }
+    }, 2000);
+}
+
+/** One line for an entry waiting to be saved: the parts shown in the review list and read aloud. */
+function voiceLine(item) {
+    const e = item.entry;
+    const who = item.person ? item.person.name : personName(e.personId);
+    const what = e.type === 'transfer' ? `${accountName(e.accountId)} → ${accountName(e.toAccountId)}` : categoryName(e.categoryId) || who || e.description || L.TYPES[e.type].label;
+    return { title: e.description || what, detail: [L.TYPES[e.type].short, e.description && what !== e.description ? what : '', e.type === 'transfer' ? '' : accountName(e.accountId), e.date === today() ? '' : shortDate(e.date)].filter(Boolean).join(' · '),
+        spoken: [L.money(e.amount), what, e.type === 'transfer' ? '' : accountName(e.accountId)].filter(Boolean).join(', ') };
+}
+
+async function voiceHeard(text) {
+    const v = state.voice;
+    if (Voice.isEcho(text, voiceLastSaid)) {
+        voiceLastSaid = ''; // the microphone caught the assistant's own question: not an answer, listen again
+        return voiceListen();
+    }
+    v.heard = text;
+    v.log.push({ who: 'you', text });
+    voiceSession = voiceSession || Voice.createSession(v.lang);
+    const r = Voice.hear(voiceSession, text, voiceCtx());
+    if (r.status === 'ask') {
+        v.log.push({ who: 'app', text: r.say });
+        v.question = r.say;
+        v.phase = 'asking';
+        render();
+        return voiceSay(r.say, voiceListen);
+    }
+    if (r.status === 'confirm') {
+        // everything is understood: show it and ask. Nothing is stored until the user says yes or presses Save.
+        v.review = r.items;
+        v.unclear = r.unclear || 0;
+        if (v.unclear >= 2) {
+            // twice neither a yes nor a no was heard: stop asking, the entries wait for the Save or Cancel button
+            v.phase = 'idle';
+            return render();
+        }
+        const ask = r.say(r.items.map((item) => voiceLine(item).spoken));
+        v.log.push({ who: 'app', text: ask });
+        v.question = ask.split(/[.।] /).pop(); // the list is on the screen already: only the question itself is written out
+        v.phase = 'asking';
+        render();
+        return voiceSay(ask, voiceListen);
+    }
+    if (r.status === 'abort') {
+        voiceSession = null;
+        v.review = null;
+        v.question = '';
+        v.log.push({ who: 'app', text: r.say, kind: 'warn' });
+        v.phase = 'idle';
+        render();
+        return voiceSay(r.say);
+    }
+    return voiceStore(r.items, r.say);
+}
+
+/** Stores the reviewed entries exactly as Add Entry would, all together, with one Undo for all of them. */
+async function voiceStore(items, spoken) {
+    const v = state.voice;
+    const pairs = [];
+    for (const item of items) {
+        const e = item.entry;
+        let personId = e.personId;
+        if (item.person) {
+            const made = pairs.find((p) => p[0] === 'people' && p[1].name === item.person.name); // the same new person in two entries is created once
+            personId = made ? made[1].id : S.newId();
+            if (!made) {
+                pairs.push(['people', { id: personId, name: item.person.name, direction: item.person.direction, opening: 0, status: 'Active' }]);
+            }
+        }
+        const entry = { id: S.newId(), type: e.type, amount: Number(e.amount), date: e.date, description: (e.description || '').trim() || L.TYPES[e.type].label, accountId: e.accountId, toAccountId: e.toAccountId,
+            categoryId: e.categoryId, personId: L.PERSON_TYPES.includes(e.type) ? personId : null, notes: '', createdAt: Date.now() + pairs.length, loanId: null, loanDown: null, assetId: null, byVoice: true };
+        if (e.type === 'asset') {
+            entry.assetId = S.newId();
+            pairs.push(['assets', { id: entry.assetId, name: entry.description, type: 'Other', price: entry.amount, value: entry.amount, boughtOn: entry.date, loanId: null, status: 'Owned', createdAt: Date.now() }]);
+        }
+        const problem = L.validateEntry(entry, { people: [...S.data.people, ...pairs.filter((p) => p[0] === 'people').map((p) => p[1])] });
+        if (problem) {
+            // one entry cannot be stored (for example, no account exists yet): none of them is
+            voiceSession = null;
+            v.review = null;
+            v.log.push({ who: 'app', text: `${problem} Nothing was saved.`, kind: 'warn' });
+            v.phase = 'idle';
+            render();
+            return voiceSay(problem);
+        }
+        pairs.push(['entries', entry]);
+    }
+    voiceStop();
+    v.phase = 'saving';
+    render();
+    await S.saveMany(pairs);
+    voiceSession = null;
+    const first = voiceLine(items[0]);
+    const t = VOICE_TEXT[v.lang];
+    state.voice = { ...v, open: false, log: [], review: null, phase: 'idle' };
+    toast(items.length === 1 ? `${L.TYPES[items[0].entry.type].short} · ${first.spoken.replace(/, /g, ' · ')} – ${t.by}.` : `${items.length} entries (${L.money(items.reduce((sum, x) => sum + Number(x.entry.amount), 0))}) – ${t.by}.`, 'ok', { label: 'Undo', run: async () => {
+        await S.removeMany(pairs.map(([c, doc]) => [c, doc.id]));
+        toast('Removed. Nothing was kept.');
+    } });
+    voiceSay(spoken || (v.lang === 'hi' ? (items.length === 1 ? 'दर्ज हो गया।' : `${items.length} एंट्री दर्ज हो गईं।`) : items.length === 1 ? 'Stored.' : `${items.length} entries stored.`));
+}
+
+/** What stays written under the assistant: the user's last words, and a closing message (nothing was saved…). The
+ * question being asked is shown next to the assistant itself, so it is not repeated here. */
+function voiceBubbles(v) {
+    const you = [...v.log].reverse().find((m) => m.who === 'you');
+    const last = v.log[v.log.length - 1];
+    return [you, last && last.who === 'app' && last.kind ? last : null].filter(Boolean);
+}
+
+function voiceSheet() {
+    const v = state.voice;
+    if (!v.open) {
+        return '';
+    }
+    const blocker = voiceBlocker();
+    if (blocker) {
+        return `<section class="card form voice" role="dialog" aria-label="Voice entry"><h3>Voice entry</h3>
+            <div class="voice-stage off"><span class="voice-mic off" aria-hidden="true">${icon('mic')}</span><b class="voice-status">Voice entry is not available in this browser</b></div>
+            <p class="voice-note">${blocker === 'insecure' ? 'Voice entry needs a secure (https) address. Open LifeDesk at its normal address and try again.'
+                : 'This browser cannot turn speech into text. Voice entry works in:'}</p>
+            ${blocker === 'insecure' ? '' : `<ul class="voice-where"><li><b>Chrome</b> and <b>Edge</b> – on a computer and on Android phones</li><li><b>Safari</b> – on iPhone, iPad and Mac</li></ul>
+                <p class="voice-note">It does not work in Firefox. You can still add the entry by typing.</p>`}
+            <div class="split"><button class="btn" data-action="voiceClose">Close</button><a class="btn primary" href="#add" data-action="voiceClose">Type the entry</a></div></section>`;
+    }
+    const t = VOICE_TEXT[v.lang];
+    const turn = v.phase === 'listening' ? 'you' : ['asking', 'starting', 'saving'].includes(v.phase) ? 'app' : 'idle';
+    return `<section class="card form voice" role="dialog" aria-label="Voice entry"><h3>Voice entry</h3>
+        <div class="seg voice-lang" role="group" aria-label="Language">${Object.entries(Voice.LANGS).map(([k, l]) => `<button class="${v.lang === k ? 'on' : ''}" data-action="voiceLang" data-lang="${k}" aria-pressed="${v.lang === k}">${l.label}</button>`).join('')}</div>
+        <div class="voice-turns" aria-hidden="true">
+            <span class="turn ${turn === 'app' ? 'on' : ''}">${icon('speaker')} ${t.assistant}</span>
+            <span class="turn you ${turn === 'you' ? 'on' : ''}">${icon('mic')} ${t.you}</span>
+        </div>
+        <div class="voice-stage ${v.phase}">
+            <button class="voice-mic" data-action="voiceMic" aria-label="${v.phase === 'listening' ? 'Stop listening' : v.phase === 'asking' ? 'Answer now' : 'Start listening'}"><span class="ring r1"></span><span class="ring r2"></span>${v.phase === 'asking'
+                ? `<span class="voice-bars"><i></i><i></i><i></i><i></i><i></i></span>` : v.phase === 'starting' || v.phase === 'saving' ? '<span class="voice-wait"></span>' : icon('mic')}</button>
+            <b class="voice-status" role="status">${esc(v.review && v.phase === 'idle' ? (v.unclear >= 2 ? t.tapInstead : t.confirmHint) : t[v.phase] || t.idle)}</b>
+            ${v.phase === 'listening' ? `<small class="voice-hint">${t.takeTime}</small>` : t.sub[v.phase] ? `<small class="voice-hint">${t.sub[v.phase]}</small>` : ''}
+            ${v.question && (v.phase === 'asking' || v.phase === 'starting' || v.phase === 'listening' || v.review) ? `<p class="voice-q"><small>${t.assistant}</small>${esc(v.question)}</p>` : ''}
+            <p class="voice-interim" id="voice-interim">${esc(v.interim)}</p>
+            ${v.review && v.unclear && v.heard ? `<small class="voice-heard">${t.heardAs} “${esc(v.heard)}”</small>` : ''}
+            ${v.note ? `<p class="voice-note warn">${esc(v.note)}</p>` : ''}
+        </div>
+        ${v.review ? '' : v.log.length ? `<div class="voice-log">${voiceBubbles(v).map((m) => `<div class="vb from-${m.who} ${m.kind || ''}"><small>${m.who === 'you' ? t.you : 'LifeDesk'}</small>${esc(m.text)}</div>`).join('')}</div>`
+            : `<div class="voice-try"><small>${t.tryTitle}</small>${t.examples.map((x) => `<span>“${esc(x)}”</span>`).join('')}</div>`}
+        ${v.review ? `<div class="voice-review"><small>${v.review.length === 1 ? t.reviewOne : t.reviewMany.replace('{n}', v.review.length)}</small>
+            <div class="list inner flush">${v.review.map((item, i) => {
+                const line = voiceLine(item);
+                return `<div class="row"><span class="row-icon t-${item.entry.type}">${icon(L.TYPES[item.entry.type].icon)}</span><span class="row-text"><b>${esc(line.title)}</b><small>${esc(line.detail)}</small></span>
+                    <b class="amount-cell">${L.money(item.entry.amount)}</b>${v.review.length > 1 ? `<button class="icon-btn" data-action="voiceDrop" data-i="${i}" aria-label="Remove ${esc(line.title)}" title="Remove this one">${icon('trash')}</button>` : ''}</div>`;
+            }).join('')}</div></div>
+            <div class="split"><button class="btn" data-action="voiceReject">${t.cancel}</button><button class="btn primary" data-action="voiceAccept" ${v.phase === 'saving' ? 'disabled' : ''}>${v.review.length === 1 ? t.save : t.saveAll.replace('{n}', v.review.length)}</button></div>`
+            : `<div class="split"><button class="btn" data-action="voiceClose">Close</button></div>`}
+        <small class="voice-privacy">Your browser turns the speech into text (Google's service in Chrome, Apple's in Safari). LifeDesk keeps only the entry, encrypted like the rest. Say “cancel” to stop.</small>
+    </section>`;
+}
+
 /** Phones: once the large title has scrolled away, a frosted bar at the top keeps the screen's title (and its back link). */
 function fillNavbar() {
     const bar = app.querySelector('.navbar');
@@ -1225,7 +1673,7 @@ function toastHtml() {
     }
     const pop = t.shown ? '' : 'pop';
     t.shown = true;
-    return `<div class="toast ${t.kind} ${pop}" role="${t.kind === 'warn' ? 'alert' : 'status'}"><span class="toast-icon">${TOAST_ICONS[t.kind] || TOAST_ICONS.ok}</span><span class="toast-text">${esc(t.message)}</span>
+    return `<div class="toast ${t.kind} ${pop}" role="${t.kind === 'warn' ? 'alert' : 'status'}"><span class="toast-icon">${TOAST_ICONS[t.kind] || TOAST_ICONS.ok}</span><span class="toast-text">${esc(t.message)}</span>${t.action ? `<button class="toast-act" data-action="toastAct">${esc(t.action.label)}</button>` : ''}
         <button class="toast-close" data-action="toastClose" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>`;
 }
 
@@ -1533,6 +1981,116 @@ const actions = {
     netShow() {
         state.net.dismissed = false;
         render();
+    },
+    async toastAct() {
+        const act = state.toast && state.toast.action;
+        if (act) {
+            window.clearTimeout(toast.timer);
+            state.toast = null;
+            await act.run();
+        }
+    },
+    // the + of the bottom bar: a tap offers typing or speaking; holding it starts speaking at once (see "hold" below)
+    addMenu(el, event) {
+        event.preventDefault();
+        if (plusHeld) {
+            plusHeld = false; // the press was a hold: voice is already open
+            return;
+        }
+        state.addMenu = !state.addMenu;
+        render();
+    },
+    addMenuClose() {
+        state.addMenu = false;
+        render();
+    },
+    addMenuType() {
+        state.addMenu = false;
+        if (state.route === 'add') {
+            render(); // already there: the link changes nothing, so only the menu is closed
+        }
+    },
+    addMenuVoice() {
+        state.addMenu = false;
+        actions.voiceOpen();
+    },
+    // voice entry
+    voiceOpen() {
+        state.addMenu = false;
+        voiceSession = null;
+        state.voice = { open: true, lang: voiceLang(), phase: 'idle', interim: '', note: '', log: [], review: null, unclear: 0, heard: '', question: '' };
+        if (voiceBlocker()) {
+            return render();
+        }
+        voiceListen(); // the tap that opened the sheet is what lets the browser ask for the microphone
+    },
+    voiceClose() {
+        voiceStop();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        voiceSession = null;
+        state.voice.open = false;
+        render();
+    },
+    voiceLang(el) {
+        state.voice.lang = el.dataset.lang;
+        try {
+            localStorage.setItem('lifedesk-voice-lang', el.dataset.lang);
+        } catch (e) {
+            // the choice then lasts for this visit only
+        }
+        voiceSession = null;
+        state.voice.log = [];
+        state.voice.review = null;
+        voiceListen();
+    },
+    voiceGender(el) {
+        try {
+            localStorage.setItem('lifedesk-voice-gender', el.dataset.gender);
+        } catch (e) {
+            // the choice then lasts for this visit only
+        }
+        state.voice.lang = voiceLang(); // the sample is spoken in the language last used for voice entry
+        render();
+        voiceSay(VOICE_TEXT[state.voice.lang].sample);
+    },
+    // the review before saving: Save and Cancel do what saying yes and no do
+    voiceAccept() {
+        const items = state.voice.review;
+        if (items && items.length) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            return voiceStore(items);
+        }
+        return null;
+    },
+    voiceReject() {
+        const v = state.voice;
+        voiceStop();
+        voiceSession = null;
+        v.review = null;
+        v.log.push({ who: 'app', text: VOICE_TEXT[v.lang].declined, kind: 'warn' });
+        v.phase = 'idle';
+        render();
+        voiceSay(VOICE_TEXT[v.lang].declined);
+    },
+    voiceDrop(el) {
+        const v = state.voice;
+        v.review = Voice.drop(voiceSession, Number(el.dataset.i), voiceCtx());
+        if (!v.review.length) {
+            return actions.voiceReject();
+        }
+        return render();
+    },
+    voiceMic() {
+        if ((state.voice.phase === 'listening' || state.voice.phase === 'starting') && voiceRec) {
+            voiceUserStop = true;
+            window.clearTimeout(voiceSilence);
+            return voiceRec.stop(); // finishes with whatever was heard, without waiting for a pause
+        }
+        return voiceListen();
     },
     toastClose() {
         window.clearTimeout(toast.timer);
@@ -2468,6 +3026,29 @@ window.addEventListener('resize', () => {
     wasWide = wide;
 });
 
+// ---------- press and hold the + of the bottom bar: speak an entry at once ----------
+let plusHeld = false;
+let plusTimer = null;
+app.addEventListener('pointerdown', (event) => {
+    if (event.target.closest && event.target.closest('.tabbar a.add')) {
+        plusHeld = false;
+        window.clearTimeout(plusTimer);
+        plusTimer = window.setTimeout(() => {
+            plusHeld = true;
+            if (navigator.vibrate) {
+                navigator.vibrate(12);
+            }
+            actions.voiceOpen();
+        }, 480);
+    }
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => app.addEventListener(type, () => window.clearTimeout(plusTimer), true));
+app.addEventListener('contextmenu', (event) => {
+    if (event.target.closest && event.target.closest('.tabbar a.add')) {
+        event.preventDefault(); // a long press on a link would otherwise open the browser's own menu
+    }
+});
+
 // ---------- connection ----------
 /** True when a tiny request really reaches the site (the browser's own "online" only means a network is attached). */
 async function reachable() {
@@ -2503,6 +3084,7 @@ window.addEventListener('online', backOnline);
 
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
+    state.addMenu = false;
     const way = trackRoute();
     const show = () => {
         window.scrollTo(0, 0);

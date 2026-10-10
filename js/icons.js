@@ -30,7 +30,9 @@ const PATHS = {
     table: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M3 15h18M9 10v10"/>',
     chevLeft: '<path d="m15 5-7 7 7 7"/>',
     chevRight: '<path d="m9 5 7 7-7 7"/>',
-    chevDown: '<path d="m5 9 7 7 7-7"/>'
+    chevDown: '<path d="m5 9 7 7 7-7"/>',
+    speaker: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'
 };
 
 export function icon(name) {
