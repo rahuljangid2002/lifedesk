@@ -1592,6 +1592,7 @@ async function voiceStore(items, spoken) {
     const first = voiceLine(items[0]);
     const t = VOICE_TEXT[v.lang];
     state.voice = { ...v, open: false, log: [], review: null, phase: 'idle' };
+    voiceForget();
     toast(items.length === 1 ? `${L.TYPES[items[0].entry.type].short} · ${first.shown} – ${t.by}.` : `${items.length} entries (${L.money(items.reduce((sum, x) => sum + Number(x.entry.amount), 0))}) – ${t.by}.`, 'ok', { label: 'Undo', run: async () => {
         await S.removeMany(pairs.map(([c, doc]) => [c, doc.id]));
         toast('Removed. Nothing was kept.');
@@ -1655,6 +1656,28 @@ function voiceBubbles(v) {
     return [you, last && last.who === 'app' && last.kind ? last : null].filter(Boolean);
 }
 
+// Behind the sheet: a tap anywhere outside it closes voice entry (and never reaches the screen underneath).
+const VOICE_BACK = '<button class="voice-back" data-action="voiceClose" aria-label="Dismiss voice entry" tabindex="-1"></button>';
+let voiceOpenedAt = 0;
+let voiceThen = ''; // where to go once the sheet's place in the browser history has been given back
+// Opening the sheet adds a step to the browser history, so the phone's Back button closes the sheet instead of leaving the screen.
+function voiceRemember() {
+    try {
+        if (!(window.history.state && window.history.state.voice)) {
+            window.history.pushState({ voice: true }, '');
+        }
+    } catch (e) {
+        // without it Back behaves as before
+    }
+}
+function voiceForget() {
+    if (window.history.state && window.history.state.voice) {
+        window.history.back();
+        return true;
+    }
+    return false;
+}
+
 function voiceSheet() {
     const v = state.voice;
     if (!v.open) {
@@ -1662,7 +1685,7 @@ function voiceSheet() {
     }
     const blocker = voiceBlocker();
     if (blocker) {
-        return `<section class="card form voice" role="dialog" aria-label="Voice entry"><h3>Voice entry</h3>
+        return `${VOICE_BACK}<section class="card form voice" role="dialog" aria-label="Voice entry"><h3>Voice entry</h3>
             <div class="voice-stage off"><span class="voice-mic off" aria-hidden="true">${icon('mic')}</span><b class="voice-status">Voice entry is not available in this browser</b></div>
             <p class="voice-note">${blocker === 'insecure' ? 'Voice entry needs a secure (https) address. Open LifeDesk at its normal address and try again.'
                 : 'This browser cannot turn speech into text. Voice entry works in:'}</p>
@@ -1672,7 +1695,7 @@ function voiceSheet() {
     }
     const t = VOICE_TEXT[v.lang];
     const turn = v.phase === 'listening' ? 'you' : ['asking', 'starting', 'saving'].includes(v.phase) ? 'app' : 'idle';
-    return `<section class="card form voice ${v.editing !== null && v.editing !== undefined ? 'editing' : ''}" role="dialog" aria-label="Voice entry"><h3>${v.editing !== null && v.editing !== undefined ? 'Change the entry' : 'Voice entry'}</h3>
+    return `${VOICE_BACK}<section class="card form voice ${v.editing !== null && v.editing !== undefined ? 'editing' : ''}" role="dialog" aria-label="Voice entry"><h3>${v.editing !== null && v.editing !== undefined ? 'Change the entry' : 'Voice entry'}</h3>
         <div class="seg voice-lang" role="group" aria-label="Language">${Object.entries(Voice.LANGS).map(([k, l]) => `<button class="${v.lang === k ? 'on' : ''}" data-action="voiceLang" data-lang="${k}" aria-pressed="${v.lang === k}">${l.label}</button>`).join('')}</div>
         <div class="voice-turns" aria-hidden="true">
             <span class="turn ${turn === 'app' ? 'on' : ''}">${icon('speaker')} ${t.assistant}</span>
@@ -2098,18 +2121,32 @@ const actions = {
         state.addMenu = false;
         voiceSession = null;
         state.voice = { open: true, lang: voiceLang(), phase: 'idle', interim: '', note: '', log: [], review: null, unclear: 0, heard: '', question: '', editing: null };
+        voiceOpenedAt = Date.now();
+        voiceRemember();
         if (voiceBlocker()) {
             return render();
         }
         voiceListen(); // the tap that opened the sheet is what lets the browser ask for the microphone
     },
-    voiceClose() {
+    voiceClose(el, event) {
+        // the finger that opened the sheet (a long press on +) must not close it again as it lifts
+        if (el && el.classList.contains('voice-back') && Date.now() - voiceOpenedAt < 450) {
+            return;
+        }
         voiceStop();
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
         }
         voiceSession = null;
         state.voice.open = false;
+        plusHeld = false;
+        // "Type the entry" is a link: give the history step back first, then follow it (see the popstate listener)
+        const go = el && el.tagName === 'A' ? el.getAttribute('href') : '';
+        if (go && window.history.state && window.history.state.voice) {
+            event.preventDefault();
+            voiceThen = go;
+        }
+        voiceForget();
         render();
     },
     voiceLang(el) {
@@ -3212,9 +3249,36 @@ window.addEventListener('offline', () => {
 });
 window.addEventListener('online', backOnline);
 
+// The phone's (or browser's) Back button while voice entry is open: close the sheet and stay on the screen.
+window.addEventListener('popstate', () => {
+    if (state.voice.open) {
+        actions.voiceClose();
+        return;
+    }
+    if (voiceThen) {
+        const go = voiceThen;
+        voiceThen = '';
+        window.location.hash = go;
+    }
+});
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.voice.open) {
+        actions.voiceClose();
+    }
+});
+
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
     state.addMenu = false;
+    if (state.voice.open) {
+        // another screen was opened while the sheet was up: stop listening, the sheet does not follow
+        voiceStop();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        voiceSession = null;
+        state.voice.open = false;
+    }
     const way = trackRoute();
     const show = () => {
         window.scrollTo(0, 0);

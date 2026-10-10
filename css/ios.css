@@ -999,6 +999,19 @@ button.shortcut {
 .tabbar a.add.open span .ic {
     transform: rotate(45deg);
 }
+/* behind the voice sheet: catches a tap outside it (the sheet's own shadow already dims the screen) */
+.voice-back {
+    position: fixed;
+    inset: 0;
+    z-index: 11;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: default;
+}
+.voice-back:active {
+    transform: none;
+}
 .add-menu-back {
     position: fixed;
     inset: 0;
