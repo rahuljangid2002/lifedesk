@@ -27,6 +27,7 @@ const state = {
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false },
     push: { busy: false },
+    fresh: false, // true for the one drawing right after moving to another screen
     net: { offline: !navigator.onLine, dismissed: false, checking: false, failedStart: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
@@ -1110,6 +1111,7 @@ const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, ass
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
+const TAB_ROUTES = NAV.map(([route]) => route);
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
@@ -1154,11 +1156,14 @@ function render() {
         state.route = 'hub';
     }
     const screen = SCREENS[state.route];
+    const fresh = state.fresh ? 'fresh' : ''; // only the first drawing after moving to a screen
+    state.fresh = false;
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
     const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`).join('')}`).join('');
     app.innerHTML = `<div class="app">
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
-        <div class="shell">${screen()}</div>
+        <div class="navbar" aria-hidden="true"></div>
+        <div class="shell ${fresh}">${screen()}</div>
         ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon(ic)}</span>${label}</a>`).join('')}</nav>`}
     </div>${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
     if (focus) {
@@ -1170,7 +1175,43 @@ function render() {
             }
         }
     }
+    markEntered();
+    fillNavbar();
 }
+/** Phones: once the large title has scrolled away, a frosted bar at the top keeps the screen's title (and its back link). */
+function fillNavbar() {
+    const bar = app.querySelector('.navbar');
+    const title = app.querySelector('.hero h1');
+    if (!bar || !title) {
+        return;
+    }
+    const back = app.querySelector('.hero .back');
+    bar.innerHTML = `${back ? back.outerHTML : '<span></span>'}<b>${esc(title.textContent)}</b>`;
+    bar.classList.toggle('show', title.getBoundingClientRect().bottom < 8);
+}
+window.addEventListener('scroll', () => {
+    const bar = app.querySelector('.navbar');
+    const title = app.querySelector('.hero h1');
+    if (bar && title) {
+        bar.classList.toggle('show', title.getBoundingClientRect().bottom < 8);
+    }
+}, { passive: true });
+
+const OPENABLE = '.card.form, .a-panel, .p-body, .emi-box, .asset-box, .a-detail .form, section.card > .form';
+let openBefore = new Set();
+/** After each drawing: what was not open a moment ago gets the "enter" movement. */
+function markEntered() {
+    const now = new Set();
+    app.querySelectorAll(OPENABLE).forEach((el, i) => {
+        const key = `${state.route}|${el.className}|${el.closest('[data-rem], .acct-row, .person, .card') ? (el.closest('[data-rem], .acct-row, .person, .card').querySelector('b, h2, h3') || {}).textContent : i}`;
+        now.add(key);
+        if (!openBefore.has(key)) {
+            el.classList.add('enter');
+        }
+    });
+    openBefore = now;
+}
+
 // A banner at the top, like a Salesforce toast: icon, message, close button. It slides in once, even though the
 // screen is redrawn while it shows.
 const TOAST_ICONS = {
@@ -2217,11 +2258,17 @@ const actions = {
 /** Keeps the trail in step with the address: a step back to the previous screen pops it, anything else adds to it. */
 function trackRoute() {
     const r = SCREENS[state.route] ? state.route : 'hub';
+    const from = trail[trail.length - 1];
     if (trail[trail.length - 2] === r) {
         trail.pop();
-    } else if (trail[trail.length - 1] !== r) {
-        trail.push(r);
+        return 'back';
     }
+    if (from !== r) {
+        trail.push(r);
+        // between the tabs of the bottom bar it is a switch, not a step deeper
+        return TAB_ROUTES.includes(from) && TAB_ROUTES.includes(r) ? 'tab' : 'forward';
+    }
+    return null;
 }
 
 // ---------- events ----------
@@ -2456,10 +2503,24 @@ window.addEventListener('online', backOnline);
 
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
-    trackRoute();
-    window.scrollTo(0, 0);
-    tipBox.hidden = true;
-    render();
+    const way = trackRoute();
+    const show = () => {
+        window.scrollTo(0, 0);
+        tipBox.hidden = true;
+        state.fresh = way === 'tab';
+        render();
+    };
+    // Screens slide like a phone's own apps: forward from the right, back from the left, tabs cross-fade (css/ios.css).
+    // Without the browser feature, or when the user asked for less motion, the screen simply changes.
+    if (way && document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.documentElement.dataset.nav = way;
+        const move = document.startViewTransition(show);
+        // a second move before the first has finished skips the first one: expected, not an error
+        move.ready.catch(() => {});
+        move.finished.catch(() => {});
+    } else {
+        show();
+    }
 });
 
 state.route = window.location.hash.slice(1) || 'hub';

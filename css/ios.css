@@ -1,0 +1,628 @@
+/* LifeDesk – look and motion.
+   Loaded after app.css (which holds the layout). This layer gives the app its feel: soft surfaces, the system font,
+   frosted bars, switches, and movement that follows what the user does – screens slide in and back like a phone's
+   own apps, panels ease open, and everything that can be pressed answers the press.
+   Sizes and positions that app.css changes on wide screens are not touched here. */
+:root {
+    --radius: 1.15rem;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --hair: color-mix(in srgb, var(--border) 72%, transparent);
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 14px rgba(16, 24, 40, 0.05);
+    --shadow-up: 0 2px 6px rgba(16, 24, 40, 0.06), 0 16px 34px rgba(16, 24, 40, 0.11);
+    --ring: 0 0 0 4px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: -0.006em;
+    text-rendering: optimizeLegibility;
+}
+h1,
+h2,
+h3 {
+    letter-spacing: -0.022em;
+}
+
+/* ---------- surfaces ---------- */
+.card,
+.tool,
+.list,
+.shortcut {
+    border-color: var(--hair);
+}
+.notice {
+    border-radius: 1rem;
+}
+
+/* ---------- everything that can be pressed answers the press ---------- */
+.btn,
+.shortcut,
+.tool,
+.tile-btn,
+.chip,
+.card.link,
+.link-btn,
+.seg button,
+.back,
+a.row,
+.p-head,
+.offline-btn {
+    transition: transform 0.22s var(--ease), box-shadow 0.25s var(--ease), background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+.btn:active,
+.shortcut:active,
+.tile-btn:active,
+.chip:active,
+.link-btn:active,
+.seg button:active {
+    transform: scale(0.96);
+}
+.tool:active,
+.card.link:active,
+a.row:active,
+.p-head:active {
+    transform: scale(0.985);
+}
+@media (hover: hover) {
+    a.tool:hover,
+    .card.link:hover,
+    .shortcut:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-up);
+    }
+    a.tool:active,
+    .card.link:active,
+    .shortcut:active {
+        transform: scale(0.985);
+    }
+}
+
+/* ---------- buttons, fields, switches ---------- */
+.btn {
+    border-radius: 0.95rem;
+    letter-spacing: -0.005em;
+}
+.btn.primary {
+    border-color: transparent;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 16px color-mix(in srgb, var(--brand) 30%, transparent);
+}
+.btn:disabled {
+    box-shadow: none;
+}
+input,
+select {
+    border-radius: 0.9rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+input:not([type='checkbox']):focus,
+select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: var(--ring);
+}
+/* a tick-box becomes a switch, at the end of its line */
+input[type='checkbox'] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: none;
+    order: 2;
+    margin: 0 0 0 auto;
+    position: relative;
+    width: 3.1rem;
+    height: 1.9rem;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted) 34%, var(--surface-2));
+    cursor: pointer;
+    transition: background-color 0.28s var(--ease);
+}
+input[type='checkbox']::before {
+    content: '';
+    position: absolute;
+    top: 0.15rem;
+    left: 0.15rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+    transition: transform 0.3s var(--ease-out);
+}
+input[type='checkbox']:checked {
+    background: var(--brand);
+}
+input[type='checkbox']:checked::before {
+    transform: translateX(1.2rem);
+}
+input[type='checkbox']:active::before {
+    width: 1.85rem;
+}
+input[type='checkbox']:checked:active::before {
+    transform: translateX(0.95rem);
+}
+input[type='checkbox']:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.check {
+    gap: 0.9rem;
+    align-items: center;
+}
+.seg {
+    border-radius: 0.85rem;
+    padding: 0.2rem;
+    background: color-mix(in srgb, var(--muted) 15%, var(--surface-2));
+}
+.seg button.on {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 3px 9px rgba(0, 0, 0, 0.09);
+}
+
+/* ---------- bottom bar: frosted, with a lively active tab ---------- */
+.tabbar {
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    border-top-color: var(--hair);
+}
+.tabbar a {
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+.tabbar a span {
+    transition: transform 0.3s var(--ease-out);
+}
+.tabbar a.on span {
+    transform: translateY(-1px) scale(1.1);
+}
+.tabbar a:active span {
+    transform: scale(0.86);
+}
+.tabbar a.add span {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px color-mix(in srgb, var(--brand) 42%, transparent);
+}
+.tabbar a.add.on span,
+.tabbar a.add span {
+    transform: none;
+}
+.tabbar a.add:active span {
+    transform: scale(0.9);
+}
+
+/* ---------- lists: separators start after the icon, like a phone's settings ---------- */
+.list > .row {
+    border-top: 0;
+    position: relative;
+}
+.list > .row + .row::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0.75rem;
+    height: 1px;
+    background: var(--border);
+}
+.list > .row + .row:has(> .row-icon)::after {
+    left: 3.45rem;
+}
+.list.inner > .row + .row::after {
+    left: 0;
+}
+.list.inner > .row + .row:has(> .row-icon)::after {
+    left: 2.7rem;
+}
+
+/* ---------- side menu (wide screens) ---------- */
+.side nav a {
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s var(--ease);
+}
+.side nav a:active {
+    transform: scale(0.98);
+}
+
+/* ================= the look: large titles on a quiet grouped background ================= */
+:root {
+    --bg: #f2f2f7;
+    --surface-2: #f2f3f7;
+    --border: #e4e5ea;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        --bg: #000000;
+        --surface: #1c1c1e;
+        --surface-2: #2c2c2e;
+        --border: #38383a;
+    }
+}
+:root[data-theme='dark'] {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --border: #38383a;
+}
+.card,
+.tool,
+.list,
+.shortcut {
+    border-color: transparent;
+}
+/* the header is now part of the page: a small caption, then a large title */
+.hero {
+    background: none;
+    color: var(--text);
+    border-radius: 0;
+    padding-bottom: 0.35rem;
+}
+.hero small,
+.hero .stat small,
+.hero-sub {
+    color: var(--muted);
+    opacity: 1;
+}
+.hero .eyebrow {
+    font-weight: 700;
+    color: var(--muted);
+}
+.hero h1 {
+    font-size: 2.05rem;
+    line-height: 1.12;
+    font-weight: 800;
+    letter-spacing: -0.032em;
+}
+.hero .month-nav h1 {
+    font-size: 1.7rem;
+}
+.back {
+    color: var(--brand-ink);
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 0.55rem;
+    margin-left: -0.3rem;
+}
+.hero .stat {
+    background: var(--surface);
+    border: 0;
+    border-radius: 1.1rem;
+    padding: 0.7rem 0.8rem;
+    box-shadow: var(--shadow);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+.hero .icon-btn.light {
+    color: var(--brand-ink);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+/* shortcuts: an icon in a soft tile, like an app icon */
+.shortcut .ic {
+    box-sizing: content-box;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0.6rem;
+    border-radius: 0.9rem;
+    background: var(--brand-soft);
+}
+.shortcut.main .ic {
+    background: rgba(255, 255, 255, 0.2);
+}
+.shortcut span {
+    font-weight: 600;
+}
+
+/* the title of the screen stays in a frosted bar once the large title has scrolled away (phones) */
+.navbar {
+    display: none;
+}
+@media (max-width: 899px) {
+    :root {
+        --tab-h: 5.1rem;
+    }
+    .navbar {
+        position: fixed;
+        z-index: 6;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        height: calc(2.9rem + env(safe-area-inset-top));
+        padding: env(safe-area-inset-top) 0.6rem 0;
+        background: color-mix(in srgb, var(--bg) 74%, transparent);
+        -webkit-backdrop-filter: blur(22px) saturate(180%);
+        backdrop-filter: blur(22px) saturate(180%);
+        border-bottom: 1px solid var(--hair);
+        opacity: 0;
+        transform: translateY(-0.4rem);
+        pointer-events: none;
+        transition: opacity 0.25s ease, transform 0.3s var(--ease-out);
+    }
+    .navbar.show {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+    .navbar b {
+        grid-column: 2;
+        font-size: 1rem;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 60vw;
+    }
+    .navbar .back {
+        grid-column: 1;
+        justify-self: start;
+        margin: 0;
+        max-width: 28vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
+    .navbar .back .ic {
+        vertical-align: -0.2em;
+    }
+    /* three figures side by side on a narrow screen: long amounts get a smaller size rather than being cut off */
+    .hero .stat {
+        padding: 0.65rem 0.6rem;
+    }
+    .hero .stat b.long {
+        font-size: 0.82rem;
+    }
+    .hero .stat b.xlong {
+        font-size: 0.7rem;
+    }
+    /* the bottom bar floats: a frosted capsule with the Add button in its middle */
+    .tabbar {
+        left: 0.7rem;
+        right: 0.7rem;
+        bottom: calc(0.55rem + env(safe-area-inset-bottom));
+        padding: 0.15rem 0.2rem;
+        border: 1px solid var(--hair);
+        border-radius: 1.7rem;
+        box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.06);
+    }
+    .tabbar a.add {
+        justify-content: center;
+        font-size: 0;
+        gap: 0;
+        padding: 0;
+    }
+    .tabbar a.add span {
+        margin-top: 0;
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+    /* forms slide up from the bottom as a sheet, over a dimmed screen */
+    section.card.form {
+        position: fixed;
+        z-index: 12;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: min(90dvh, 46rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        margin: 0;
+        border: 0;
+        border-radius: 1.6rem 1.6rem 0 0;
+        padding: 1.9rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom));
+        box-shadow: 0 0 0 100vmax rgba(8, 12, 24, 0.42), 0 -12px 40px rgba(0, 0, 0, 0.22);
+    }
+    section.card.form::before {
+        content: '';
+        position: absolute;
+        top: 0.55rem;
+        left: 50%;
+        width: 2.4rem;
+        height: 0.3rem;
+        margin-left: -1.2rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--muted) 45%, transparent);
+    }
+    section.card.form > h3 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        text-transform: none;
+        margin-bottom: 0.2rem;
+    }
+}
+@media (max-width: 899px) and (prefers-reduced-motion: no-preference) {
+    section.card.form.enter {
+        animation: sheet-up 0.58s var(--vt-ease) both;
+    }
+}
+@media (min-width: 900px) {
+    .hero {
+        padding: 0.25rem 0 0.5rem;
+    }
+    .hero h1 {
+        font-size: 1.9rem;
+    }
+    /* on a wide screen a form opens as a dialog in the middle */
+    section.card.form {
+        position: fixed;
+        z-index: 12;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(42rem, 92vw);
+        max-height: 88vh;
+        overflow-y: auto;
+        margin: 0;
+        border: 0;
+        border-radius: 1.4rem;
+        padding: 1.5rem;
+        box-shadow: 0 0 0 100vmax rgba(8, 12, 24, 0.42), 0 30px 80px rgba(0, 0, 0, 0.35);
+    }
+    section.card.form > h3 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        text-transform: none;
+    }
+}
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+    section.card.form.enter {
+        animation: dialog-in 0.34s var(--ease-out) both;
+    }
+}
+
+/* ---------- movement ----------
+   Screens move like a phone's own apps. Going deeper, the new screen glides in from the right over the old one, which
+   eases a little to the left and dims; going back is the same in reverse. A little over half a second, starting
+   quickly and settling slowly. Tabs of the bottom bar cross-fade. The bars and messages stay where they are. */
+@keyframes rise-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.7rem) scale(0.985);
+    }
+}
+@keyframes sheet-up {
+    from {
+        transform: translateY(100%);
+    }
+}
+@keyframes dialog-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -46%) scale(0.96);
+    }
+}
+@keyframes vt-push-in {
+    from {
+        opacity: var(--vt-in-opacity);
+        transform: translateX(var(--vt-far));
+    }
+}
+@keyframes vt-push-under {
+    to {
+        opacity: var(--vt-under-opacity);
+        transform: translateX(calc(var(--vt-near) * -1));
+    }
+}
+@keyframes vt-pop-out {
+    to {
+        opacity: var(--vt-in-opacity);
+        transform: translateX(var(--vt-far));
+    }
+}
+@keyframes vt-pop-under {
+    from {
+        opacity: var(--vt-under-opacity);
+        transform: translateX(calc(var(--vt-near) * -1));
+    }
+}
+@keyframes vt-fade-out {
+    to {
+        opacity: 0;
+    }
+}
+@keyframes vt-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.985);
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    :root {
+        --vt-far: 100%;
+        --vt-near: 28%;
+        --vt-in-opacity: 1;
+        --vt-under-opacity: 0.55;
+        --vt-time: 0.6s;
+        --vt-ease: cubic-bezier(0.3, 0.7, 0.1, 1);
+    }
+    /* a panel or form that has just opened */
+    .enter {
+        animation: rise-in 0.42s var(--ease-out) both;
+    }
+    /* a tab that has just been switched to: its blocks settle in */
+    .shell.fresh main > * {
+        animation: rise-in 0.5s var(--ease-out) both;
+    }
+    .shell.fresh main > *:nth-child(2) {
+        animation-delay: 0.05s;
+    }
+    .shell.fresh main > *:nth-child(3) {
+        animation-delay: 0.1s;
+    }
+    .shell.fresh main > *:nth-child(n + 4) {
+        animation-delay: 0.15s;
+    }
+    .tabbar {
+        view-transition-name: tabbar;
+    }
+    .side {
+        view-transition-name: side;
+    }
+    .toast {
+        view-transition-name: toast;
+    }
+    .net-chip {
+        view-transition-name: net-chip;
+    }
+    ::view-transition-group(tabbar),
+    ::view-transition-group(side),
+    ::view-transition-group(toast),
+    ::view-transition-group(net-chip) {
+        z-index: 3;
+    }
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation-duration: var(--vt-time);
+        animation-timing-function: var(--vt-ease);
+        animation-fill-mode: both;
+        mix-blend-mode: normal;
+    }
+    html[data-nav='forward']::view-transition-old(root) {
+        animation-name: vt-push-under;
+    }
+    html[data-nav='forward']::view-transition-new(root) {
+        animation-name: vt-push-in;
+        box-shadow: -18px 0 40px rgba(8, 12, 24, 0.18);
+    }
+    html[data-nav='back']::view-transition-old(root) {
+        animation-name: vt-pop-out;
+        z-index: 2;
+        box-shadow: -18px 0 40px rgba(8, 12, 24, 0.18);
+    }
+    html[data-nav='back']::view-transition-new(root) {
+        animation-name: vt-pop-under;
+        z-index: 1;
+    }
+    html[data-nav='tab']::view-transition-old(root) {
+        animation: vt-fade-out 0.26s ease both;
+    }
+    html[data-nav='tab']::view-transition-new(root) {
+        animation: vt-fade-in 0.42s var(--ease-out) both;
+    }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 900px) {
+    /* on a wide screen the content only shifts a little and fades: a full slide would be too much movement */
+    :root {
+        --vt-far: 3rem;
+        --vt-near: 1.5rem;
+        --vt-in-opacity: 0;
+        --vt-under-opacity: 0;
+        --vt-time: 0.42s;
+    }
+    html[data-nav='forward']::view-transition-new(root),
+    html[data-nav='back']::view-transition-old(root) {
+        box-shadow: none;
+    }
+}
