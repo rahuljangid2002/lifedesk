@@ -12,6 +12,101 @@
 
 export const LANGS = { en: { code: 'en-IN', label: 'English' }, hi: { code: 'hi-IN', label: 'हिन्दी' } };
 
+// ---------- saying things clearly ----------
+/**
+ * An amount as it should be spoken: "450 rupees", "1 lakh 50 thousand rupees", "2 करोड़ रुपये". A voice reads "₹1,50,000"
+ * badly (the sign, the commas, "one hundred fifty thousand"), so rupees are put into words the Indian way; any other
+ * currency is the plain number followed by its name.
+ */
+export function moneyWords(amount, lang = 'en', currency = 'INR') {
+    const value = Math.round(Number(amount) * 100) / 100;
+    const whole = Math.floor(value);
+    const cents = Math.round((value - whole) * 100);
+    if (currency !== 'INR') {
+        let name = currency;
+        try {
+            name = new Intl.NumberFormat(lang === 'hi' ? 'hi' : 'en', { style: 'currency', currency, currencyDisplay: 'name', maximumFractionDigits: 0 }).format(2).replace(/^[\d\s.,]+/, '').trim() || currency;
+        } catch (e) {
+            // an unknown currency code is said as it is
+        }
+        return `${cents ? value : whole} ${name}`;
+    }
+    const w = lang === 'hi' ? { crore: 'करोड़', lakh: 'लाख', thousand: 'हज़ार', rupees: 'रुपये', paise: 'पैसे' } : { crore: 'crore', lakh: 'lakh', thousand: 'thousand', rupees: 'rupees', paise: 'paise' };
+    let rest = whole;
+    const parts = [];
+    if (whole >= 100000) {
+        const crore = Math.floor(rest / 10000000);
+        rest %= 10000000;
+        const lakh = Math.floor(rest / 100000);
+        rest %= 100000;
+        const thousand = Math.floor(rest / 1000);
+        rest %= 1000;
+        if (crore) {
+            parts.push(`${crore} ${w.crore}`);
+        }
+        if (lakh) {
+            parts.push(`${lakh} ${w.lakh}`);
+        }
+        if (thousand) {
+            parts.push(`${thousand} ${w.thousand}`);
+        }
+        if (rest) {
+            parts.push(String(rest));
+        }
+    } else {
+        parts.push(String(whole)); // below one lakh a voice reads the plain number well
+    }
+    return `${parts.join(' ')} ${w.rupees}${cents ? ` ${cents} ${w.paise}` : ''}`;
+}
+
+/**
+ * One entry as a sentence for the voice: "450 rupees for Groceries, from HDFC Bank", "शुभम को 2000 रुपये उधार, Cash से".
+ * names = { money, category, account, toAccount, person, description }, already as they should be said.
+ */
+export function entryWords(type, names, lang = 'en') {
+    const n = names;
+    const hi = lang === 'hi';
+    const from = n.account ? (hi ? `, ${n.account} से` : `, from ${n.account}`) : '';
+    const into = n.account ? (hi ? `, ${n.account} में` : `, into ${n.account}`) : '';
+    const what = n.category || n.description || '';
+    switch (type) {
+    case 'income': return hi ? `${what ? `${what}, ` : ''}${n.money}${into}` : `${n.money}${what ? `, ${what}` : ''}${into}`;
+    case 'transfer': return hi ? `${n.account} से ${n.toAccount} में ${n.money}` : `${n.money} from ${n.account} to ${n.toAccount}`;
+    case 'lent': return hi ? `${n.person} को ${n.money} उधार${from}` : `${n.money} lent to ${n.person}${from}`;
+    case 'gotback': return hi ? `${n.person} से ${n.money} वापस${into}` : `${n.money} got back from ${n.person}${into}`;
+    case 'borrowed': return hi ? `${n.person} से ${n.money} उधार लिए${into}` : `${n.money} borrowed from ${n.person}${into}`;
+    case 'repaid': return hi ? `${n.person} को ${n.money} वापस${from}` : `${n.money} repaid to ${n.person}${from}`;
+    default: return hi ? `${what ? `${what} के लिए ` : ''}${n.money}${from}` : `${n.money}${what ? ` for ${what}` : ''}${from}`;
+    }
+}
+
+/**
+ * How good a device voice is for this language and gender: the higher, the better. Natural / neural voices first,
+ * then premium and enhanced ones, never the novelty ones; a voice of the gender asked for beats one of the right
+ * accent with the wrong gender. Returns { score, gender: 'female' | 'male' | null }.
+ */
+const FEMALE_NAMES = /female|woman|samantha|veena|lekha|karen|moira|tessa|fiona|victoria|allison|ava\b|susan|zira|heera|kalpana|swara|neerja|aditi|raveena|priya|sangeeta|kiyara|isha|nicky|serena|catherine|kate|martha|sara|aria|jenny|sonia|libby|hazel|emma|google हिन्दी|google us english/i;
+const MALE_NAMES = /(^|[^e])male|\bman\b|daniel|rishi|alex\b|\btom\b|david|\bmark\b|ravi|hemant|madhur|prabhat|aaron|arthur|gordon|oliver|james|george|\bguy\b|ryan|thomas/i;
+const NOVELTY = /albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|\bfred\b|junior|ralph|kathy|eddy|\bflo\b|grandma|grandpa|\breed\b|rocko|sandy|shelley|eloquence|compact/i;
+export function voiceGenderOf(name) {
+    return MALE_NAMES.test(name) && !/female/i.test(name) ? 'male' : FEMALE_NAMES.test(name) ? 'female' : null;
+}
+export function rateVoice(voice, lang, gender) {
+    const code = LANGS[lang].code.toLowerCase();
+    const tag = String(voice.lang || '').replace('_', '-').toLowerCase();
+    const name = String(voice.name || '');
+    if (!tag.startsWith(code.slice(0, 2))) {
+        return { score: -1000, gender: null };
+    }
+    const is = voiceGenderOf(name);
+    // the language's own accent first (en-IN, hi-IN); failing that the widely understood British and American ones
+    let score = tag === code ? 40 : tag === 'en-gb' ? 16 : tag === 'en-us' ? 14 : 10;
+    score += /natural|neural/i.test(name) ? 30 : /premium/i.test(name) ? 24 : /siri/i.test(name) ? 20 : /enhanced/i.test(name) ? 18 : /^google/i.test(name) ? 14 : 0;
+    score += is === gender ? 50 : is ? -40 : 0;
+    score -= NOVELTY.test(name) ? 200 : 0;
+    return { score, gender: is };
+}
+
 // ---------- what the recogniser heard ----------
 /**
  * Puts the pieces a recogniser hands over into one sentence. Some browsers (Chrome on Android, while it keeps
@@ -703,6 +798,7 @@ const SAY = {
         forEntry: (n, label) => `For entry ${n}${label ? `, ${label}` : ''}: `,
         confirm: (lines) => (lines.length === 1 ? `${lines[0]}. Should I store this?` : `${lines.length} entries. ${lines.map((l, i) => `${i + 1}: ${l}`).join('. ')}. Should I store these?`),
         yesOrNo: 'Sorry, I missed that. Should I store this?',
+        changed: 'Changed. ',
         again: 'Sorry, I did not get that. ',
         saved: (count) => (count === 1 ? 'Stored.' : `${count} entries stored.`)
     },
@@ -725,6 +821,7 @@ const SAY = {
         forEntry: (n, label) => `एंट्री ${n}${label ? `, ${label}` : ''} के लिए: `,
         confirm: (lines) => (lines.length === 1 ? `${lines[0]}। क्या इसे दर्ज करूं?` : `${lines.length} एंट्री। ${lines.map((l, i) => `${i + 1}: ${l}`).join('। ')}। क्या इन्हें दर्ज करूं?`),
         yesOrNo: 'माफ़ कीजिए, दोबारा बताइए। क्या इसे दर्ज करूं?',
+        changed: 'बदल दिया। ',
         again: 'माफ़ कीजिए, समझ नहीं आया। ',
         saved: (count) => (count === 1 ? 'दर्ज हो गया।' : `${count} एंट्री दर्ज हो गईं।`)
     }
@@ -782,6 +879,34 @@ function question(session, s, slot) {
     return which + ask;
 }
 
+/** Applies a spoken correction to an entry being reviewed. True when something was changed. */
+function correct(s, text, ctx, lang) {
+    let changed = false;
+    const n = numbersIn(words(text), lang).sort((a, b) => Number(b.money) - Number(a.money) || b.value - a.value)[0];
+    if (n && n.value !== s.amount) {
+        s.amount = n.value;
+        changed = true;
+    }
+    const which = whichAccount(text, ctx);
+    if (which && which.account && which.account.id !== s.accountId && s.type !== 'transfer') {
+        s.accountId = which.account.id;
+        s.strangerAccount = null;
+        changed = true;
+    }
+    if (s.type === 'expense' || s.type === 'income') {
+        const cats = ctx.categories.filter((c) => c.type === s.type);
+        const hints = words(text).map((w) => HINDI_HINTS[w]).filter(Boolean).join(' ');
+        const rest = words(text).filter((w) => !['category', 'change', 'make', 'it', 'to', 'is', 'कैटेगरी', 'बदलो', 'करो'].includes(w) && numberOf(w, lang) === null).join(' ');
+        const byName = named(text, cats);
+        const id = (byName && byName.id) || (rest || hints ? ctx.suggest(`${rest} ${hints}`.trim(), s.type) : null);
+        if (id && id !== s.categoryId && !(which && which.account)) {
+            s.categoryId = id;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 /** The entries as they would be stored: [{ entry, person }] (person = someone new to create with it, or null). */
 export function review(session, ctx) {
     return (session.items || []).map((s) => {
@@ -792,6 +917,36 @@ export function review(session, ctx) {
             person: personal && !s.personId ? { name: s.createPerson, direction: s.type === 'lent' || s.type === 'gotback' ? 'owesMe' : 'iOwe' } : null
         };
     });
+}
+
+/**
+ * Changes one entry while it is being reviewed (the edit form on the review screen). changes may hold amount,
+ * categoryId, accountId, toAccountId, personId, date, description. Returns the list as review() does.
+ */
+export function edit(session, index, changes, ctx) {
+    const s = session.items[index];
+    if (s) {
+        if ('amount' in changes) {
+            s.amount = Number(changes.amount) > 0 ? Math.round(Number(changes.amount) * 100) / 100 : null;
+        }
+        ['categoryId', 'accountId', 'toAccountId', 'date'].forEach((k) => {
+            if (k in changes) {
+                s[k] = changes[k] || null;
+            }
+        });
+        if ('accountId' in changes) {
+            s.strangerAccount = null;
+        }
+        if ('description' in changes) {
+            s.description = String(changes.description || '').trim();
+        }
+        if ('personId' in changes && changes.personId) {
+            s.personId = changes.personId; // an existing person chosen instead of a new one
+            s.newPerson = null;
+            s.createPerson = null;
+        }
+    }
+    return review(session, ctx);
 }
 
 /** Takes one entry out of the list being reviewed. Returns what is left (none: there is nothing to save). */
@@ -835,6 +990,12 @@ export function hear(session, raw, ctx) {
         }
         if (answer === 'yes') {
             return { status: 'save', items: review(session, ctx), say: say.saved(session.items.length) };
+        }
+        // a correction instead: "make it 500", "from cash", "category food". The entry is changed, read out again
+        // and asked about again.
+        if (session.items.length === 1 && correct(session.items[0], text, ctx, session.lang)) {
+            session.tries = 0;
+            return { status: 'confirm', items: review(session, ctx), changed: true, say: (lines) => say.changed + say.confirm(lines) };
         }
         // neither a yes nor a no: asked once more aloud; after that the entries simply wait for Save or Cancel.
         // They are never thrown away because a short word was misheard.

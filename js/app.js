@@ -1093,11 +1093,7 @@ function more() {
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
         ${notificationsCard()}
-        <section class="card"><div class="card-head"><h2>Voice assistant</h2><span class="pill">${voiceBlocker() ? 'Not in this browser' : 'Ready'}</span></div>
-            <small>The voice that asks the questions when you speak an entry.</small>
-            <div class="seg">${[['female', 'Female voice'], ['male', 'Male voice']].map(([k, label]) => `<button class="${voiceGender() === k ? 'on' : ''}" data-action="voiceGender" data-gender="${k}" aria-pressed="${voiceGender() === k}">${label}</button>`).join('')}</div>
-            <small>Tap one to hear it. It uses the voices of this device: where there is none of that kind for the language, the nearest one is used, pitched lower or higher. Saved on this device only.</small>
-            ${voiceBlocker() ? '<small>Speaking an entry works in Chrome and Edge (computer and Android) and Safari (iPhone, iPad, Mac).</small>' : ''}</section>
+        ${voiceCard()}
         <section class="card"><div class="card-head"><h2>Region</h2></div>
             <label>Currency<select data-currency>${currencyOptions(state.more.change ? state.more.change.to : f.currency)}</select></label>
             ${currencyChange(f.currency)}
@@ -1206,14 +1202,14 @@ const VOICE_TEXT = {
         blocked: "The microphone is blocked for LifeDesk. Allow it in the browser's site settings, then tap the microphone.", network: 'Voice entry needs an internet connection.',
         noMic: 'No microphone was found on this device.', failed: 'Listening did not work this time. Tap the microphone to try again.',
         examples: ['Spent 450 on groceries from HDFC', 'Received 50,000 salary', 'Lent 2,000 to Shubham yesterday', 'Spent 300 on petrol and 120 on milk'], tryTitle: 'Try saying', you: 'You', by: 'saved by voice',
-        takeTime: 'Take your time. Tap the microphone when you have finished.', heardAs: 'I heard', tapInstead: 'Tap Save or Cancel below', confirmHint: 'Say “yes” to save, or “no”', female: 'Female voice', male: 'Male voice', sample: 'This is how I will sound.',
+        takeTime: 'Take your time. Tap the microphone when you have finished.', heardAs: 'I heard', tapInstead: 'Tap Save or Cancel below', confirmHint: 'Say “yes” to save, or “no”', female: 'Female voice', male: 'Male voice', 
         reviewOne: 'Check it before saving', reviewMany: 'Check these {n} entries before saving', save: 'Save', saveAll: 'Save all {n}', cancel: 'Cancel', declined: 'Okay, nothing was saved.' },
     hi: { idle: 'बोलने के लिए माइक दबाएं', starting: 'तैयार हो जाइए…', listening: 'अब आपकी बारी: बोलिए', asking: 'LifeDesk बोल रहा है', saving: 'सेव कर रहा हूँ…',
         sub: { starting: 'माइक खुल रहा है', asking: 'रुकिए, फिर जवाब दीजिए। अभी जवाब देने के लिए गोले को दबाएं।', saving: 'एक क्षण' }, assistant: 'LifeDesk', noSpeech: 'कुछ सुनाई नहीं दिया। माइक दबाकर बोलिए।',
         blocked: 'LifeDesk के लिए माइक बंद है। ब्राउज़र की साइट सेटिंग में अनुमति दें, फिर माइक दबाएं।', network: 'वॉइस एंट्री के लिए इंटरनेट चाहिए।',
         noMic: 'इस डिवाइस पर माइक नहीं मिला।', failed: 'इस बार सुनना नहीं हो पाया। दोबारा माइक दबाएं।',
         examples: ['किराने पर 450 रुपये खर्च किए', '50,000 सैलरी मिली', 'शुभम को कल 2,000 उधार दिए', 'पेट्रोल पर 300 और दूध पर 120 रुपये खर्च किए'], tryTitle: 'ऐसे बोलिए', you: 'आप', by: 'वॉइस से सेव हुआ',
-        takeTime: 'आराम से बोलिए। पूरा होने पर माइक दबाएं।', heardAs: 'मैंने सुना', tapInstead: 'नीचे सेव या रद्द दबाएं', confirmHint: 'सेव करने के लिए “हाँ” बोलिए, या “नहीं”', female: 'महिला आवाज़', male: 'पुरुष आवाज़', sample: 'मेरी आवाज़ ऐसी होगी।',
+        takeTime: 'आराम से बोलिए। पूरा होने पर माइक दबाएं।', heardAs: 'मैंने सुना', tapInstead: 'नीचे सेव या रद्द दबाएं', confirmHint: 'सेव करने के लिए “हाँ” बोलिए, या “नहीं”', female: 'महिला आवाज़', male: 'पुरुष आवाज़', 
         reviewOne: 'सेव करने से पहले जांच लें', reviewMany: 'सेव करने से पहले ये {n} एंट्री जांच लें', save: 'सेव करें', saveAll: 'सभी {n} सेव करें', cancel: 'रद्द करें', declined: 'ठीक है, कुछ सेव नहीं हुआ।' }
 };
 let voiceSession = null;
@@ -1237,26 +1233,44 @@ const voiceGender = () => {
         return 'female';
     }
 };
-// Browsers do not say whether a voice is male or female, so the well-known voice names are recognised. Where the
-// device has no voice of the kind chosen for the language, the nearest voice is used at a lower or higher pitch.
-const FEMALE_VOICES = /female|woman|samantha|veena|lekha|karen|moira|tessa|fiona|victoria|allison|ava|susan|zira|heera|kalpana|swara|neerja|aditi|raveena|priya|sangeeta|kiyara|isha|nicky|kathy|serena|catherine|google हिन्दी|google us english/i;
-const MALE_VOICES = /(^|[^e])male|\bman\b|daniel|rishi|alex|fred|\btom\b|david|mark|ravi|hemant|madhur|prabhat|aaron|arthur|gordon|oliver|james|george|ralph|albert|bruce|eddy|reed|rocko/i;
-function voicePick(lang, gender) {
-    const all = window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function' ? window.speechSynthesis.getVoices() : [];
-    const code = Voice.LANGS[lang].code.toLowerCase();
-    const forLang = all.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2)))
-        .sort((a, b) => Number(b.lang.replace('_', '-').toLowerCase() === code) - Number(a.lang.replace('_', '-').toLowerCase() === code));
-    const isMale = (v) => MALE_VOICES.test(v.name) && !/female/i.test(v.name);
-    const isFemale = (v) => FEMALE_VOICES.test(v.name);
-    const exact = forLang.find(gender === 'male' ? isMale : isFemale);
-    if (exact) {
-        return { voice: exact, pitch: 1 };
+// The voices are the device's own. Browsers do not say which are male, female or good, so they are ranked by
+// their well-known names (Voice.rateVoice): natural ones first, never the novelty ones. The user can also pick
+// one by name, per language, under Account. Without a voice of the gender chosen, the nearest one is used at a
+// slightly lower or higher pitch.
+const voiceChoice = (lang) => {
+    try {
+        return localStorage.getItem(`lifedesk-voice-name-${lang}`) || '';
+    } catch (e) {
+        return '';
     }
-    const other = forLang.find((v) => !(gender === 'male' ? isFemale(v) : isMale(v))) || forLang[0] || null;
-    return { voice: other, pitch: gender === 'male' ? 0.72 : 1.18 };
+};
+const voiceList = () => (window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function' ? window.speechSynthesis.getVoices() : []);
+/** The device's voices for a language, best first for the gender chosen: [{ voice, score, gender }]. */
+function voicesFor(lang, gender) {
+    return voiceList().map((voice) => ({ voice, ...Voice.rateVoice(voice, lang, gender) })).filter((x) => x.score > -100).sort((x, y) => y.score - x.score || x.voice.name.localeCompare(y.voice.name));
+}
+/** The voice to speak with: { voice, pitch, exact } (exact: it is a voice of the gender asked for, or one picked by name). */
+function voicePick(lang, gender) {
+    const list = voicesFor(lang, gender);
+    const chosen = voiceChoice(lang) && list.find((x) => x.voice.voiceURI === voiceChoice(lang) || x.voice.name === voiceChoice(lang));
+    if (chosen) {
+        return { voice: chosen.voice, pitch: 1, exact: true };
+    }
+    const best = list[0];
+    if (!best) {
+        return { voice: null, pitch: gender === 'male' ? 0.82 : 1.1, exact: false };
+    }
+    return best.gender === gender ? { voice: best.voice, pitch: 1, exact: true } : { voice: best.voice, pitch: gender === 'male' ? 0.82 : 1.1, exact: false };
 }
 if (window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function') {
     window.speechSynthesis.getVoices(); // browsers load their list of voices only after it is first asked for
+    if (typeof window.speechSynthesis.addEventListener === 'function') {
+        window.speechSynthesis.addEventListener('voiceschanged', () => {
+            if (state.route === 'more' && state.status === 'ready') {
+                render(); // the list on the Account page fills in once the device has loaded its voices
+            }
+        });
+    }
 }
 
 let voiceTone = null;
@@ -1314,9 +1328,15 @@ function voiceSay(text, then) {
     u.lang = Voice.LANGS[state.voice.lang].code;
     const pick = voicePick(state.voice.lang, voiceGender());
     if (pick.voice) {
-        u.voice = pick.voice;
+        try {
+            u.voice = pick.voice;
+        } catch (e) {
+            // the device took its voice away in the meantime: its default voice speaks
+        }
     }
     u.pitch = pick.pitch;
+    u.rate = 0.94; // a little slower than the default: amounts and names are easier to catch
+    u.volume = 1;
     u.onend = done;
     u.onerror = done;
     synth.speak(u);
@@ -1470,13 +1490,18 @@ function voiceListen() {
     }, 2000);
 }
 
-/** One line for an entry waiting to be saved: the parts shown in the review list and read aloud. */
+/** One line for an entry waiting to be saved: what the review list shows, and the sentence the voice reads. */
 function voiceLine(item) {
     const e = item.entry;
+    const lang = state.voice.lang;
     const who = item.person ? item.person.name : personName(e.personId);
     const what = e.type === 'transfer' ? `${accountName(e.accountId)} → ${accountName(e.toAccountId)}` : categoryName(e.categoryId) || who || e.description || L.TYPES[e.type].label;
+    // for the voice: no signs or brackets ("&" is "and", "(sample)" is left out), the amount in words
+    const say = (name) => String(name || '').replace(/\s*\(sample\)/i, '').replace(/&/g, lang === 'hi' ? 'और' : 'and').replace(/\s+-\s+/g, ' ').trim();
+    const spoken = Voice.entryWords(e.type, { money: Voice.moneyWords(e.amount || 0, lang, L.currentFormat().currency), category: say(categoryName(e.categoryId)), account: say(accountName(e.accountId)),
+        toAccount: say(accountName(e.toAccountId)), person: say(who), description: say(e.description) }, lang);
     return { title: e.description || what, detail: [L.TYPES[e.type].short, e.description && what !== e.description ? what : '', e.type === 'transfer' ? '' : accountName(e.accountId), e.date === today() ? '' : shortDate(e.date)].filter(Boolean).join(' · '),
-        spoken: [L.money(e.amount), what, e.type === 'transfer' ? '' : accountName(e.accountId)].filter(Boolean).join(', ') };
+        shown: [L.money(e.amount || 0), what, e.type === 'transfer' ? '' : accountName(e.accountId)].filter(Boolean).join(' · '), spoken };
 }
 
 async function voiceHeard(text) {
@@ -1500,6 +1525,7 @@ async function voiceHeard(text) {
         // everything is understood: show it and ask. Nothing is stored until the user says yes or presses Save.
         v.review = r.items;
         v.unclear = r.unclear || 0;
+        v.editing = null;
         if (v.unclear >= 2) {
             // twice neither a yes nor a no was heard: stop asking, the entries wait for the Save or Cancel button
             v.phase = 'idle';
@@ -1546,11 +1572,13 @@ async function voiceStore(items, spoken) {
         }
         const problem = L.validateEntry(entry, { people: [...S.data.people, ...pairs.filter((p) => p[0] === 'people').map((p) => p[1])] });
         if (problem) {
-            // one entry cannot be stored (for example, no account exists yet): none of them is
-            voiceSession = null;
-            v.review = null;
-            v.log.push({ who: 'app', text: `${problem} Nothing was saved.`, kind: 'warn' });
+            // one entry cannot be stored yet (for example, no category): nothing is stored, and the entries stay on
+            // the screen with that entry opened for changing
+            voiceStop();
             v.phase = 'idle';
+            v.unclear = 2;
+            v.editing = items.indexOf(item);
+            v.note = items.length > 1 ? `${voiceLine(item).title}: ${problem}` : problem;
             render();
             return voiceSay(problem);
         }
@@ -1564,11 +1592,59 @@ async function voiceStore(items, spoken) {
     const first = voiceLine(items[0]);
     const t = VOICE_TEXT[v.lang];
     state.voice = { ...v, open: false, log: [], review: null, phase: 'idle' };
-    toast(items.length === 1 ? `${L.TYPES[items[0].entry.type].short} · ${first.spoken.replace(/, /g, ' · ')} – ${t.by}.` : `${items.length} entries (${L.money(items.reduce((sum, x) => sum + Number(x.entry.amount), 0))}) – ${t.by}.`, 'ok', { label: 'Undo', run: async () => {
+    toast(items.length === 1 ? `${L.TYPES[items[0].entry.type].short} · ${first.shown} – ${t.by}.` : `${items.length} entries (${L.money(items.reduce((sum, x) => sum + Number(x.entry.amount), 0))}) – ${t.by}.`, 'ok', { label: 'Undo', run: async () => {
         await S.removeMany(pairs.map(([c, doc]) => [c, doc.id]));
         toast('Removed. Nothing was kept.');
     } });
     voiceSay(spoken || (v.lang === 'hi' ? (items.length === 1 ? 'दर्ज हो गया।' : `${items.length} एंट्री दर्ज हो गईं।`) : items.length === 1 ? 'Stored.' : `${items.length} entries stored.`));
+}
+
+/** The form under an entry on the review screen: everything about it can be changed before it is saved. */
+function voiceEditor(item, i) {
+    const e = item.entry;
+    const field = (name) => `data-vfield="${name}" data-i="${i}"`;
+    const accounts = (selected, skip) => `<option value="">Choose an account</option>${activeAccounts().filter((a) => a.id !== skip).map((a) => `<option value="${a.id}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)} · ${L.ACCOUNT_KINDS[a.kind]}</option>`).join('')}`;
+    const inflow = ['income', 'gotback', 'borrowed'].includes(e.type);
+    const cats = S.data.categories.filter((c) => c.type === e.type).sort((a, b) => a.name.localeCompare(b.name));
+    const people = S.data.people.filter((p) => p.direction === (e.type === 'lent' || e.type === 'gotback' ? 'owesMe' : 'iOwe'));
+    return `<div class="voice-edit">
+        <label>Amount<input type="number" inputmode="decimal" min="0" step="any" value="${esc(e.amount || '')}" ${field('amount')}></label>
+        ${e.type === 'expense' || e.type === 'income' ? `<label>Category<select ${field('categoryId')}><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === e.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
+        ${e.type === 'transfer'
+            ? `<label>From<select ${field('accountId')}>${accounts(e.accountId, e.toAccountId)}</select></label><label>To<select ${field('toAccountId')}>${accounts(e.toAccountId, e.accountId)}</select></label>`
+            : `<label>${inflow ? 'Received into' : 'Paid from'}<select ${field('accountId')}>${accounts(e.accountId)}</select></label>`}
+        ${L.PERSON_TYPES.includes(e.type) ? `<label>Person<select ${field('personId')}>${item.person ? `<option value="" selected>New: ${esc(item.person.name)}</option>` : '<option value="">Choose a person</option>'}${people.map((p) => `<option value="${p.id}" ${p.id === e.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>` : ''}
+        <label>Date<input type="date" max="${today()}" value="${esc(e.date)}" ${field('date')}></label>
+        <label class="wide">Description<input type="text" value="${esc(e.description || '')}" placeholder="${esc(L.TYPES[e.type].label)}" ${field('description')}></label>
+        <button class="btn wide" data-action="voiceEditDone">Done</button>
+    </div>`;
+}
+
+const VOICE_SAMPLE = {
+    en: () => `Hello. I will read your entries back to you, like this: ${Voice.entryWords('expense', { money: Voice.moneyWords(450, 'en', L.currentFormat().currency), category: 'Groceries', account: 'your bank' }, 'en')}. Should I store this?`,
+    hi: (gender) => `नमस्ते। मैं आपकी एंट्री ऐसे पढ़कर ${gender === 'male' ? 'सुनाऊंगा' : 'सुनाऊंगी'}: ${Voice.entryWords('expense', { money: Voice.moneyWords(450, 'hi', L.currentFormat().currency), category: 'किराने', account: 'आपके बैंक' }, 'hi')}। क्या इसे दर्ज करूं?`
+};
+/** Account page: the assistant's voice. Female or male, and optionally one of the device's voices by name, per language. */
+function voiceCard() {
+    const lang = state.more.voiceLang || voiceLang();
+    const gender = voiceGender();
+    const list = voicesFor(lang, gender);
+    const pick = voicePick(lang, gender);
+    const quality = (name) => (/natural|neural/i.test(name) ? ' · natural' : /premium/i.test(name) ? ' · premium' : /enhanced/i.test(name) ? ' · enhanced' : '');
+    const label = (x) => `${x.voice.name.replace(/^Microsoft /, '').replace(/ Online \(Natural\).*$/, '')}${x.gender ? ` · ${x.gender}` : ''}${quality(x.voice.name)}${x.voice.lang.replace('_', '-').toLowerCase() === Voice.LANGS[lang].code.toLowerCase() ? '' : ` · ${x.voice.lang.replace('_', '-')}`}`;
+    const seg = (items, action, attr, on) => `<div class="seg">${items.map(([k, text]) => `<button class="${on === k ? 'on' : ''}" data-action="${action}" data-${attr}="${k}" aria-pressed="${on === k}">${text}</button>`).join('')}</div>`;
+    return `<section class="card"><div class="card-head"><h2>Voice assistant</h2><span class="pill">${voiceBlocker() ? 'Not in this browser' : 'Ready'}</span></div>
+        <small>The voice that asks the questions and reads your entries back when you speak an entry.</small>
+        ${seg([['female', 'Female voice'], ['male', 'Male voice']], 'voiceGender', 'gender', gender)}
+        ${seg(Object.entries(Voice.LANGS).map(([k, l]) => [k, l.label]), 'voiceCardLang', 'lang', lang)}
+        <label>Voice for ${Voice.LANGS[lang].label}<select data-voice-name="${lang}">
+            <option value="">Automatic: the best ${gender} voice on this device</option>
+            ${list.filter((x) => x.score > -100 && !(x.score < -150)).map((x) => `<option value="${esc(x.voice.voiceURI || x.voice.name)}" ${voiceChoice(lang) && (voiceChoice(lang) === x.voice.voiceURI || voiceChoice(lang) === x.voice.name) ? 'selected' : ''}>${esc(label(x))}</option>`).join('')}
+        </select></label>
+        <small>${pick.voice ? `Now using: <b>${esc(pick.voice.name)}</b>${pick.exact ? '' : ` at a ${gender === 'male' ? 'lower' : 'higher'} pitch, because this device has no ${gender} voice for ${Voice.LANGS[lang].label}`}.` : 'This device has not listed its voices yet, or has none for this language; its default voice is used.'}
+            The voices belong to this device and browser, so they differ between a phone and a computer. Saved on this device only.</small>
+        <div class="split wrap"><button class="btn" data-action="voiceSample">${icon('speaker')} Play a sample</button></div>
+        ${voiceBlocker() ? '<small>Speaking an entry works in Chrome and Edge (computer and Android) and Safari (iPhone, iPad, Mac).</small>' : ''}</section>`;
 }
 
 /** What stays written under the assistant: the user's last words, and a closing message (nothing was saved…). The
@@ -1596,7 +1672,7 @@ function voiceSheet() {
     }
     const t = VOICE_TEXT[v.lang];
     const turn = v.phase === 'listening' ? 'you' : ['asking', 'starting', 'saving'].includes(v.phase) ? 'app' : 'idle';
-    return `<section class="card form voice" role="dialog" aria-label="Voice entry"><h3>Voice entry</h3>
+    return `<section class="card form voice ${v.editing !== null && v.editing !== undefined ? 'editing' : ''}" role="dialog" aria-label="Voice entry"><h3>${v.editing !== null && v.editing !== undefined ? 'Change the entry' : 'Voice entry'}</h3>
         <div class="seg voice-lang" role="group" aria-label="Language">${Object.entries(Voice.LANGS).map(([k, l]) => `<button class="${v.lang === k ? 'on' : ''}" data-action="voiceLang" data-lang="${k}" aria-pressed="${v.lang === k}">${l.label}</button>`).join('')}</div>
         <div class="voice-turns" aria-hidden="true">
             <span class="turn ${turn === 'app' ? 'on' : ''}">${icon('speaker')} ${t.assistant}</span>
@@ -1617,8 +1693,11 @@ function voiceSheet() {
         ${v.review ? `<div class="voice-review"><small>${v.review.length === 1 ? t.reviewOne : t.reviewMany.replace('{n}', v.review.length)}</small>
             <div class="list inner flush">${v.review.map((item, i) => {
                 const line = voiceLine(item);
-                return `<div class="row"><span class="row-icon t-${item.entry.type}">${icon(L.TYPES[item.entry.type].icon)}</span><span class="row-text"><b>${esc(line.title)}</b><small>${esc(line.detail)}</small></span>
-                    <b class="amount-cell">${L.money(item.entry.amount)}</b>${v.review.length > 1 ? `<button class="icon-btn" data-action="voiceDrop" data-i="${i}" aria-label="Remove ${esc(line.title)}" title="Remove this one">${icon('trash')}</button>` : ''}</div>`;
+                return `<div class="row ${v.editing === i ? 'editing' : ''}"><span class="row-icon t-${item.entry.type}">${icon(L.TYPES[item.entry.type].icon)}</span><span class="row-text"><b>${esc(line.title)}</b><small>${esc(line.detail)}</small></span>
+                    <b class="amount-cell">${L.money(item.entry.amount || 0)}</b>
+                    <button class="icon-btn edit" data-action="voiceEdit" data-i="${i}" aria-label="Change ${esc(line.title)}" aria-expanded="${v.editing === i}" title="Change it">${icon('edit')}</button>
+                    ${v.review.length > 1 ? `<button class="icon-btn" data-action="voiceDrop" data-i="${i}" aria-label="Remove ${esc(line.title)}" title="Remove this one">${icon('trash')}</button>` : ''}</div>
+                    ${v.editing === i ? voiceEditor(item, i) : ''}`;
             }).join('')}</div></div>
             <div class="split"><button class="btn" data-action="voiceReject">${t.cancel}</button><button class="btn primary" data-action="voiceAccept" ${v.phase === 'saving' ? 'disabled' : ''}>${v.review.length === 1 ? t.save : t.saveAll.replace('{n}', v.review.length)}</button></div>`
             : `<div class="split"><button class="btn" data-action="voiceClose">Close</button></div>`}
@@ -2018,7 +2097,7 @@ const actions = {
     voiceOpen() {
         state.addMenu = false;
         voiceSession = null;
-        state.voice = { open: true, lang: voiceLang(), phase: 'idle', interim: '', note: '', log: [], review: null, unclear: 0, heard: '', question: '' };
+        state.voice = { open: true, lang: voiceLang(), phase: 'idle', interim: '', note: '', log: [], review: null, unclear: 0, heard: '', question: '', editing: null };
         if (voiceBlocker()) {
             return render();
         }
@@ -2048,12 +2127,21 @@ const actions = {
     voiceGender(el) {
         try {
             localStorage.setItem('lifedesk-voice-gender', el.dataset.gender);
+            Object.keys(Voice.LANGS).forEach((k) => localStorage.removeItem(`lifedesk-voice-name-${k}`)); // back to the best voice of that kind
         } catch (e) {
             // the choice then lasts for this visit only
         }
-        state.voice.lang = voiceLang(); // the sample is spoken in the language last used for voice entry
         render();
-        voiceSay(VOICE_TEXT[state.voice.lang].sample);
+        actions.voiceSample();
+    },
+    voiceCardLang(el) {
+        state.more.voiceLang = el.dataset.lang;
+        render();
+    },
+    voiceSample() {
+        const lang = state.more.voiceLang || voiceLang();
+        state.voice.lang = lang;
+        voiceSay(VOICE_SAMPLE[lang](voiceGender()));
     },
     // the review before saving: Save and Cancel do what saying yes and no do
     voiceAccept() {
@@ -2076,8 +2164,27 @@ const actions = {
         render();
         voiceSay(VOICE_TEXT[v.lang].declined);
     },
+    voiceEdit(el) {
+        const v = state.voice;
+        const i = Number(el.dataset.i);
+        v.editing = v.editing === i ? null : i;
+        voiceStop(); // while changing something by hand the microphone is closed; Save, or a tap on it, goes on
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        v.phase = 'idle';
+        v.unclear = 2;
+        v.heard = ''; // nothing was misheard: the user chose to change something
+        v.note = '';
+        render();
+    },
+    voiceEditDone() {
+        state.voice.editing = null;
+        render();
+    },
     voiceDrop(el) {
         const v = state.voice;
+        v.editing = null;
         v.review = Voice.drop(voiceSession, Number(el.dataset.i), voiceCtx());
         if (!v.review.length) {
             return actions.voiceReject();
@@ -2857,6 +2964,12 @@ app.addEventListener('click', async (event) => {
 
 app.addEventListener('input', (event) => {
     const el = event.target;
+    if (el.dataset.vfield && voiceSession) {
+        // the review form of voice entry: applied as it is typed (the list is redrawn when the field is left)
+        state.voice.review = Voice.edit(voiceSession, Number(el.dataset.i), { [el.dataset.vfield]: el.value }, voiceCtx());
+        state.voice.note = '';
+        return;
+    }
     if (el.dataset.model) {
         setPath(el.dataset.model, el.type === 'checkbox' ? el.checked : el.value);
         if (el.dataset.then === 'suggest' && !state.add.categoryTouched) {
@@ -2921,6 +3034,23 @@ app.addEventListener('keydown', async (event) => {
 app.addEventListener('change', async (event) => {
     const el = event.target;
     try {
+        if (el.dataset.vfield && voiceSession) {
+            state.voice.review = Voice.edit(voiceSession, Number(el.dataset.i), { [el.dataset.vfield]: el.value }, voiceCtx());
+            return render();
+        }
+        if (el.dataset.voiceName) {
+            try {
+                if (el.value) {
+                    localStorage.setItem(`lifedesk-voice-name-${el.dataset.voiceName}`, el.value);
+                } else {
+                    localStorage.removeItem(`lifedesk-voice-name-${el.dataset.voiceName}`);
+                }
+            } catch (e) {
+                // the choice then lasts for this visit only
+            }
+            render();
+            return actions.voiceSample();
+        }
         if (el.dataset.model && 'rerender' in el.dataset) {
             setPath(el.dataset.model, el.value);
             render();

@@ -58,6 +58,30 @@ JS = """async (cases) => {
                ['which account did you pay from', 'Which account did you pay from? You have Cash, HDFC Bank and ICICI.'], ['store this', 'Should I store this?']].map(([h, sp]) => V.isEcho(h, sp)),
         wording: (() => { const s = V.createSession('en'); const r1 = V.hear(s, 'Spent 450 on groceries from hdfc', ctx); const h = V.createSession('hi'); const r2 = V.hear(h, 'HDFC से किराने पर 450 रुपये खर्च किए', ctx);
                           return [r1.say(['450']), r2.say(['450']), V.yesOrNo(r1.say(['450'])), V.yesOrNo(r2.say(['450'])), V.yesOrNo('Sorry, I missed that. Should I store this?'), V.yesOrNo('माफ़ कीजिए, दोबारा बताइए। क्या इसे दर्ज करूं?')]; })(),
+        fix: (() => {
+            const run = (first, ...more) => { const s = V.createSession('en'); let r = V.hear(s, first, ctx); const said = []; for (const m of more) { r = V.hear(s, m, ctx); said.push(r.status === 'confirm' ? r.say(r.items.map((x) => String(x.entry.amount))) : r.status); }
+                return { status: r.status, said, e: r.items ? { ...r.items[0].entry, category: cat(r.items[0].entry.categoryId) } : null }; };
+            const s = V.createSession('en'); V.hear(s, 'Spent 450 on groceries from hdfc', ctx);
+            const edited = V.edit(s, 0, { amount: '512.5', categoryId: categories.find((c) => c.name === 'Food & Dining').id, accountId: 'cash', date: '2026-10-08', description: 'Lunch out' }, ctx)[0].entry;
+            const cleared = V.edit(s, 0, { categoryId: '', amount: '' }, ctx)[0].entry;
+            return { amount: run('Spent 450 on groceries from hdfc', 'make it 500', 'yes'), account: run('Spent 450 on groceries from hdfc', 'from cash', 'yes'), category: run('Spent 450 on groceries from hdfc', 'category food', 'yes'),
+                     both: run('Spent 450 on groceries from hdfc', 'no'), many: run('Spent 450 on groceries and 200 on petrol from hdfc', 'make it 500'),
+                     edited: { ...edited, category: cat(edited.categoryId) }, cleared, afterYes: V.hear(s, 'yes', ctx).items[0].entry };
+        })(),
+        money: [[450, 'en'], [45300, 'en'], [150000, 'en'], [12005300, 'en'], [2500.5, 'en'], [100000, 'en'], [450, 'hi'], [150000, 'hi'], [20000000, 'hi']].map(([a, l]) => V.moneyWords(a, l, 'INR')).concat([V.moneyWords(450, 'en', 'USD'), V.moneyWords(99.5, 'en', 'EUR')]),
+        words: [V.entryWords('expense', { money: '450 rupees', category: 'Groceries and Household', account: 'HDFC Bank' }, 'en'), V.entryWords('income', { money: '5000 rupees', category: 'Salary', account: 'ICICI' }, 'en'),
+                V.entryWords('transfer', { money: '5000 rupees', account: 'ICICI', toAccount: 'Cash' }, 'en'), V.entryWords('lent', { money: '2000 rupees', person: 'Shubham', account: 'Cash' }, 'en'),
+                V.entryWords('gotback', { money: '500 rupees', person: 'Yash', account: 'Cash' }, 'en'), V.entryWords('expense', { money: '450 रुपये', category: 'Groceries', account: 'HDFC Bank' }, 'hi'),
+                V.entryWords('lent', { money: '2000 रुपये', person: 'शुभम', account: 'Cash' }, 'hi'), V.entryWords('transfer', { money: '5000 रुपये', account: 'ICICI', toAccount: 'Cash' }, 'hi')],
+        voices: (() => {
+            const all = [['Veena', 'en-IN'], ['Rishi', 'en-IN'], ['Microsoft Neerja Online (Natural) - English (India)', 'en-IN'], ['Microsoft Prabhat Online (Natural) - English (India)', 'en-IN'], ['Daniel', 'en-GB'], ['Samantha', 'en-US'],
+                         ['Samantha (Enhanced)', 'en-US'], ['Zarvox', 'en-US'], ['Fred', 'en-US'], ['Lekha', 'hi-IN'], ['Google हिन्दी', 'hi-IN'], ['English India', 'en_IN'], ['Thomas', 'fr-FR']].map(([name, lang]) => ({ name, lang }));
+            const best = (list, lang, gender) => { const r = list.map((v) => ({ v, ...V.rateVoice(v, lang, gender) })).filter((x) => x.score > -100).sort((a, b) => b.score - a.score)[0]; return r ? [r.v.name, r.gender] : null; };
+            const mac = all.filter((v) => !/Microsoft/.test(v.name));
+            return { edgeF: best(all, 'en', 'female'), edgeM: best(all, 'en', 'male'), macF: best(mac, 'en', 'female'), macM: best(mac, 'en', 'male'), hiF: best(all, 'hi', 'female'), hiM: best(all, 'hi', 'male'),
+                     noIndianMale: best(mac.filter((v) => v.name !== 'Rishi'), 'en', 'male'), android: best([{ name: 'English India', lang: 'en_IN' }, { name: 'English United States', lang: 'en_US' }], 'en', 'male'),
+                     novelty: V.rateVoice({ name: 'Zarvox', lang: 'en-US' }, 'en', 'male').score < 0, french: V.rateVoice({ name: 'Thomas', lang: 'fr-FR' }, 'en', 'male').score < -100 };
+        })(),
         second: (() => { const s = V.createSession('en'); V.hear(s, 'Spent 450 on groceries', ctx); return V.hear(s, 'PNB bank', ctx).say; })(),
         one: (() => { const c1 = { ...ctx, accounts: [ctx.accounts[1]] }; const s = V.createSession('en'); const r = V.hear(s, 'spent 450 on groceries', c1); return { status: r.status, account: r.items && r.items[0].entry.accountId }; })(),
         none: V.hear(V.createSession('en'), 'spent 450 on groceries', { ...ctx, accounts: [] }),
@@ -193,6 +217,20 @@ check('no in many forms: know, नो, "मत करो"; a yes and a no togeth
 check('anything else is neither', r['yn'][31:] == [None, None, None, None], str(r['yn'][31:]))
 check('the assistant hearing itself is ignored, real answers are not ("HDFC bank", "from hdfc bank", "yes", "store this")', r['echo'] == [False, True, True, False, False, False, True, False], str(r['echo']))
 check('the spoken questions hold no word that could be taken as a yes or a no', r['wording'][0] == '450. Should I store this?' and r['wording'][1] == '450। क्या इसे दर्ज करूं?' and r['wording'][2:] == [None, None, None, None], str(r['wording']))
+check('amounts for the voice: plain below one lakh, lakh and crore above, paise, Hindi words, other currencies by name', r['money'] == ['450 rupees', '45300 rupees', '1 lakh 50 thousand rupees', '1 crore 20 lakh 5 thousand 300 rupees', '2500 rupees 50 paise', '1 lakh rupees', '450 रुपये', '1 लाख 50 हज़ार रुपये', '2 करोड़ रुपये', '450 US dollars', '99.5 euros'], str(r['money']))
+check('entries as sentences: "450 rupees for Groceries and Household, from HDFC Bank", "… lent to Shubham, from Cash", and in Hindi', r['words'] == ['450 rupees for Groceries and Household, from HDFC Bank', '5000 rupees, Salary, into ICICI', '5000 rupees from ICICI to Cash', '2000 rupees lent to Shubham, from Cash', '500 rupees got back from Yash, into Cash',
+      'Groceries के लिए 450 रुपये, HDFC Bank से', 'शुभम को 2000 रुपये उधार, Cash से', 'ICICI से Cash में 5000 रुपये'], str(r['words']))
+v = r['voices']
+check('best voice: the natural Indian-English ones where the browser has them (Neerja for female, Prabhat for male)', v['edgeF'] == ['Microsoft Neerja Online (Natural) - English (India)', 'female'] and v['edgeM'] == ['Microsoft Prabhat Online (Natural) - English (India)', 'male'], str([v['edgeF'], v['edgeM']]))
+check('…on a Mac: Veena (female) and Rishi (male); Hindi: Lekha or Google हिन्दी; never Zarvox or a French voice', v['macF'][0] == 'Veena' and v['macM'][0] == 'Rishi' and v['hiF'][0] in ('Lekha', 'Google हिन्दी') and v['novelty'] and v['french'], str([v['macF'], v['macM'], v['hiF']]))
+check('…no Indian male voice: a real male English voice (Daniel) rather than a pitched female one; no male Hindi voice: the Hindi one is used', v['noIndianMale'] == ['Daniel', 'male'] and v['hiM'][0] in ('Lekha', 'Google हिन्दी') and v['hiM'][1] == 'female', str([v['noIndianMale'], v['hiM']]))
+check('…a phone that only lists "English India": that voice is used (gender unknown)', v['android'] == ['English India', None], str(v['android']))
+f = r['fix']
+check('at the confirmation, "make it 500" changes the amount, says "Changed." and asks again; "yes" then stores 500', f['amount']['status'] == 'save' and f['amount']['e']['amount'] == 500 and f['amount']['said'][0] == 'Changed. 500. Should I store this?', str(f['amount']))
+check('…"from cash" changes the account; "category food" changes the category', f['account']['e']['accountId'] == 'cash' and f['account']['e']['amount'] == 450 and f['category']['e']['category'] == 'Food & Dining' and f['category']['e']['accountId'] == 'hdfc', str(f['account']['e']) + str(f['category']['e']))
+check('…a plain "no" is still a no; with several entries a spoken change is not guessed at (it asks again)', f['both']['status'] == 'abort' and f['many']['status'] == 'confirm' and f['many']['said'][0] == 'Sorry, I missed that. Should I store this?', str(f['both']['status']) + str(f['many']))
+check('edit(): amount, category, account, date and description of a reviewed entry can all be changed', f['edited']['amount'] == 512.5 and f['edited']['category'] == 'Food & Dining' and f['edited']['accountId'] == 'cash' and f['edited']['date'] == '2026-10-08' and f['edited']['description'] == 'Lunch out', str(f['edited']))
+check('edit(): a cleared category or amount stays cleared (Save then refuses it), also after "yes"', f['cleared']['categoryId'] is None and f['cleared']['amount'] is None and f['afterYes']['categoryId'] is None, str(f['cleared']))
 check('heard pieces are merged without repeats (a phone re-sends the sentence so far with each word)', r['joined'] == ['spent 450 on groceries', 'spent 450 on groceries', 'spent 450 on groceries', 'Spent 450 on groceries from cash', 'spent 450 on groceries', 'Yes', 'किराने पर 450 रुपये खर्च किए'], str(r['joined']))
 a = r['asks']
 check('wording: "Which account did you pay from?" / "…did it come into?"', a[0] == 'Which account did you pay from?' and a[1] == 'Which account did it come into?', str(a[:2]))

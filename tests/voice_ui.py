@@ -114,6 +114,32 @@ with sync_playwright() as p:
     check('tapping the microphone and saying "yas" (a misheard yes) stores it', last()['amount'] == 777)
     pg.locator('.toast-act').click(); time.sleep(0.4); pg.locator('.toast-close').click()
 
+    # changing an entry on the review screen before it is saved: amount, category, account, description
+    speak('Spent 600 on groceries from HDFC'); pg.get_by_role('button', name='Speak it').click(); pg.wait_for_selector('.voice-review'); time.sleep(0.4)
+    pg.locator('.voice-review [data-action="voiceEdit"]').click(); pg.wait_for_selector('.voice-edit'); time.sleep(0.2)
+    check('the review has a change button that opens a form with amount, category, account, date and description', pg.locator('.voice-edit [data-vfield]').evaluate_all('els => els.map(e => e.dataset.vfield)') == ['amount', 'categoryId', 'accountId', 'date', 'description'])
+    pg.locator('.voice-edit [data-vfield="amount"]').fill('650.5')
+    pg.locator('.voice-edit [data-vfield="categoryId"]').select_option(label='Food & Dining'); time.sleep(0.2)
+    pg.locator('.voice-edit [data-vfield="accountId"]').select_option(label='Cash · Cash'); time.sleep(0.2)
+    pg.locator('.voice-edit [data-vfield="description"]').fill('Dinner with family'); pg.locator('.voice-edit [data-vfield="description"]').blur(); time.sleep(0.2)
+    row = pg.locator('.voice-review .row').first.inner_text().replace('\n', ' ')
+    check('the row shows the changes at once', 'Dinner with family' in row and 'Food & Dining' in row and '650.5' in row and 'Cash' in row, row)
+    shot('v8_review_editing')
+    pg.locator('.voice-edit [data-vfield="categoryId"]').select_option(''); time.sleep(0.2)
+    pg.get_by_role('button', name='Save', exact=True).click(); time.sleep(0.5)
+    check('Save without a category is refused, and the entry stays on the screen to be fixed', len(db()['entries']) == start and 'Choose a category' in pg.locator('.voice-note.warn').inner_text() and pg.locator('.voice-edit').count() == 1, pg.locator('.voice-note.warn').inner_text() if pg.locator('.voice-note.warn').count() else 'no note')
+    pg.locator('.voice-edit [data-vfield="categoryId"]').select_option(label='Food & Dining'); time.sleep(0.2)
+    pg.get_by_role('button', name='Done').click(); time.sleep(0.2)
+    pg.get_by_role('button', name='Save', exact=True).click(); pg.wait_for_selector('.toast')
+    e = last(); fd = next(c for c in db()['categories'] if c['name'] == 'Food & Dining'); cash0 = next(a for a in db()['accounts'] if a['kind'] == 'cash')
+    check('stored with the changed amount, category, account and description', e['amount'] == 650.5 and e['categoryId'] == fd['id'] and e['accountId'] == cash0['id'] and e['description'] == 'Dinner with family', str(e))
+    pg.locator('.toast-act').click(); time.sleep(0.4); pg.locator('.toast-close').click()
+    # …or by voice: "make it 500" at the question
+    speak('Spent 450 on groceries from HDFC', 'make it 500', 'yes'); pg.get_by_role('button', name='Speak it').click(); pg.wait_for_selector('.toast')
+    said = pg.evaluate('window.__spoken')
+    check('a spoken correction ("make it 500") is applied, read back ("Changed. …") and asked about again', last()['amount'] == 500 and said[1].startswith('Changed. ') and said[1].endswith('Should I store this?'), str(said))
+    pg.locator('.toast-act').click(); time.sleep(0.4); pg.locator('.toast-close').click()
+
     # something missing: asked aloud, then confirmed by voice, then stored
     speak('Spent on groceries from cash', '450', 'yes')
     pg.get_by_role('button', name='Speak it').click(); pg.wait_for_selector('.toast')
@@ -207,7 +233,7 @@ with sync_playwright() as p:
     card = pg.locator('.card', has_text='Voice assistant'); pg.evaluate('window.__pitch = []; window.__spoken = []')
     check('Account page has a Voice assistant card with Female voice chosen', 'on' in card.get_by_role('button', name='Female voice', exact=True).get_attribute('class'))
     card.get_by_role('button', name='Male voice', exact=True).click(); time.sleep(0.4)
-    check('Male voice: chosen, remembered, and a sample is spoken lower', pg.evaluate("localStorage.getItem('lifedesk-voice-gender')") == 'male' and pg.evaluate('window.__spoken')[-1] in ('This is how I will sound.', 'मेरी आवाज़ ऐसी होगी।') and pg.evaluate('window.__pitch')[-1] < 1 and 'on' in card.get_by_role('button', name='Male voice', exact=True).get_attribute('class'), str(pg.evaluate('window.__pitch')))
+    check('Male voice: chosen, remembered, and a sample is spoken lower', pg.evaluate("localStorage.getItem('lifedesk-voice-gender')") == 'male' and (pg.evaluate('window.__spoken')[-1].startswith('Hello. I will read your entries back') or pg.evaluate('window.__spoken')[-1].startswith('नमस्ते')) and pg.evaluate('window.__pitch')[-1] < 1 and 'on' in card.get_by_role('button', name='Male voice', exact=True).get_attribute('class'), str(pg.evaluate('window.__pitch')))
     card.get_by_role('button', name='Female voice', exact=True).click(); time.sleep(0.4)
     check('Female voice: a sample is spoken higher', pg.evaluate("localStorage.getItem('lifedesk-voice-gender')") == 'female' and pg.evaluate('window.__pitch')[-1] > 1)
     card.screenshot(path=os.path.join(OUT, 'v6_account_voice_card.png'))
@@ -259,6 +285,38 @@ with sync_playwright() as p:
     gap = pg.evaluate('window.__quietAt - window.__spokeAt')
     check('phone: "yes" right after the question is heard the first time, although the phone never reported that speaking ended', len(db()['entries']) == n + 1 and db()['entries'][-1]['amount'] == 450 and 'Should I store this?' in pg.evaluate('window.__spoken')[0], str(pg.evaluate('window.__spoken')))
     check('no errors in the browser (phone)', not errors2, str(errors2[:2]))
+    ctx.close()
+
+    # choosing among the device's voices: the best of the gender asked for, per language, or one picked by name
+    ctx = b.new_context(viewport={'width': 390, 'height': 844})
+    ctx.add_init_script(STAND_IN + """
+        const VOICES = [['Veena', 'en-IN'], ['Rishi', 'en-IN'], ['Daniel', 'en-GB'], ['Samantha', 'en-US'], ['Zarvox', 'en-US'], ['Lekha', 'hi-IN']].map(([name, lang]) => ({ name, lang, voiceURI: name }));
+        window.__used = [];
+        window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };  // the real one accepts only the browser's own voice objects
+        Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { cancel() {}, getVoices() { return VOICES; }, addEventListener() {},
+            speak(u) { window.__spoken.push(u.text); window.__used.push([u.voice ? u.voice.name : null, u.pitch, u.rate]); setTimeout(() => u.onend && u.onend(), 40); } } });
+    """)
+    pg = ctx.new_page(); errors3 = []
+    pg.on('pageerror', lambda e: errors3.append(str(e))); pg.on('dialog', lambda d: d.accept())
+    pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
+    pg.goto(URL + '#more'); pg.wait_for_selector('.card:has-text("Voice assistant")'); time.sleep(0.3)
+    card = lambda: pg.locator('.card', has_text='Voice assistant'); used = lambda: pg.evaluate('window.__used')[-1]
+    check('Account: female by default, now using Veena; the list offers the device voices, without the novelty one', 'Now using: Veena' in card().inner_text().replace('\n', ' ') and 'Zarvox' not in card().locator('select').inner_text() and 'Rishi' in card().locator('select').inner_text(), card().inner_text()[:200])
+    card().get_by_role('button', name='Play a sample').click(); time.sleep(0.3)
+    check('the sample is a real sentence, in the chosen voice at its own pitch, a little slower than normal', used()[0] == 'Veena' and used()[1] == 1 and 0.9 <= used()[2] < 1 and '450 rupees for Groceries, from your bank' in pg.evaluate('window.__spoken')[-1], str(used()) + pg.evaluate('window.__spoken')[-1][:80])
+    card().get_by_role('button', name='Male voice', exact=True).click(); time.sleep(0.4)
+    check('Male voice: Rishi is used (a real male voice, not a pitched one)', used()[0] == 'Rishi' and used()[1] == 1 and 'Now using: Rishi' in card().inner_text().replace('\n', ' '), str(used()))
+    card().get_by_role('button', name='हिन्दी').click(); time.sleep(0.3); card().get_by_role('button', name='Play a sample').click(); time.sleep(0.3)
+    check('Hindi with Male chosen: the device has only a female Hindi voice, so it is used lower, and the card says so', used()[0] == 'Lekha' and used()[1] < 1 and 'no male voice for हिन्दी' in card().inner_text().replace('\n', ' ') and 'सुनाऊंगा' in pg.evaluate('window.__spoken')[-1], str(used()))
+    card().get_by_role('button', name='English').click(); time.sleep(0.3)
+    card().locator('select').select_option('Daniel'); time.sleep(0.4)
+    check('picking a voice by name: Daniel is used from then on, and remembered', used()[0] == 'Daniel' and pg.evaluate("localStorage.getItem('lifedesk-voice-name-en')") == 'Daniel' and 'Now using: Daniel' in card().inner_text().replace('\n', ' '), str(used()))
+    card().screenshot(path=os.path.join(OUT, 'v9_voice_card.png'))
+    pg.goto(URL + '#accounts'); pg.get_by_role('button', name='＋ Bank account').click(); pg.get_by_label('Name').fill('HDFC Bank'); pg.get_by_label('Opening balance').fill('1000'); pg.get_by_role('button', name='Save').click(); time.sleep(0.5)
+    pg.goto(URL + '#add'); pg.wait_for_selector('.voice-btn'); pg.evaluate("window.__say = ['Spent 150000 on groceries from HDFC', 'no']; window.__spoken = []")
+    pg.get_by_role('button', name='Speak it').click(); pg.wait_for_selector('.vb.from-app.warn'); time.sleep(0.2)
+    check('an entry is read back as a sentence in that voice: "1 lakh 50 thousand rupees for Groceries and Household, from HDFC Bank. Should I store this?"', pg.evaluate('window.__spoken')[0] == '1 lakh 50 thousand rupees for Groceries and Household, from HDFC Bank. Should I store this?' and pg.evaluate('window.__used')[-2][0] == 'Daniel', pg.evaluate('window.__spoken')[0])
+    check('no errors in the browser (voices)', not errors3, str(errors3[:2]))
     ctx.close()
 
     # a browser without speech recognition: the button explains where it works
