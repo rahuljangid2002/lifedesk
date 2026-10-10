@@ -14,7 +14,18 @@ self.addEventListener('activate', (event) => {
 // Network first, so a new version shows as soon as you are online; the cache is the fallback when offline.
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
-    if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
+    // Firebase's program files (a fixed version in the address, so they never change): kept after the first load,
+    // which lets the app open without internet.
+    if (event.request.method === 'GET' && url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
+        event.respondWith(caches.match(event.request).then((hit) => hit || fetch(event.request).then((res) => {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(event.request, copy));
+            return res;
+        })));
+        return;
+    }
+    // the app's "is the internet really there?" check must not be answered from the saved copy
+    if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.searchParams.has('ping')) {
         return;
     }
     event.respondWith(

@@ -27,6 +27,7 @@ const state = {
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false },
     push: { busy: false },
+    net: { offline: !navigator.onLine, dismissed: false, checking: false, failedStart: false },
     vault: { pass: '', pass2: '', code: null, saved: false, mode: 'pass', recovery: '', busy: false },
     insights: { tab: 'monthly', month: thisMonth(), year: null },
     reports: { id: 'monthly-summary', preset: 'this-month', from: null, to: null, month: null, year: null },
@@ -340,6 +341,40 @@ function vaultScreen() {
     }
     return `<div class="login"><div class="logo">${icon('logo')}</div><h1>LifeDesk</h1>${body}
         <button class="link-btn" data-action="signOut">${icon('logout')} Sign out (${esc(S.user.contact)})</button></div>`;
+}
+
+/**
+ * Shown over everything while there is no internet (and when the app is opened without it). It goes away by itself
+ * when the connection returns. "Continue offline" is offered once the user's data is on this device: screens keep
+ * working from the saved copy and changes are sent when the connection is back.
+ */
+function offlineScreen() {
+    const n = state.net;
+    const canContinue = state.status === 'ready' && !n.failedStart;
+    return `<div class="offline" role="alertdialog" aria-labelledby="offline-title" aria-describedby="offline-text">
+        <div class="offline-glow a"></div><div class="offline-glow b"></div><div class="offline-glow c"></div>
+        <div class="offline-card">
+            <div class="offline-art" aria-hidden="true">
+                <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
+                <span class="offline-icon"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 18.5c4.7-4.4 10.9-7 18-7 2.6 0 5.1 .35 7.5 1"/><path d="M42 18.5a26.3 26.3 0 0 0-4.6-3.6"/>
+                    <path d="M12.5 25.5a16.8 16.8 0 0 1 8.3-4.3"/><path d="M35.5 25.5a16.9 16.9 0 0 0-5-3.3"/>
+                    <path d="M18.8 32.2a8.2 8.2 0 0 1 10.4 0"/><circle cx="24" cy="38.2" r="1.6" fill="currentColor" stroke="none"/>
+                    <path class="slash" d="M8 6l32 36"/></svg></span>
+            </div>
+            <small class="offline-chip"><i></i> No connection</small>
+            <h1 id="offline-title">You're offline</h1>
+            <p id="offline-text">${canContinue ? 'LifeDesk cannot reach the internet. Your data is safe on this device, and anything you change will be sent when you are back online.' : 'LifeDesk cannot reach the internet. Check your Wi-Fi or mobile data and it will open as soon as you are connected.'}</p>
+            <div class="offline-actions">
+                <button class="offline-btn primary" data-action="netRetry" ${n.checking ? 'disabled' : ''}>${n.checking ? '<span class="spin"></span> Checking…' : 'Try again'}</button>
+                ${canContinue ? '<button class="offline-btn" data-action="netContinue">Continue offline</button>' : ''}
+            </div>
+            <ul class="offline-tips">
+                <li>Check that Wi-Fi or mobile data is on</li><li>Turn off aeroplane mode</li><li>Move closer to your router, or try another network</li>
+            </ul>
+            <small class="offline-foot"><span class="dots"><i></i><i></i><i></i></span> Reconnecting automatically</small>
+        </div>
+    </div>`;
 }
 
 /** First visit: choose the currency amounts are shown in. */
@@ -1084,6 +1119,10 @@ const SIDE = [
 ];
 
 function render() {
+    if (state.net.offline && !state.net.dismissed) {
+        app.innerHTML = offlineScreen() + toastHtml();
+        return;
+    }
     if (state.status === 'loading') {
         app.innerHTML = `<div class="loading"><div class="logo">${icon('logo')}</div><p>Loading…</p></div>`;
         return;
@@ -1121,7 +1160,7 @@ function render() {
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
         <div class="shell">${screen()}</div>
         ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''} ${r === 'add' ? 'add' : ''}"><span>${icon(ic)}</span>${label}</a>`).join('')}</nav>`}
-    </div>${toastHtml()}`;
+    </div>${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
     if (focus) {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {
@@ -1433,6 +1472,26 @@ const actions = {
             await S.remove('assets', a.id);
             toast(`${a.name} deleted.`);
         }
+    },
+    // offline screen
+    async netRetry() {
+        state.net.checking = true;
+        render();
+        const online = await reachable();
+        state.net.checking = false;
+        if (online) {
+            backOnline();
+        } else {
+            toast('Still no connection. Check your Wi-Fi or mobile data.', 'warn');
+        }
+    },
+    netContinue() {
+        state.net.dismissed = true;
+        render();
+    },
+    netShow() {
+        state.net.dismissed = false;
+        render();
     },
     toastClose() {
         window.clearTimeout(toast.timer);
@@ -2362,6 +2421,39 @@ window.addEventListener('resize', () => {
     wasWide = wide;
 });
 
+// ---------- connection ----------
+/** True when a tiny request really reaches the site (the browser's own "online" only means a network is attached). */
+async function reachable() {
+    try {
+        const res = await fetch(`manifest.webmanifest?ping=${Date.now()}`, { cache: 'no-store' }); // sw.js lets "ping" requests go straight to the network
+        return res.ok;
+    } catch (e) {
+        return false;
+    }
+}
+function backOnline() {
+    const was = state.net.offline;
+    state.net.offline = false;
+    state.net.dismissed = false;
+    if (state.net.failedStart) {
+        window.location.reload(); // the app never started: start it now
+        return;
+    }
+    if (was) {
+        toast('You are back online.');
+    } else {
+        render();
+    }
+}
+window.addEventListener('offline', () => {
+    state.net.offline = true;
+    state.net.dismissed = false;
+    window.clearTimeout(toast.timer);
+    state.toast = null; // an older message (such as "back online") does not belong on this screen
+    render();
+});
+window.addEventListener('online', backOnline);
+
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
     trackRoute();
@@ -2395,8 +2487,14 @@ S.init((status) => {
         pushFor = null;
     }
     render();
-}).catch((e) => {
+}).catch(async (e) => {
     console.error(e);
+    if (!navigator.onLine || !(await reachable())) {
+        state.net.offline = true;
+        state.net.failedStart = true;
+        render();
+        return;
+    }
     app.innerHTML = `<div class="loading"><p>Could not start: ${esc(e.message)}</p></div>`;
 });
 
