@@ -1132,7 +1132,22 @@ function render() {
         }
     }
 }
-const toastHtml = () => (state.toast ? `<div class="toast ${state.toast.kind}" role="status">${esc(state.toast.message)}</div>` : '');
+// A banner at the top, like a Salesforce toast: icon, message, close button. It slides in once, even though the
+// screen is redrawn while it shows.
+const TOAST_ICONS = {
+    ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff"/><path d="M7.5 12.4l3 3 6-6.4" fill="none" stroke="#2e844a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff"/><path d="M12 6.8v6.4" fill="none" stroke="#ba0517" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.9" r="1.4" fill="#ba0517"/></svg>'
+};
+function toastHtml() {
+    const t = state.toast;
+    if (!t) {
+        return '';
+    }
+    const pop = t.shown ? '' : 'pop';
+    t.shown = true;
+    return `<div class="toast ${t.kind} ${pop}" role="${t.kind === 'warn' ? 'alert' : 'status'}"><span class="toast-icon">${TOAST_ICONS[t.kind] || TOAST_ICONS.ok}</span><span class="toast-text">${esc(t.message)}</span>
+        <button class="toast-close" data-action="toastClose" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>`;
+}
 
 // ---------- actions ----------
 const actions = {
@@ -1418,6 +1433,11 @@ const actions = {
             await S.remove('assets', a.id);
             toast(`${a.name} deleted.`);
         }
+    },
+    toastClose() {
+        window.clearTimeout(toast.timer);
+        state.toast = null;
+        render();
     },
     goBack(el, event) {
         event.preventDefault(); // the browser's own back keeps its history in step (the link's address is the fallback)

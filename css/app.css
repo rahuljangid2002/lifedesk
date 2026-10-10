@@ -1124,22 +1124,83 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 /* ---------- toast, login ---------- */
+/* Messages after an action, in the style of Salesforce toasts: a coloured banner at the top centre with an icon,
+   the text and a close button. Green = done, red = a problem. */
 .toast {
     position: fixed;
     left: 50%;
-    bottom: calc(var(--tab-h) + 1.5rem + env(safe-area-inset-bottom));
+    top: calc(0.75rem + env(safe-area-inset-top));
     transform: translateX(-50%);
-    z-index: 10;
-    max-width: min(90vw, 28rem);
-    background: #14291d;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: max-content;
+    min-width: min(92vw, 20rem);
+    max-width: min(92vw, 34rem);
+    background: #2e844a;
     color: #fff;
-    padding: 0.7rem 1rem;
-    border-radius: 0.9rem;
-    font-size: 0.86rem;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    padding: 0.75rem 0.75rem 0.75rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.35;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+.toast.pop {
+    animation: toast-in 0.22s ease-out;
+}
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -0.9rem);
+    }
 }
 .toast.warn {
-    background: #5a1a1a;
+    background: #ba0517;
+}
+.toast-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+}
+.toast-icon svg {
+    width: 1.6rem;
+    height: 1.6rem;
+}
+.toast-text {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.toast-close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    border-radius: 0.35rem;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+}
+.toast-close:hover,
+.toast-close:focus-visible {
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+}
+.toast-close svg {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    .toast.pop {
+        animation: none;
+    }
 }
 .loading,
 .login {
@@ -1427,9 +1488,6 @@ input[type='number']::-webkit-outer-spin-button {
     .chips {
         flex-wrap: wrap;
         overflow: visible;
-    }
-    .toast {
-        bottom: 2rem;
     }
     .btn.wide {
         max-width: 24rem;
