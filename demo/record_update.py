@@ -1,5 +1,5 @@
-"""Records the "What's new" video (October 2026 update): the new look and motion, Renewal reminders, notifications
-and email, clear messages, and working offline. Demo mode with the made-up sample data only.
+"""Records the "What's new" video (October 2026 update): the new look and motion, voice entry, Renewal reminders,
+notifications and email, clear messages, and working offline. Demo mode with the made-up sample data only.
 
     python3 -m http.server 8765                          (in 4-Web-App)
     <venv>/python demo/record_update.py --mobile         -> docs/LifeDesk - What's New (Mobile).mp4, portrait 1080 x 1920
@@ -20,6 +20,38 @@ SLOW = 2  # filmed at 1/2 speed, played at 2x
 FPS = 50
 iso = lambda n: (date.today() + timedelta(days=n)).isoformat()
 w = lambda seconds: time.sleep(seconds * SLOW)
+
+
+# The voice scene: a recording cannot hear anyone, so a stand-in "hears" the lines the scene gives it (the words
+# appear one by one, as they do while really speaking) and a silent stand-in takes the place of the spoken voice.
+# Its timers are stretched like everything else in a scene filmed at half speed.
+VOICE_STAND = """
+window.__say = [];
+class FakeRecognition {
+    start() { const text = window.__say.shift(); const words = (text || '').split(' '); let n = 0; const T = %d;
+        setTimeout(() => this.onstart && this.onstart(), 180 * T);
+        if (text === undefined) { this._t = setTimeout(() => { this.onerror && this.onerror({ error: 'no-speech' }); this.onend && this.onend(); }, 4000 * T); return; }
+        const step = () => { n += 1; const part = [{ transcript: words.slice(0, n).join(' ') }]; part.isFinal = n === words.length;
+            this.onresult && this.onresult({ resultIndex: 0, results: [part] });
+            this._t = n < words.length ? setTimeout(step, 140 * T) : setTimeout(() => this.onend && this.onend(), 420 * T); };
+        this._t = setTimeout(step, 650 * T); }
+    stop() { clearTimeout(this._t); this.onend && this.onend(); }
+    abort() { clearTimeout(this._t); }
+}
+window.SpeechRecognition = FakeRecognition; window.webkitSpeechRecognition = FakeRecognition;
+Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { cancel() {}, getVoices() { return []; }, addEventListener() {},
+    speak(u) { setTimeout(() => u.onend && u.onend(), (650 + u.text.length * 22) * %d); } } });
+window.AudioContext = undefined; window.webkitAudioContext = undefined;
+""" % (SLOW, SLOW)
+
+
+def hear(page, *lines):
+    page.evaluate('(l) => { window.__say = l; }', list(lines))
+
+
+def caption_top(page):
+    """The voice sheet rises from the bottom: the caption moves to the top for this scene."""
+    page.evaluate("() => { const c = document.getElementById('demo-cap'); if (c) { c.style.bottom = 'auto'; c.style.top = '84px'; } }")
 
 
 def slow(page):
@@ -54,7 +86,7 @@ def row(page, name):
 # ---------------- scenes ----------------
 def s_title(page):
     R.start(page, R.card('u_title', 'LifeDesk', "What's new: the October update",
-                         ['A new design', 'Renewal reminders', 'Notifications and email', 'Works offline']), 0.6)
+                         ['Voice entry', 'A new design', 'Renewal reminders', 'Notifications and email', 'Works offline']), 0.6)
     time.sleep(3)
 
 
@@ -80,6 +112,50 @@ def s_design(page):
     tap(page, page.get_by_role('button', name='Dark', exact=True), 1.7)
     tap(page, page.locator('.hero .back'), 1.6)
     w(0.6)
+
+
+def s_voice(page):
+    R.start(page, R.DEMO + '#home'); slow(page); caption_top(page)
+    R.caption(page, 'New: speak an entry')
+    w(0.7)
+    tap(page, page.locator('.tabbar a.add'), 1.1)
+    R.caption(page, 'Tap +, then speak or type')
+    w(0.7)
+    hear(page, 'Spent 450 on groceries', 'main bank', 'yes')
+    tap(page, page.get_by_role('menuitem', name='Speak an entry'), 0.4)
+    R.caption(page, 'You say: “Spent 450 on groceries”')
+    page.wait_for_selector('.voice-q', timeout=60000)
+    R.caption(page, 'No account said, so it asks')
+    page.wait_for_selector('.voice-review', timeout=60000)
+    R.caption(page, 'It shows what it understood, and waits for your yes')
+    page.wait_for_selector('.toast', timeout=60000)
+    R.caption(page, 'Saved only after “yes”')
+    w(1.5)
+    page.locator('.toast-close').click(); w(0.2)
+    R.nav(page, 'add', 0.8 * SLOW)
+    R.caption(page, 'Several entries in one sentence')
+    hear(page, 'Spent 300 on vegetables and 120 on milk from cash and received 5000 salary in main bank')
+    tap(page, page.get_by_role('button', name='Speak it'), 0.4)
+    page.wait_for_selector('.voice-review', timeout=60000)
+    w(1.2)
+    R.caption(page, 'Change anything before saving')
+    tap(page, page.locator('.voice-review [data-action="voiceEdit"]').first, 0.9)
+    amount = page.locator('.voice-edit [data-vfield="amount"]')
+    amount.fill(''); amount.type('320', delay=110 * SLOW); w(0.4)
+    tap(page, page.get_by_role('button', name='Done'), 0.7)
+    tap(page, page.get_by_role('button', name='Save all 3'), 0.3)
+    page.wait_for_selector('.toast', timeout=60000)
+    R.caption(page, 'Three entries saved together, with Undo')
+    w(1.6)
+    page.locator('.toast-close').click(); w(0.2)
+    R.caption(page, 'English or हिन्दी')
+    hear(page)
+    tap(page, page.get_by_role('button', name='Speak it'), 0.6)
+    hear(page, 'कैश से किराने पर 450 रुपये खर्च किए', 'हाँ')
+    tap(page, page.get_by_role('button', name='हिन्दी'), 0.4)
+    page.wait_for_selector('.voice-review', timeout=60000)
+    page.wait_for_selector('.toast', timeout=60000)
+    w(1.8)
 
 
 def s_renew(page):
@@ -172,19 +248,21 @@ def s_trust(page):
 
 
 def s_outro(page):
-    R.start(page, R.card('u_outro', 'LifeDesk', 'Reminders, notifications and a new design: live now',
+    R.start(page, R.card('u_outro', 'LifeDesk', 'Voice entry, reminders and a new design: live now',
                          ['rahuljangid2002.github.io/lifedesk', 'Free', 'Encrypted: only you can read your data', 'Phone and desktop']), 0.6)
     time.sleep(3)
 
 
-# name, scene, kind ('card' = a still page at normal speed, 'app' = the app at half speed), narration
+# name, scene, kind ('card' = a still page at normal speed, 'app' = the app at half speed, 'voice' = the same with the
+# stand-in microphone), narration
 SCENES = [
     ('u_title', s_title, 'card', "LifeDesk has a big update. Here is what is new."),
     ('u_design', s_design, 'app', "First, a new design. Large titles, clean cards and a floating bar, with screens that glide in and back like the apps on your phone. Money is now called Account Management, and its More tab holds everything else: payments, dashboards, reports, people, accounts and assets. Forms slide up as a sheet, so you never lose your place. And dark mode is true black."),
+    ('u_voice', s_voice, 'voice', "The biggest addition is voice entry. Tap the plus button and simply say it, in English or Hindi. If something is missing, like the account, LifeDesk asks for it, and the screen tells you when it is your turn to speak. It shows what it understood, and nothing is saved until you say yes. You can say several entries in one sentence, change the amount, the category or the account before saving, and undo afterwards. It works the same way in Hindi, and you can choose the assistant's voice."),
     ('u_renew', s_renew, 'app', "The new tool is Renewal reminders. Add your insurance, subscriptions, documents or a warranty, with a due date. LifeDesk sorts them into overdue, due soon and later, and shows what they cost in a year. Press Renewed, and a reminder moves to its next date. It can also record the payment as an expense."),
     ('u_notify', s_notify, 'card', "You are reminded even when the app is closed. A notification arrives on your phone or computer, and an email if you want one, every morning from the day you choose, until you mark it renewed. Your reminders stay encrypted, so a message says when something is due, and names appear only if you choose to include them."),
     ('u_trust', s_trust, 'app', "Every action now confirms with a clear message: green when it is done, red when something is missing. And LifeDesk now works without internet. If the connection drops, you see a clear screen, and you can continue offline. Keep adding entries, and they sync by themselves when you are back online."),
-    ('u_outro', s_outro, 'card', "Renewal reminders, notifications and the new design are live now. The link is in the comments. Tell me what you would like next."),
+    ('u_outro', s_outro, 'card', "Voice entry, renewal reminders, notifications and the new design are live now. The link is in the comments. Tell me what you would like next."),
 ]
 
 
@@ -210,8 +288,10 @@ def record(pw, name, fn, kind):
     vdir = os.path.join(R.WORK, f'v_{name}')
     R.shutil.rmtree(vdir, ignore_errors=True)
     ctx = browser.new_context(viewport={'width': vw, 'height': vh}, record_video_dir=vdir, record_video_size={'width': vw, 'height': vh},
-                              device_scale_factor=R.MSCALE if R.MOBILE else 1, storage_state=R.STATE if kind == 'app' else None, color_scheme='light')
+                              device_scale_factor=R.MSCALE if R.MOBILE else 1, storage_state=R.STATE if kind in ('app', 'voice') else None, color_scheme='light')
     ctx.add_init_script(R.OVERLAY)
+    if kind == 'voice':
+        ctx.add_init_script(VOICE_STAND)
     t0 = time.time()
     page = ctx.new_page()
     page.on('dialog', lambda d: d.accept())
@@ -224,7 +304,7 @@ def record(pw, name, fn, kind):
 
 
 def build(name, webm, begin, end, apath, alen, kind):
-    speed = SLOW if kind == 'app' else 1
+    speed = SLOW if kind in ('app', 'voice') else 1
     dur = max(alen + 1.2, (end - begin) / speed)
     size = 'scale=1080:1920:flags=lanczos,' if R.MOBILE else ''
     vf = f'{size}setpts=(PTS-STARTPTS)/{speed},fps={FPS},tpad=stop_mode=clone:stop_duration=30'
@@ -251,7 +331,7 @@ def main():
             webm, begin, end = record(pw, name, fn, kind)
             dur = build(name, webm, begin, end, apath, alen, kind)
             total += dur
-            print(f'{name}: voice {alen:.1f}s, shown {(end - begin) / (SLOW if kind == "app" else 1):.1f}s, scene {dur:.1f}s', flush=True)
+            print(f'{name}: voice {alen:.1f}s, shown {(end - begin) / (SLOW if kind in ("app", "voice") else 1):.1f}s, scene {dur:.1f}s', flush=True)
     lst = os.path.join(R.WORK, 'u_list.txt')
     with open(lst, 'w') as f:
         for name, *_ in SCENES:
