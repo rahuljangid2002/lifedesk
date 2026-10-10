@@ -736,6 +736,16 @@ input[type='number']::-webkit-outer-spin-button {
 .pane-head h2 {
     font-size: 1.1rem;
 }
+/* the line under the heading changes with the kind of entry: it always has room for two lines, so nothing below it moves */
+.pane-head small {
+    line-height: 1.3;
+    min-height: 2.6em;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
 .empty-state {
     display: flex;
     flex-direction: column;

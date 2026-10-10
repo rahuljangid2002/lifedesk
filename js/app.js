@@ -1126,6 +1126,7 @@ const SIDE = [
     ['You', [['more', 'user', 'Account & backup']]]
 ];
 
+let renderedRoute = null; // the screen the last drawing was for
 function render() {
     if (state.net.offline && !state.net.dismissed) {
         app.innerHTML = offlineScreen() + toastHtml();
@@ -1165,6 +1166,9 @@ function render() {
     const fresh = state.fresh ? 'fresh' : ''; // only the first drawing after moving to a screen
     state.fresh = false;
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
+    // rows that scroll sideways (the account chips) keep their place when the same screen is drawn again
+    const slid = renderedRoute === state.route ? [...app.querySelectorAll('.chips')].map((el) => el.scrollLeft) : [];
+    renderedRoute = state.route;
     const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>${r === 'add' ? `<button class="side-voice" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>` : ''}`).join('')}`).join('');
     app.innerHTML = `<div class="app">
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
@@ -1180,6 +1184,11 @@ function render() {
                 <small class="add-menu-tip">Tip: press and hold + to speak straight away</small>
             </div>` : ''}`}
     </div>${voiceSheet()}${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
+    app.querySelectorAll('.chips').forEach((el, n) => {
+        if (slid[n]) {
+            el.scrollLeft = slid[n];
+        }
+    });
     if (focus) {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {

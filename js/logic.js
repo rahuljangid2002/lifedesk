@@ -3,12 +3,12 @@
 export const TYPES = {
     expense: { label: 'Expense', short: 'Expense', icon: 'cart', sign: -1, hint: 'Money you spent.' },
     income: { label: 'Income', short: 'Income', icon: 'income', sign: 1, hint: 'Money you earned or received.' },
-    transfer: { label: 'Transfer', short: 'Transfer', icon: 'transfer', sign: 0, hint: 'Move money between your own accounts, or pay a card bill.' },
+    transfer: { label: 'Transfer', short: 'Transfer', icon: 'transfer', sign: 0, hint: 'Between your own accounts, or to pay a card bill.' },
     lent: { label: 'Lent / Given', short: 'Lent', icon: 'lent', sign: -1, hint: 'Money you gave to someone who will pay it back.' },
     gotback: { label: 'Got Back', short: 'Got back', icon: 'gotback', sign: 1, hint: 'Someone returned money they owed you.' },
     borrowed: { label: 'Borrowed', short: 'Borrowed', icon: 'borrowed', sign: 1, hint: 'Money you took from someone and will pay back.' },
     repaid: { label: 'Repaid', short: 'Repaid', icon: 'repaid', sign: -1, hint: 'You paid back someone you owe.' },
-    asset: { label: 'Asset purchase', short: 'Asset', icon: 'asset', sign: -1, hint: 'Something valuable you bought: a vehicle, gadget, gold or property. It is added to My assets.' }
+    asset: { label: 'Asset purchase', short: 'Asset', icon: 'asset', sign: -1, hint: 'Something valuable you bought. Added to My assets.' }
 };
 export const ASSET_TYPES = ['Vehicle', 'Electronics', 'Property', 'Gold & Jewellery', 'Furniture & Appliances', 'Investment', 'Other'];
 export const PERSON_TYPES = ['lent', 'gotback', 'borrowed', 'repaid'];
