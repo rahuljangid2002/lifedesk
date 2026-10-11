@@ -1316,3 +1316,63 @@ button.shortcut {
 .voice.editing .voice-stage {
     padding: 0;
 }
+
+/* ---------- renewal reminders: rows come and go with movement ---------- */
+/* leaving (deleted, renewed, removed): fade and slide away, then the list closes over the gap */
+.acct-row.rem-leaving {
+    overflow: hidden;
+    pointer-events: none;
+    animation: rem-leave 0.42s var(--ease) both;
+}
+@keyframes rem-leave {
+    0% {
+        opacity: 1;
+        transform: none;
+        max-height: 16rem;
+    }
+    45% {
+        opacity: 0;
+        transform: translateX(-1.25rem) scale(0.98);
+        max-height: 16rem;
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(-1.25rem) scale(0.98);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-top-width: 0;
+    }
+}
+/* arrived (added, or moved to its new place): opens up, fades in, and stays lightly highlighted for a moment */
+.acct-row.rem-arrived {
+    animation: rem-arrive 0.55s var(--ease-out) both, rem-glow 1.8s ease-out both;
+}
+@keyframes rem-arrive {
+    from {
+        opacity: 0;
+        transform: translateY(-0.6rem) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes rem-glow {
+    0%,
+    35% {
+        background-color: var(--brand-soft);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .acct-row.rem-leaving,
+    .acct-row.rem-arrived {
+        animation: none;
+    }
+    .acct-row.rem-leaving {
+        opacity: 0;
+    }
+}

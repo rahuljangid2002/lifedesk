@@ -104,7 +104,7 @@ with sync_playwright() as p:
     check('renew: payment pre-ticked with the amount and the default account', pg.get_by_label('Amount paid').input_value() == '40' and pg.locator('[data-model="renewals.renew.accountId"] option:checked').inner_text() == 'City Bank')
     if not pg.locator('[data-model="renewals.renew.categoryId"]').input_value():
         pg.locator('[data-model="renewals.renew.categoryId"]').select_option(index=1)
-    pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.3)
+    pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.9)  # the row fades out (0.42 s) before the change is saved
     d = db()
     gym = next(x for x in d['reminders'] if x['name'] == 'Gym membership')
     paid = [e for e in d['entries'] if e.get('reminderId') == gym['id']]
@@ -115,7 +115,7 @@ with sync_playwright() as p:
 
     # a renewal with a next date not after the current one is refused
     pg.goto(URL + '#renewals'); row('Car insurance').get_by_role('button', name='Renewed').click(); time.sleep(0.2)
-    pg.get_by_label('Next due date').fill(iso(10)); pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.2)
+    pg.get_by_label('Next due date').fill(iso(10)); pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.9)  # the row fades out (0.42 s) before the change is saved
     check('renew: next date must be after the current due date', pg.locator('.toast.warn').count() == 1 and next(x for x in db()['reminders'] if x['name'] == 'Car insurance')['due'] == iso(10))
     pg.get_by_role('button', name='Cancel').click()
 
@@ -123,17 +123,17 @@ with sync_playwright() as p:
     row('Passport').get_by_role('button', name='Renewed').click(); time.sleep(0.2)
     check('one-time: no next date, payment not ticked when there is no amount', pg.get_by_label('Next due date').count() == 0 and not pg.locator('[data-action="remRecord"]').is_checked())
     before = len(db()['entries'])
-    pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.3)
+    pg.get_by_role('button', name='Mark renewed').click(); time.sleep(0.9)  # the row fades out (0.42 s) before the change is saved
     check('one-time: moves to Done, no entry added', 'Show done · 1' in pg.locator('main').inner_text() and len(db()['entries']) == before and row('Passport').count() == 0)
     pg.get_by_role('button', name='Show done · 1').click(); time.sleep(0.2)
-    row('Passport').get_by_role('button', name='Undo').click(); time.sleep(0.3)
+    row('Passport').get_by_role('button', name='Undo').click(); time.sleep(0.9)  # the row fades out (0.42 s) before the change is saved
     check('undo confirms with a message', 'Passport is open again.' in pg.locator('.toast').inner_text())
     check('undo: passport is back under Later', 'rem-later' in row('Passport').get_attribute('class'))
 
     # edit and delete
     row('Car insurance').get_by_role('button', name='Edit').click(); pg.get_by_label('Amount (optional)').fill('600'); pg.get_by_role('button', name='Save').click(); time.sleep(0.3)
     check('edit: yearly cost becomes 600 + 480 = 1,080', money(stat('Yearly cost')) == 1080, stat('Yearly cost'))
-    row('Passport').get_by_role('button', name='Delete').click(); time.sleep(0.3)
+    row('Passport').get_by_role('button', name='Delete').click(); time.sleep(0.9)  # the row fades out (0.42 s) before the change is saved
     check('delete confirms with a message', 'Passport deleted.' in pg.locator('.toast').inner_text())
     check('delete: passport is gone', row('Passport').count() == 0 and len(db()['reminders']) == 2)
 

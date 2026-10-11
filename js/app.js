@@ -26,7 +26,7 @@ const state = {
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
-    renewals: { form: null, renew: null, showDone: false },
+    renewals: { form: null, renew: null, showDone: false, leaving: [], leavingAt: 0, arrived: [], arrivedAt: 0 },
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
     voice: { open: false, lang: 'en', phase: 'idle', interim: '', note: '', log: [], review: null },
@@ -857,12 +857,44 @@ function renewForm(r) {
     </div>`;
 }
 
+// Reminder rows move: one that is deleted, renewed or removed fades and slides away before the list closes over it;
+// one that is added, or lands in a new group, opens up and fades in with a short highlight (css/ios.css).
+// The screen is redrawn whenever the data changes, so each row is told how far into its movement it already is.
+const REM_LEAVE_MS = 420;
+const REM_ARRIVE_MS = 1800;
+let remArriveTimer = null;
+function remLeave(ids) {
+    state.renewals.leaving = ids;
+    state.renewals.leavingAt = Date.now();
+    render();
+    return new Promise((resolve) => window.setTimeout(resolve, REM_LEAVE_MS));
+}
+function remArrive(ids) {
+    window.clearTimeout(remArriveTimer);
+    state.renewals.leaving = [];
+    state.renewals.arrived = ids;
+    state.renewals.arrivedAt = Date.now();
+    remArriveTimer = window.setTimeout(() => {
+        state.renewals.arrived = [];
+    }, REM_ARRIVE_MS);
+}
+function remMotion(id) {
+    const st = state.renewals;
+    if (st.leaving.includes(id)) {
+        return { cls: 'rem-leaving', style: `style="animation-delay:-${Date.now() - st.leavingAt}ms"` };
+    }
+    if (st.arrived.includes(id) && Date.now() - st.arrivedAt < REM_ARRIVE_MS) {
+        return { cls: 'rem-arrived', style: `style="animation-delay:-${Date.now() - st.arrivedAt}ms"` };
+    }
+    return { cls: '', style: '' };
+}
+
 function renewals() {
     const st = state.renewals;
     const rows = remRows();
     const groups = [['overdue', 'Overdue'], ['soon', 'Due soon'], ['later', 'Later']];
     const f = st.form;
-    const row = (r) => `<div class="acct-row rem-${r.state} ${st.renew && st.renew.id === r.id ? 'open' : ''}">
+    const row = (r) => `<div class="acct-row rem-${r.state} ${st.renew && st.renew.id === r.id ? 'open' : ''} ${remMotion(r.id).cls}" ${remMotion(r.id).style} data-rem="${r.id}">
         <div class="a-name"><span class="row-icon">${icon('bell')}</span><span><b>${esc(r.name)}</b><small>${[esc(r.kind), esc(L.repeatLabel(r.repeat)), r.state === 'done' ? '' : `remind ${plural(Number(r.remindDays ?? 30), 'day')} before`].filter(Boolean).join(' · ')}</small></span></div>
         <div class="a-detail"><small>${dueWords(r)}</small>${r.notes ? `<small>${esc(r.notes)}</small>` : ''}</div>
         <div class="a-bal"><b class="big">${Number(r.amount) ? L.money(r.amount) : '–'}</b><small>${Number(r.amount) ? (Number(r.repeat) ? 'each time' : 'once') : 'no cost'}</small></div>
@@ -2363,6 +2395,7 @@ const actions = {
         const doc = { ...f, id: f.id || S.newId(), name: String(f.name).trim(), notes: String(f.notes || '').trim(), repeat: Number(f.repeat) || 0, amount: Number(f.amount) || 0,
             remindDays: Number(f.remindDays) || 0, accountId: f.accountId || null, done: false, createdAt: f.createdAt || Date.now() };
         state.renewals.form = null;
+        remArrive([doc.id]);
         await S.save('reminders', doc);
         toast(`${doc.name} saved.`);
     },
@@ -2403,11 +2436,15 @@ const actions = {
             pairs.push(['entries', entry]);
         }
         state.renewals.renew = null;
+        await remLeave([r.id]); // it leaves its place, then appears where it now belongs
+        remArrive([r.id]);
         await S.saveAll(pairs);
         toast(`${r.name} renewed${repeating ? `, next due ${longDate(f.next)}` : ''}${f.record ? ` · ${L.money(f.amount)} recorded` : ''}.`);
     },
     async remUndo(el) {
         const r = byId(S.data.reminders, el.dataset.id);
+        await remLeave([r.id]);
+        remArrive([r.id]);
         await S.save('reminders', { ...r, done: false });
         toast(`${r.name} is open again.`);
     },
@@ -2422,6 +2459,7 @@ const actions = {
         if (!window.confirm(`Add ${pairs.length} sample reminders?\nMade-up ones dated from today: one overdue, one due today, one tomorrow, one in 2 days, and others later. Your own reminders stay as they are, and you can remove the sample ones here.`)) {
             return;
         }
+        remArrive(pairs.map(([, doc]) => doc.id));
         await S.saveAll(pairs);
         toast(`${pairs.length} sample reminders added.`);
     },
@@ -2430,13 +2468,17 @@ const actions = {
         if (!window.confirm(`Remove the ${pairs.length} sample reminders? Your own reminders are kept.`)) {
             return;
         }
+        await remLeave(pairs.map(([, id]) => id));
         await S.removeMany(pairs);
+        state.renewals.leaving = [];
         toast('Sample reminders removed.');
     },
     async remDelete(el) {
         const r = byId(S.data.reminders, el.dataset.id);
         if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Account Management stays.`)) {
+            await remLeave([r.id]);
             await S.remove('reminders', r.id);
+            state.renewals.leaving = [];
             toast(`${r.name} deleted.`);
         }
     },
