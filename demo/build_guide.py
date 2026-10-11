@@ -128,6 +128,7 @@ SECTIONS = [
         'Each reminder has a name, a kind, a due date, how often it repeats (or once), an optional amount, and how many days before to start reminding.',
         'The list is grouped into Overdue, Due soon and Later, with the yearly cost of everything that repeats.',
         '"Renewed" moves a repeating reminder to its next date and can record the payment as an expense at the same time. Undo is offered.',
+        'Rows move as things change: a deleted reminder fades away before the list closes up, and a new or renewed one fades in with a short highlight.',
         'Sample reminders can be loaded to try it, and removed again.',
     ]),
     ('Notifications and email reminders', ['n_account'], [

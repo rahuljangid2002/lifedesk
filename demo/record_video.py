@@ -396,8 +396,14 @@ def s_renew(page):
     scroll(page, -380)
     tap(page, page.get_by_role('button', name='Renewed').first, 1.5)
     caption(page, 'Renewed: moves to the next date and can record the payment')
-    time.sleep(4.5)
-    tap(page, page.get_by_role('button', name='Cancel').first, 1)
+    time.sleep(3.5)
+    if page.locator('[data-action="remRecord"]').is_checked():
+        page.locator('[data-action="remRecord"]').uncheck()
+    tap(page, page.get_by_role('button', name='Mark renewed'), 0.2)
+    caption(page, 'It fades from its place and arrives at its next date')
+    time.sleep(4)
+    if page.locator('.toast-close').count():
+        page.locator('.toast-close').click()
     nav(page, 'more', 1.2)
     page.locator('.card', has_text='Notifications').first.scroll_into_view_if_needed()
     caption(page, 'A notification and an email every morning until it is renewed')
