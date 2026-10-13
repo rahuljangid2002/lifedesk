@@ -1,10 +1,13 @@
 """Records two short LinkedIn videos of LifeDesk, in demo mode with the made-up sample data only:
 
-    design      "LifeDesk - New Look and Offline (Mobile).mp4"   the new design, its motion, and working offline
-    reminders   "LifeDesk - Renewal Reminders (Mobile).mp4"      a complete walkthrough, opening with a punch line
+    ui          the new design and its motion
+    offline     working without internet (opens with a punch line)
+    voice       speaking an entry (opens with a punch line)
+    reminders   Renewal reminders, a complete walkthrough (opens with a punch line)
+Each goes to its own folder under docs/LinkedIn/.
 
     tools/serve_dev.py                                              (serves 4-Web-App on 127.0.0.1:8765)
-    <venv>/python demo/record_promo.py --mobile design
+    <venv>/python demo/record_promo.py --mobile ui
     <venv>/python demo/record_promo.py --mobile reminders [scene ...]   re-record only those scenes of that video
 
 Built on record_update.py (half-speed filming for smooth motion, the voice, captions and pointer) and record_video.py.
@@ -69,10 +72,13 @@ def steps_card(name, title, steps, sub=''):
     return 'file://' + path
 
 
-# ================= video 1: the new look, and working offline =================
+hear, caption_top = U.hear, U.caption_top
+
+
+# ================= video: the new look =================
 def d_hook(page):
-    R.start(page, punch('d_hook', [('Money apps', 'mid', 0.3), ('should feel', 'mid', 0.9), ('effortless.', 'accent', 1.6), ('LifeDesk has a new look,', 'small', 3.4), ('and it now works without internet.', 'small', 4.0)]), 0.3)
-    time.sleep(7.5)
+    R.start(page, punch('d_hook', [('Money apps', 'mid', 0.3), ('should feel', 'mid', 0.9), ('effortless.', 'accent', 1.6), ('LifeDesk has a completely new look.', 'small', 3.4)]), 0.3)
+    time.sleep(6.6)
 
 
 def d_design(page):
@@ -97,7 +103,7 @@ def d_design(page):
 
 def d_touch(page):
     R.start(page, R.DEMO + '#home'); slow(page)
-    R.caption(page, 'The plus button: type an entry, or just say it')
+    R.caption(page, 'The plus button is always within reach')
     w(1.0)
     tap(page, page.locator('.tabbar a.add'), 2.0)
     tap(page, page.get_by_role('menuitem', name='Type an entry'), 1.6)
@@ -107,46 +113,200 @@ def d_touch(page):
     if not page.locator('#add-category').input_value():
         page.locator('#add-category').select_option(label='Food & Dining')
     tap(page, page.get_by_role('button', name='Save Expense'), 2.6)
+    R.caption(page, 'Dashboards that are easy on the eye')
+    R.nav(page, 'insights', 1.4 * SLOW)
+    glide(page, 520, 1.8); w(0.6)
+
+
+def d_dark(page):
+    R.start(page, R.DEMO + '#more'); slow(page)
     R.caption(page, 'Dark mode is true black')
-    R.nav(page, 'more', 1.3 * SLOW)
+    w(1.0)
     tap(page, page.get_by_role('button', name='Dark', exact=True), 1.8)
     R.nav(page, 'home', 1.5 * SLOW)
-    glide(page, 380, 1.5); w(0.8)
-
-
-def d_offline(page):
-    R.start(page, R.DEMO + '#home'); slow(page)
-    R.caption(page, 'On a train, in a lift, on a flight…')
+    glide(page, 420, 1.6); w(0.6)
+    R.nav(page, 'renewals', 1.5 * SLOW)
     w(1.6)
+
+
+def d_outro(page):
+    R.start(page, punch('d_outro', [('Looks better.', 'big', 0.3), ('Feels faster.', 'accent', 1.1), ('Free, private, and in your browser.', 'small', 2.6), ('Try it: link in the comments', 'small', 3.4)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(6.5)
+
+
+DESIGN = [
+    ('d_hook', d_hook, 'card', "Money apps should feel effortless. So LifeDesk has a completely new look."),
+    ('d_design', d_design, 'app', "Everything is redesigned. You get large titles, clean cards, and far less clutter. Open a tool, and the screen glides in. Go back, and it glides away, just like the apps already on your phone. A floating bar keeps home, daily expenses, budget and more one tap away. And forms no longer take you to another page. They slide up as a sheet, so you never lose your place."),
+    ('d_touch', d_touch, 'app', "The plus button is always within reach. Fill in the amount and what it was for, and the category is chosen for you. Every save is confirmed with a clear message at the top, so you are never left guessing. And the dashboards are now as easy to read as the rest."),
+    ('d_dark', d_dark, 'app', "And when the lights go down, dark mode is true black. Not grey, but black, on every screen: your home, your budget, and your reminders. It is easier on your eyes, and on your battery."),
+    ('d_outro', d_outro, 'card', "It looks better, and it feels faster. LifeDesk is free, private, and runs in your browser. The link is in the comments."),
+]
+
+
+# ================= video: offline mode =================
+def o_hook(page):
+    R.start(page, punch('o_hook', [('No signal?', 'big', 0.3), ('No problem.', 'accent', 1.3), ('LifeDesk now works offline', 'small', 3.0)]), 0.3)
+    time.sleep(5.2)
+
+
+def o_problem(page):
+    R.start(page, punch('o_problem', [('Most apps stop', 'mid', 0.3), ('the moment', 'mid', 0.9), ('your internet does.', 'big', 1.5), ('On a train. In a lift. On a flight.', 'small', 3.3)]), 0.3)
+    time.sleep(6.6)
+
+
+def o_drop(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'You are adding an expense…')
+    w(1.8)
     R.caption(page, '')
     page.context.set_offline(True)
     page.wait_for_selector('.offline')
-    w(4.6)
-    tap(page, page.get_by_role('button', name='Continue offline'), 1.4)
-    R.caption(page, 'No internet? Keep going')
+    w(5.4)
+    page.locator('.offline-card li').first.hover(); w(2.0)
+    tap(page, page.get_by_role('button', name='Continue offline'), 1.6)
+    R.caption(page, 'A small chip reminds you that you are offline')
+    w(2.4)
+
+
+def o_work(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    page.context.set_offline(True)
+    page.wait_for_selector('.offline')
+    page.get_by_role('button', name='Continue offline').click(); w(0.6)
+    R.caption(page, 'Keep adding entries, exactly as before')
     R.nav(page, 'add', 1.2 * SLOW)
     page.get_by_label('Amount').type('180', delay=110 * SLOW)
     page.get_by_label('Description').type('Lunch on the train', delay=55 * SLOW); w(0.8)
     if not page.locator('#add-category').input_value():
         page.locator('#add-category').select_option(label='Food & Dining')
     tap(page, page.get_by_role('button', name='Save Expense'), 2.4)
-    R.caption(page, 'It syncs by itself when you are back online')
+    if page.locator('.toast-close').count():
+        page.locator('.toast-close').click()
+    R.caption(page, 'Your budget and daily expenses still work')
+    R.nav(page, 'daily', 1.4 * SLOW); w(1.6)
+    R.nav(page, 'budget', 1.4 * SLOW); w(1.6)
+    R.caption(page, 'Back online: everything syncs by itself')
     page.context.set_offline(False)
     page.wait_for_selector('.toast:has-text("back online")', timeout=20000)
-    w(3.0)
+    w(3.4)
 
 
-def d_outro(page):
-    R.start(page, punch('d_outro', [('Looks better.', 'big', 0.3), ('Works anywhere.', 'accent', 1.1), ('Free, private, and in your browser.', 'small', 2.6), ('Try it: link in the comments', 'small', 3.4)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
-    time.sleep(6.5)
+def o_how(page):
+    R.start(page, steps_card('o_how', 'How it works', ['Open LifeDesk once while you are online', 'Lost the connection? Tap “Continue offline”', 'Keep adding. It syncs when you are back'],
+                             'Nothing to set up. Add it to your Home screen and it opens like any other app.'), 0.4)
+    time.sleep(9.5)
 
 
-DESIGN = [
-    ('d_hook', d_hook, 'card', "Money apps should feel effortless. LifeDesk has a new look. And now, it works without internet."),
-    ('d_design', d_design, 'app', "Everything is redesigned. You get large titles, clean cards, and far less clutter. Open a tool, and the screen glides in. Go back, and it glides away, just like the apps already on your phone. A floating bar keeps home, daily expenses, budget and more one tap away. And forms no longer take you to another page. They slide up as a sheet, so you never lose your place."),
-    ('d_touch', d_touch, 'app', "The plus button is the heart of it. Tap it to type an entry, or simply say it out loud. Fill in the amount and what it was for, and the category is chosen for you. Every save is confirmed with a clear message at the top, so you are never left guessing. And when the lights go down, dark mode is true black."),
-    ('d_offline', d_offline, 'app', "Now the part I like most. On a train, in a lift, or on a flight, your connection drops. LifeDesk tells you clearly, instead of failing silently. Choose continue offline, and carry on. Add your lunch, your ticket, anything. The moment you are back online, everything syncs by itself, and a message confirms it."),
-    ('d_outro', d_outro, 'card', "It looks better, and it works anywhere. LifeDesk is free, private, and runs in your browser. The link is in the comments."),
+def o_outro(page):
+    R.start(page, punch('o_outro', [('Track your money', 'big', 0.3), ('anywhere.', 'accent', 1.1), ('Free, private, and in your browser.', 'small', 2.6), ('Try it: link in the comments', 'small', 3.4)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(6.2)
+
+
+OFFLINE = [
+    ('o_hook', o_hook, 'card', "No signal? No problem."),
+    ('o_problem', o_problem, 'card', "Most apps stop the moment your internet does. On a train, in a lift, or on a flight."),
+    ('o_drop', o_drop, 'app', "Here is what happens in LifeDesk. Your connection drops, and it tells you clearly, instead of failing silently. It even suggests what to check. If you do not want to wait, choose continue offline. A small chip stays on screen, so you always know."),
+    ('o_work', o_work, 'app', "Then carry on as if nothing happened. Add your lunch, your ticket, anything. Your daily expenses and your budget keep working too. And the moment you are back online, everything syncs by itself, and a message confirms it."),
+    ('o_how', o_how, 'card', "There is nothing to set up. Open LifeDesk once while you are online. If the connection goes, tap continue offline. Keep adding, and it syncs when you are back."),
+    ('o_outro', o_outro, 'card', "Track your money anywhere. LifeDesk is free, private, and runs in your browser. The link is in the comments."),
+]
+
+
+# ================= video: voice entry =================
+def v_hook(page):
+    R.start(page, punch('v_hook', [('Stop typing', 'big', 0.3), ('your expenses.', 'big', 0.9), ('Just say them.', 'accent', 2.0)]), 0.3)
+    time.sleep(5.4)
+
+
+def v_problem(page):
+    R.start(page, punch('v_problem', [('You buy something.', 'mid', 0.3), ('You mean to note it later.', 'mid', 1.5), ('By evening,', 'big', 3.0), ('it is forgotten.', 'accent', 3.6)]), 0.3)
+    time.sleep(7.2)
+
+
+def v_one(page):
+    R.start(page, R.DEMO + '#home'); slow(page); caption_top(page)
+    R.caption(page, 'Tap +, then “Speak an entry”')
+    w(0.8)
+    tap(page, page.locator('.tabbar a.add'), 1.3)
+    hear(page, 'Spent 450 on groceries from main bank', 'yes')
+    tap(page, page.get_by_role('menuitem', name='Speak an entry'), 0.4)
+    R.caption(page, 'You say: “Spent 450 on groceries from Main Bank”')
+    page.wait_for_selector('.voice-review', timeout=60000)
+    R.caption(page, 'It shows what it understood, and asks before saving')
+    page.wait_for_selector('.toast', timeout=60000)
+    R.caption(page, 'You say “yes”. Saved, with Undo')
+    w(2.2)
+
+
+def v_ask(page):
+    R.start(page, R.DEMO + '#home'); slow(page); caption_top(page)
+    R.caption(page, 'Forgot to say the account?')
+    w(0.6)
+    hear(page, 'Spent 320 on lunch', 'cash', 'yes')
+    tap(page, page.locator('.shortcut', has_text='Voice entry'), 0.4)
+    R.caption(page, 'You say: “Spent 320 on lunch”')
+    page.wait_for_selector('.voice-q', timeout=60000)
+    R.caption(page, 'It asks: “Which account did you pay from?”')
+    page.wait_for_selector('.voice-review', timeout=60000)
+    R.caption(page, 'You answer “cash”, then “yes”')
+    page.wait_for_selector('.toast', timeout=60000)
+    w(1.8)
+
+
+def v_many(page):
+    R.start(page, R.DEMO + '#add'); slow(page); caption_top(page)
+    R.caption(page, 'A whole day in one sentence')
+    w(0.5)
+    hear(page, 'Spent 300 on vegetables and 120 on milk from cash and received 5000 salary in main bank')
+    tap(page, page.get_by_role('button', name='Speak it'), 0.4)
+    page.wait_for_selector('.voice-review', timeout=60000)
+    R.caption(page, 'Three entries, ready to check')
+    w(1.6)
+    R.caption(page, 'Change anything before saving')
+    tap(page, page.locator('.voice-review [data-action="voiceEdit"]').first, 0.9)
+    amount = page.locator('.voice-edit [data-vfield="amount"]')
+    amount.fill(''); amount.type('320', delay=110 * SLOW); w(0.4)
+    tap(page, page.get_by_role('button', name='Done'), 0.7)
+    tap(page, page.get_by_role('button', name='Save all 3'), 0.3)
+    page.wait_for_selector('.toast', timeout=60000)
+    R.caption(page, 'Saved together, with one Undo')
+    w(1.8)
+    page.locator('.toast-close').click(); w(0.2)
+    R.caption(page, 'English or हिन्दी')
+    hear(page)
+    tap(page, page.get_by_role('button', name='Speak it'), 0.6)
+    hear(page, 'कैश से किराने पर 450 रुपये खर्च किए', 'हाँ')
+    tap(page, page.get_by_role('button', name='हिन्दी'), 0.4)
+    page.wait_for_selector('.voice-review', timeout=60000)
+    page.wait_for_selector('.toast', timeout=60000)
+    w(1.8)
+
+
+def v_how(page):
+    R.start(page, steps_card('v_how', 'Try it in 4 steps', ['Tap <b style="all:unset;font-weight:800">+</b> and choose “Speak an entry”', 'Allow the microphone, once', 'Say it: “Spent 450 on groceries”', 'Say “yes”, or tap Save'],
+                             'Works in Chrome, Edge and Safari. English and हिन्दी.'), 0.4)
+    time.sleep(10.5)
+
+
+def v_trust(page):
+    R.start(page, punch('v_trust', [('Nothing is saved', 'big', 0.3), ('until you say yes.', 'accent', 1.1), ('It never guesses an account you do not have.', 'small', 2.8), ('Encrypted on your device. No ads.', 'small', 3.6)]), 0.3)
+    time.sleep(7.0)
+
+
+def v_outro(page):
+    R.start(page, punch('v_outro', [('Say it.', 'big', 0.3), ('It is tracked.', 'accent', 1.1), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.6)
+
+
+VOICE = [
+    ('v_hook', v_hook, 'card', "Stop typing your expenses. Just say them."),
+    ('v_problem', v_problem, 'card', "You buy something. You mean to note it later. And by evening, it is forgotten."),
+    ('v_one', v_one, 'voice', "In LifeDesk, tap plus and choose speak an entry. Say what you spent, on what, and from which account. It shows what it understood, and asks before saving. Say yes, and it is done."),
+    ('v_ask', v_ask, 'voice', "Leave something out, and it simply asks. Here, the account is missing, so it asks which one you paid from. You answer, it confirms, and it saves. It never guesses."),
+    ('v_many', v_many, 'voice', "You can even say a whole day in one sentence. Vegetables, milk and your salary become three separate entries, each with its own category and account. Check them, change any amount before saving, and they are stored together, with a single undo. And it is not only English. Say it in Hindi, and it understands that too."),
+    ('v_how', v_how, 'card', "To try it: tap plus, and choose speak an entry. Allow the microphone once. Say your entry. Then say yes, or tap save."),
+    ('v_trust', v_trust, 'card', "Nothing is saved until you say yes. It never guesses an account you do not have. And your data is encrypted on your own device."),
+    ('v_outro', v_outro, 'card', "Say it, and it is tracked. LifeDesk is free, and the link is in the comments."),
 ]
 
 
@@ -275,14 +435,16 @@ REMINDERS = [
     ('r_outro', r_outro, 'card', "Add your first reminder today. It is free, and the link is in the comments."),
 ]
 
-VIDEOS = {'design': (DESIGN, 'LifeDesk - New Look and Offline'), 'reminders': (REMINDERS, 'LifeDesk - Renewal Reminders')}
+# name -> (scenes, file title, folder under docs/LinkedIn)
+VIDEOS = {'ui': (DESIGN, 'LifeDesk - New UI', '1 - New UI'), 'offline': (OFFLINE, 'LifeDesk - Offline Mode', '2 - Offline mode'),
+          'voice': (VOICE, 'LifeDesk - Voice Entry', '3 - Voice entry'), 'reminders': (REMINDERS, 'LifeDesk - Renewal Reminders', '4 - Renewal Reminders')}
 
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     if not args or args[0] not in VIDEOS:
         raise SystemExit(__doc__)
-    scenes, title = VIDEOS[args[0]]
+    scenes, title, folder = VIDEOS[args[0]]
     only = set(args[1:])
     os.makedirs(R.WORK, exist_ok=True); os.makedirs(R.OUT, exist_ok=True)
     with sync_playwright() as pw:
@@ -300,7 +462,9 @@ def main():
     with open(lst, 'w') as f:
         for name, *_ in scenes:
             f.write(f"file '{os.path.join(R.WORK, name + '.mp4')}'\n")
-    final = os.path.join(R.OUT, title + (' (Mobile).mp4' if R.MOBILE else '.mp4'))
+    out = os.path.join(R.OUT, 'LinkedIn', folder)
+    os.makedirs(out, exist_ok=True)
+    final = os.path.join(out, title + (' (Mobile).mp4' if R.MOBILE else '.mp4'))
     subprocess.run([R.FFMPEG, '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', lst, '-c', 'copy', '-movflags', '+faststart', final], check=True)
     print('video', final)
 
