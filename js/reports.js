@@ -1,6 +1,6 @@
 // Figures for the dashboards and reports. Pure calculations over the user's data: no screen code here.
 import { TXN_KINDS, goalRows, portfolio } from './invest.js';
-import { TYPES, accountBalance, addMonths, budgetRows, isoDate, loanStatus, monthEnd, monthKey, monthLabel, monthSummary, personOutstanding, totals } from './logic.js';
+import { TYPES, accountBalance, addMonths, billDate, billRuns, budgetRows, isBackDated, isoDate, loanStatus, monthEnd, monthKey, monthLabel, monthSummary, personOutstanding, totals } from './logic.js';
 
 const num = (v) => Number(v) || 0;
 const inRange = (e, from, to) => e.date >= from && e.date <= to;
@@ -343,6 +343,42 @@ export const REPORTS = [
             const pf = portfolio(data, p.today);
             const rows = goalRows(data, pf.rows, p.today).map((g) => [g.name, num(g.target), g.targetDate || null, g.value, g.progress / 100, g.needed, g.sipPerMonth, g.onTrack ? 'On track' : 'Behind']);
             return { columns: [text('Goal'), money('Target'), { label: 'By', kind: 'date' }, money('Value now'), { label: 'Progress', kind: 'rate' }, money('Needed a month'), money('SIPs a month'), text('Status')], rows, total: null };
+        }
+    },
+    {
+        id: 'back-dated', name: 'Back-dated entries', period: 'range', about: 'Entries saved more than 3 days after their date: worth a second look when a month has already been reviewed.',
+        build(data, p) {
+            const rows = data.entries.filter((e) => inRange(e, p.from, p.to) && isBackDated(e)).sort((a, b) => (a.date < b.date ? 1 : -1))
+                .map((e) => [e.date, isoDate(new Date(e.createdAt)), TYPES[e.type] ? TYPES[e.type].label : e.type, e.description, nameOf(data.accounts, e.accountId, ''), num(e.amount)]);
+            return { columns: [{ label: 'Date', kind: 'date' }, { label: 'Saved on', kind: 'date' }, text('Type'), text('Description'), text('Account'), money('Amount')], rows, total: ['Total', null, '', '', '', sumCol(rows, 5)] };
+        }
+    },
+    {
+        id: 'missing-receipts', name: 'Missing receipts', period: 'range', about: 'Expenses and asset purchases without a receipt attached, largest first.',
+        build(data, p) {
+            const rows = data.entries.filter((e) => inRange(e, p.from, p.to) && (e.type === 'expense' || e.type === 'asset') && !(e.receipts && e.receipts.length)).sort((a, b) => num(b.amount) - num(a.amount))
+                .map((e) => [e.date, e.description, nameOf(data.categories, e.categoryId, TYPES[e.type].label), e.paidBy ? `Paid by ${nameOf(data.people, e.paidBy, '')}` : nameOf(data.accounts, e.accountId, ''), num(e.amount)]);
+            return { columns: [{ label: 'Date', kind: 'date' }, text('Description'), text('Category'), text('Account'), money('Amount')], rows, total: ['Total', '', '', '', sumCol(rows, 4)] };
+        }
+    },
+    {
+        id: 'paid-for-me', name: 'Paid for me', period: 'range', about: 'Purchases someone else paid for you, by person: what you owe them for.',
+        build(data, p) {
+            const rows = data.entries.filter((e) => e.paidBy && inRange(e, p.from, p.to)).sort((a, b) => nameOf(data.people, a.paidBy, '').localeCompare(nameOf(data.people, b.paidBy, '')) || (a.date < b.date ? 1 : -1))
+                .map((e) => [nameOf(data.people, e.paidBy, 'Deleted person'), e.date, e.description, nameOf(data.categories, e.categoryId, TYPES[e.type].label), num(e.amount)]);
+            return { columns: [text('Paid by'), { label: 'Date', kind: 'date' }, text('Description'), text('Category'), money('Amount')], rows, total: ['Total', null, '', '', sumCol(rows, 4)] };
+        }
+    },
+    {
+        id: 'monthly-bills', name: 'Monthly bills', period: 'month', about: 'Every monthly bill and whether it is paid, due or skipped in the month.',
+        build(data, p) {
+            const key = p.month || monthKey(p.today);
+            const rows = (data.bills || []).filter((b) => billRuns(b, key)).sort((a, b) => num(a.day) - num(b.day)).map((b) => {
+                const paid = data.entries.find((e) => e.billId === b.id && monthKey(e.date) === key);
+                const status = paid ? 'Paid' : (b.skipped || []).includes(key) ? 'Skipped' : billDate(b, key) < p.today ? 'Overdue' : 'Due';
+                return [b.description, b.type === 'income' ? 'Income' : nameOf(data.categories, b.categoryId, ''), billDate(b, key), nameOf(data.accounts, b.accountId, ''), num(b.amount), status, paid ? num(paid.amount) : null];
+            });
+            return { columns: [text('Bill'), text('Category'), { label: 'Due', kind: 'date' }, text('Account'), money('Amount'), text('Status'), money('Paid')], rows, total: ['Total', '', null, '', sumCol(rows, 4), '', sumCol(rows, 6)] };
         }
     },
     {

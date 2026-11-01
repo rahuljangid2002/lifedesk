@@ -284,7 +284,7 @@ with sync_playwright() as p:
         pg.locator('[data-model="reports.id"]').select_option(value); time.sleep(0.15)
         if pg.locator('.hero h1').count() != 1 or (pg.locator('table.report').count() == 0 and pg.locator('main .empty').count() == 0):
             broken.append(value)
-    check(f'reports: all {len(names)} open without an error', len(names) == 24 and not broken, str(broken))
+    check(f'reports: all {len(names)} open without an error', len(names) == 28 and not broken, str(broken))
     pg.locator('[data-model="reports.id"]').select_option('spend-by-category'); pg.locator('[data-model="reports.preset"]').select_option('last-month'); time.sleep(0.3)
     total = money(pg.locator('table.report tfoot td').nth(2).inner_text())
     check('report: spend by category for last month totals the month expense', total == round(spent_lm), f'{total} vs {spent_lm}')

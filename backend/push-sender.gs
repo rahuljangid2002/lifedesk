@@ -5,6 +5,8 @@
  *   tokens     the notification address of each device that turned notifications on
  *   tz         their time zone, e.g. "Asia/Kolkata"
  *   renewals   true = renewal reminders;  monthStart  true = a nudge on the 1st of each month
+ *   money      true = bills, SIP instalments and maturities (from Account Management)
+ *   items      [{ due: "2026-11-10", kind: "bill" | "sip" | "maturity" }] – dates only, no names or amounts
  *   dates      [{ due: "2026-10-13", remind: 30 }] – the due date and remind-me days of each open reminder;
  *              no names, amounts or notes (those stay encrypted, so a message never says which reminder) –
  *              unless the user ticked "Include names and amounts in emails": then also { name, amount } (text)
@@ -50,6 +52,10 @@ const TEXT = {
   manyBody: '{list}. Tap to see them in LifeDesk.',
   monthTitle: '📅 {month} has started',
   monthBody: 'See how {lastMonth} went and set this month\'s budget in LifeDesk.',
+  moneyTitle: '💳 Due today',
+  moneyBody: '{list}. Tap to pay them in LifeDesk.',
+  maturityTitle: '🏦 A deposit matures {when}',
+  maturityBody: 'Record the maturity on the Investments screen when the money arrives.',
   testTitle: '✅ LifeDesk notifications are on',
   testBody: 'Renewal reminders and a start-of-month nudge will appear here.'
 };
@@ -111,6 +117,19 @@ function messagesFor(schedule, today) {
       });
       out.push({ title: fill(TEXT.manyTitle, { count: due.length }), body: fill(TEXT.manyBody, { list: groups.map(function (g) { return g.label + ': ' + g.n; }).join(' · ') }),
         link: APP_URL + '#renewals', tag: 'renewals', rows: due });
+    }
+  }
+  if (schedule.money !== false) {
+    const items = (schedule.items || []).map(function (d) { return { kind: d.kind, days: daysBetween(today, d.due) }; });
+    const bills = items.filter(function (d) { return d.kind === 'bill' && d.days === 0; }).length;
+    const sips = items.filter(function (d) { return d.kind === 'sip' && d.days === 0; }).length;
+    if (bills || sips) {
+      const list = [bills ? plural(bills, 'bill') : '', sips ? plural(sips, 'SIP instalment') : ''].filter(Boolean).join(' and ');
+      out.push({ title: TEXT.moneyTitle, body: fill(TEXT.moneyBody, { list: list.charAt(0).toUpperCase() + list.slice(1) }), link: APP_URL + (bills ? '#pay' : '#invest'), tag: 'money' });
+    }
+    const maturing = items.filter(function (d) { return d.kind === 'maturity' && (d.days === 0 || d.days === 7); });
+    if (maturing.length) {
+      out.push({ title: fill(TEXT.maturityTitle, { when: maturing[0].days === 0 ? 'today' : 'in 7 days' }), body: TEXT.maturityBody, link: APP_URL + '#invest', tag: 'maturity' });
     }
   }
   if (schedule.monthStart !== false && today.slice(8) === '01') {

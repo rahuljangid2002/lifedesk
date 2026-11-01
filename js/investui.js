@@ -399,6 +399,7 @@ export function investTool(c) {
             <section class="card span"><div class="card-head"><h2>Allocation by asset class</h2></div>${hbars(sliceItems(p.byClass), money, 'Add investments to see the allocation.')}</section>
             <section class="card"><div class="card-head"><h2>By type</h2></div>${hbars(sliceItems(p.byType), money)}</section>
             <section class="card"><div class="card-head"><h2>By platform</h2></div>${hbars(sliceItems(p.byPlatform), money)}</section>
+            ${valueByMonth().length > 1 ? `<section class="card span"><div class="card-head"><h2>Value and cost by month</h2></div>${columns(valueByMonth().map((x) => L.monthLabel(x.id).slice(0, 3)), [{ name: 'Value', slot: 1, values: valueByMonth().map((x) => num(x.value)) }, { name: 'Cost', slot: 2, values: valueByMonth().map((x) => num(x.invested)) }], money, L.compact)}</section>` : `<section class="card span"><div class="card-head"><h2>Value and cost by month</h2></div><p class="empty">Builds up from this month: LifeDesk keeps the value of your investments each month.</p></section>`}
             <section class="card span"><div class="card-head"><h2>Money in and out by month</h2></div>${columns(months.map((k) => L.monthLabel(k).slice(0, 3)), [{ name: 'Put in', slot: 1, values: flowIn }, { name: 'Taken out', slot: 2, values: flowOut }], money, L.compact)}</section>
             <section class="card"><div class="card-head"><h2>Best performers</h2></div>${movers.slice(0, 5).map((r) => `<div class="kv"><span>${esc(r.name)}</span><b class="${tone(r.gain)}">${pct(r.gainPct)} · ${signed(r.gain)}</b></div>`).join('') || '<p class="empty">Nothing yet.</p>'}
                 ${movers.filter((r) => r.gainPct < 0).length ? `<h3>In loss</h3>${movers.filter((r) => r.gainPct < 0).slice(-5).reverse().map((r) => `<div class="kv"><span>${esc(r.name)}</span><b class="out">${pct(r.gainPct)} · ${signed(r.gain)}</b></div>`).join('')}` : ''}</section>
@@ -618,10 +619,29 @@ export function investTool(c) {
         }
         if (alerts.length) {
             c.toast(`Price alert: ${alerts.join('; ')}.`, 'warn');
+            c.localNotify('Price alert', `${alerts.join('; ')}.`, 'invest');
         } else if (!quiet) {
             c.toast(pairs.length ? `${pairs.length} price${pairs.length === 1 ? '' : 's'} updated.` : list.length ? 'Prices could not be fetched right now.' : 'Nothing has an automatic price yet.', pairs.length || !list.length ? 'ok' : 'warn');
         }
         return pairs.length;
+    }
+
+    /** Keeps this month's value and cost of the investments (the chart "Value by month"); saved only when it changed. */
+    async function snapshot() {
+        if (!S.data.investments.some((i) => !isSample(i))) {
+            return;
+        }
+        const p = port();
+        const key = L.monthKey(today());
+        const old = (S.data.invSnapshots || []).find((x) => x.id === key);
+        if (!old || Math.abs(num(old.value) - p.value) >= 1 || Math.abs(num(old.invested) - p.invested) >= 1) {
+            await S.save('invSnapshots', { id: key, value: p.value, invested: p.invested, updated: today() });
+        }
+    }
+
+    /** Value and cost at the end of each month that has a record, for a chart. */
+    function valueByMonth() {
+        return [...(S.data.invSnapshots || [])].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(-24);
     }
 
     /** Opening the screen: SIP instalments that are due, then prices when the last fetch is older than 6 hours. */
@@ -634,6 +654,9 @@ export function investTool(c) {
         }
         try {
             const r = await recordDueSips();
+            if (r.recorded) {
+                c.localNotify('SIP instalments recorded', `${r.recorded} recorded at their day's price.`, 'invest');
+            }
             if (r.recorded || r.pending) {
                 c.toast(`${r.recorded ? `${r.recorded} SIP instalment${r.recorded === 1 ? '' : 's'} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm` : ''}.`);
             }
@@ -650,6 +673,7 @@ export function investTool(c) {
                 c.render();
             }
         }
+        snapshot().catch(() => {});
     }
 
     function sampleDocs() {
@@ -1094,5 +1118,5 @@ export function investTool(c) {
         }
     };
 
-    return { screen, actions, onOpen, recordDueSips, port, sampleDocs };
+    return { screen, actions, onOpen, recordDueSips, port, sampleDocs, snapshot, valueByMonth };
 }

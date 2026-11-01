@@ -1,6 +1,7 @@
 // Data layer for LifeDesk. Each tool keeps its data in its own collections under the user
 // (Money: accounts, categories, entries, people, budgets, loans, assets; Investments: investments, invTxns, sips, goals;
-// Renewals: reminders; shared: settings); a new tool adds its names to COLLECTIONS.
+// monthly bills: bills; investment value by month: invSnapshots; Renewals: reminders; shared: settings);
+// a new tool adds its names to COLLECTIONS. Receipt files are kept apart (files) and read only when opened.
 // Two back ends behind the same functions:
 //   - demo: this browser's localStorage, no login (used when config.js has no Firebase settings)
 //   - firebase: Firebase Authentication + Cloud Firestore, each user under users/{uid}/...
@@ -9,13 +10,13 @@ import { STARTER_CATEGORIES } from './seed.js';
 import * as V from './vault.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
-const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals'];
+const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals', 'bills', 'invSnapshots'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
-export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [], investments: [], invTxns: [], sips: [], goals: [] };
+export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [], investments: [], invTxns: [], sips: [], goals: [], bills: [], invSnapshots: [] };
 
 /** The user's preferences (currency, region); null until they have chosen. */
 export function prefs() {
@@ -428,6 +429,8 @@ export async function deleteAccount() {
             pairs.push([c, doc.id]);
         }
     }
+    // receipt files: listed on their entries
+    data.entries.forEach((e) => (e.receipts || []).forEach((r) => pairs.push(['files', r.id])));
     for (let i = 0; i < pairs.length; i += 400) {
         const batch = fb.fs.writeBatch(fb.db);
         pairs.slice(i, i + 400).forEach(([c, id]) => batch.delete(fb.fs.doc(fb.db, 'users', current.uid, c, id)));
@@ -551,4 +554,46 @@ function readDemo() {
 }
 function writeDemo() {
     localStorage.setItem(DEMO_KEY, JSON.stringify(data));
+}
+
+// ---------- receipt files ----------
+// Photos and PDFs attached to entries, encrypted like everything else, in users/{uid}/files/{id}. They are not part of
+// the data loaded at start (they can be large): an entry keeps a short list of its files (receipts: [{ id, name, type }])
+// and a file is read only when it is opened. Demo mode keeps them in this browser.
+const FILES_KEY = 'lifedesk-demo-files';
+const demoFiles = () => {
+    try {
+        return JSON.parse(localStorage.getItem(FILES_KEY) || '{}');
+    } catch (e) {
+        return {};
+    }
+};
+export async function saveFile(id, file) {
+    if (isDemo) {
+        const all = demoFiles();
+        all[id] = file;
+        try {
+            localStorage.setItem(FILES_KEY, JSON.stringify(all));
+        } catch (e) {
+            throw new Error('This browser has no room left for more files in demo mode.');
+        }
+        return;
+    }
+    await fb.fs.setDoc(fb.fs.doc(fb.db, 'users', user.uid, 'files', id), await V.encryptDoc(dek, file));
+}
+export async function getFile(id) {
+    if (isDemo) {
+        return demoFiles()[id] || null;
+    }
+    const snap = await fb.fs.getDoc(fb.fs.doc(fb.db, 'users', user.uid, 'files', id));
+    return snap.exists() ? (await V.decryptDoc(dek, snap.data())).fields : null;
+}
+export async function removeFile(id) {
+    if (isDemo) {
+        const all = demoFiles();
+        delete all[id];
+        localStorage.setItem(FILES_KEY, JSON.stringify(all));
+        return;
+    }
+    await fb.fs.deleteDoc(fb.fs.doc(fb.db, 'users', user.uid, 'files', id));
 }

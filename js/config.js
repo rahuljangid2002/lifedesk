@@ -38,4 +38,4 @@ export const pushSettings = { enabled: true, vapidKey: '' };
 
 // Share, ETF and crypto prices on the Investments screen: the web address of the deployed price service
 // (backend/prices.gs, see backend/README.md). Empty: mutual fund NAVs still come automatically, other prices are typed in.
-export const pricesEndpoint = '';
+export const pricesEndpoint = 'https://script.google.com/macros/s/AKfycbzWTyw6gQOK-2d360a8bOrptNqzMcdLxSYvIqzKDbmyPMhkBHrA67G5bHjdZmVZYBDvag/exec';

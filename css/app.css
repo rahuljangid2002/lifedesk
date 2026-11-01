@@ -2807,3 +2807,74 @@ label > span .pill {
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* ---------- Home figures, due list, bills, receipts, follow-ups ---------- */
+.home-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.home-stats .stat.link {
+    grid-column: 1 / -1;
+    text-decoration: none;
+    color: inherit;
+}
+.home-stats .stat.link small + b + small {
+    color: var(--muted);
+}
+.home-stats .stat.link.owed b {
+    color: var(--red);
+}
+.due-card {
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
+}
+.due-card h2 {
+    color: var(--warn-text);
+}
+.due-card .row {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+.card-head.plain {
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    margin-top: 0.4rem;
+}
+.receipts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.receipt {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.86rem;
+}
+.receipt span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.receipt small {
+    color: var(--muted);
+}
+.link-btn.danger {
+    color: var(--red);
+}
+.badge.follow {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+}
+@media (min-width: 900px) {
+    .home-stats .stat.link {
+        grid-column: auto;
+    }
+    .home-stats {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}

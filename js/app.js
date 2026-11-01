@@ -25,12 +25,13 @@ const state = {
     add: null,
     daily: { month: thisMonth(), custom: false, from: null, to: null, view: 'spend', category: '', account: '', search: '', closed: new Set() },
     budget: { month: thisMonth(), edits: null, open: null },
-    people: { view: 'owesMe', selected: null, form: null, adding: false },
+    people: { view: 'owesMe', selected: null, form: null, adding: false, loanForm: null },
     accounts: { form: null, pay: null, showClosed: false },
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false, leaving: [], leavingAt: 0, arrived: [], arrivedAt: 0 },
     invest: INV_STATE(),
+    bills: { form: null },
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
     voice: { open: false, lang: 'en', phase: 'idle', interim: '', note: '', log: [], review: null },
@@ -140,7 +141,14 @@ function blankEntry(keep) {
         emiRateTouched: false,
         emiLender: '',
         assetType: 'Electronics',
-        assetValue: ''
+        assetValue: '',
+        paidByMode: false, // "someone paid": no account; the person you owe
+        paidBy: null,
+        newPayer: '',
+        repeat: false, // also add it to Monthly bills
+        receipts: [], // saved files: [{ id, name, type }]
+        files: [], // chosen, not uploaded yet: [{ name, type, data }]
+        removed: [] // saved files to delete on save
     };
 }
 
@@ -159,14 +167,24 @@ function emiSums(f) {
     const typed = !!f.emiRateTouched && f.emiRate !== '' && f.emiRate !== null;
     return { price, down, emi, months, financed, total: down + emi * months, interest: emi * months - financed, calculated, typed, rate: typed ? Number(f.emiRate) : calculated };
 }
-function dueList() {
-    const due = dueEmis();
+/** EMIs and monthly bills still to pay this month, oldest first. */
+function dueItems(view) {
+    const items = [
+        ...dueEmis().map((d) => ({ kind: 'emi', date: d.date, name: `${d.loan.name} · EMI ${d.number} of ${d.loan.months}`, amount: Number(d.loan.emi), id: d.loan.id, type: 'expense', from: d.loan.accountId })),
+        ...L.billsDue(S.data, thisMonth(), today()).map((d) => ({ kind: 'bill', date: d.date, name: d.bill.description, amount: Number(d.bill.amount), id: d.bill.id, type: d.bill.type, from: d.bill.accountId }))
+    ];
+    return items.filter((x) => (view === 'income' ? x.type === 'income' : view === 'spend' ? x.type !== 'income' : true)).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+function dueList(view, title = 'Due this month') {
+    const due = dueItems(view);
     if (!due.length) {
         return '';
     }
-    return `<h3>EMIs due this month</h3><section class="list">${due.map((d) => `<div class="row"><span class="row-icon">${icon('repaid')}</span>
-        <span class="row-text"><b>${esc(d.loan.name)} · EMI ${d.number} of ${d.loan.months}</b><small>Due ${longDate(d.date)} · from ${esc(accountName(d.loan.accountId))}</small></span>
-        <span class="amt">${L.money(d.loan.emi)}</span><button class="btn primary" data-action="payEmi" data-id="${d.loan.id}">Pay</button></div>`).join('')}</section>`;
+    const total = due.reduce((t, d) => t + d.amount, 0);
+    return `<section class="card due-card"><div class="card-head"><h2>${title} · not paid yet</h2><b>${L.money(total)}</b></div><div class="list inner flush">${due.map((d) => `<div class="row"><span class="row-icon">${icon(d.kind === 'emi' ? 'repaid' : d.type === 'income' ? 'income' : 'calendar')}</span>
+        <span class="row-text"><b>${esc(d.name)}</b><small><span class="${d.date < today() ? 'over' : ''}">${d.date < today() ? 'Overdue · ' : d.date === today() ? 'Due today · ' : 'Due '}${longDate(d.date)}</span> · ${d.kind === 'emi' ? 'EMI' : 'monthly bill'}${d.from ? ` · from ${esc(accountName(d.from))}` : ''}</small></span>
+        <span class="amt">${L.money(d.amount)}</span><span class="row-btns"><button class="btn primary" data-action="${d.kind === 'emi' ? 'payEmi' : 'billPay'}" data-id="${d.id}">Paid</button>${d.kind === 'bill' ? `<button class="btn ghost" data-action="billSkip" data-id="${d.id}">Skip</button>` : ''}</span></div>`).join('')}</div>
+        <small>Counted in your spending once you press Paid (dated today when paid early).</small></section>`;
 }
 /** The line under the EMI fields: updated as you type, without redrawing the form. */
 function emiSummary(f) {
@@ -209,7 +227,10 @@ function entryMeta(e) {
     if (e.categoryId) {
         bits.push(categoryName(e.categoryId));
     }
-    bits.push(e.type === 'transfer' ? `${accountName(e.accountId)} → ${accountName(e.toAccountId)}` : accountName(e.accountId));
+    bits.push(e.type === 'transfer' ? `${accountName(e.accountId)} → ${accountName(e.toAccountId)}` : e.paidBy ? `paid by ${personName(e.paidBy)}` : accountName(e.accountId));
+    if (e.receipts && e.receipts.length) {
+        bits.push(`📎 ${e.receipts.length}`);
+    }
     if (e.personId) {
         bits.push(personName(e.personId));
     }
@@ -455,8 +476,10 @@ function home() {
     return `<header class="hero">
         <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
         <small class="eyebrow">Account Management</small><h1>${L.monthLabel(key)}</h1>
-        <div class="stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}</div>
-        <p class="hero-sub">Money in hand ${L.money(t.inHand)}${t.cardOwed ? ` · Card owed ${L.money(t.cardOwed)}` : ''}${t.owedToPeople ? ` · Owed to people ${L.money(t.owedToPeople)}` : ''}</p>
+        ${(() => { const fl = L.monthFlows(S.data, key); return `<div class="stats home-stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}
+            ${stat('Invested', L.money(fl.invested))}${stat('Spent + Invested', L.money(fl.spentAndInvested))}${stat('Total money out', L.money(fl.moneyOut))}
+            <a class="stat link ${t.cardOwed > 0 ? 'owed' : ''}" href="#pay"><small>Card owed</small><b>${L.money(t.cardOwed)}</b><small>${t.cardOwed > 0 ? 'Tap to pay' : 'Nothing owed'}</small></a></div>`; })()}
+        <p class="hero-sub">Money in hand ${L.money(t.inHand)}${t.owedToPeople ? ` · Owed to people ${L.money(t.owedToPeople)}` : ''} · Total money out includes lending, EMIs, assets and investments</p>
     </header>
     <main class="dash">
         <div class="shortcuts span">
@@ -470,7 +493,8 @@ function home() {
             <a class="shortcut" href="#invest">${icon('chart')}<span>Investments</span></a>
             <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
         </div>
-        ${dueEmis().length ? `<a class="notice span" href="#pay">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
+        ${(() => { const due = dueItems(); const emis = due.filter((d) => d.kind === 'emi').length; const bills = due.length - emis; return due.length ? `<a class="notice span" href="#pay">${[emis ? plural(emis, 'EMI') : '', bills ? plural(bills, 'bill') : ''].filter(Boolean).join(' and ')} due this month (${L.money(due.reduce((x, d) => x + d.amount, 0))}) – tap to pay</a>` : ''; })()}
+        ${(() => { const n = followUpsDue().length; return n ? `<a class="notice span" href="#people">${plural(n, 'follow-up')} due with people who owe you – tap to see</a>` : ''; })()}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
         ${(() => { const w = netWorth(S.data, today()); return `<a class="card link span worth" href="#insights"><div class="card-head"><span><small>Net worth</small><b class="big">${L.money(w.worth)}</b></span>
             <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small>${w.investments ? `<small>+ investments ${L.money(w.investments)}</small>` : ''}<small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
@@ -533,7 +557,10 @@ function addEntry() {
                 <label>Description<input type="text" placeholder="e.g. Fuel, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
             </div>
             <h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>
-            <div class="chips">${chips(f.accountId, 'setAccount')}</div>
+            <div class="chips">${chips(f.paidByMode ? null : f.accountId, 'setAccount')}${(f.type === 'expense' || f.type === 'asset') && !f.onEmi ? `<button class="chip ${f.paidByMode ? 'on' : ''}" data-action="setPaidBy">${icon('users')}<span><b>Someone paid</b><small>You owe them</small></span></button>` : ''}</div>
+            ${f.paidByMode && (f.type === 'expense' || f.type === 'asset') ? `<label>Who paid for you<select data-model="add.paidBy" data-rerender><option value="">Choose a person</option>${S.data.people.filter((p) => p.direction === 'iOwe').map((p) => `<option value="${p.id}" ${p.id === f.paidBy ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.paidBy === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
+                ${f.paidBy === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPayer)}" data-model="add.newPayer"></label>` : ''}
+                <small>It counts as your spending, no account changes, and you owe them the amount (People &amp; Loans → I owe).</small>` : ''}
             ${f.type === 'transfer' ? `<h3>To account</h3><div class="chips">${chips(f.toAccountId, 'setToAccount', f.accountId)}</div>` : ''}
             ${needsCategory ? `<label>Category<select data-model="add.categoryId" data-then="touchCategory" id="add-category"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
             ${needsPerson ? `<label>${direction === 'owesMe' ? 'Person (owes you)' : 'Person (you owe)'}<select data-model="add.personId" data-rerender><option value="">Choose a person</option>${people.map((p) => `<option value="${p.id}" ${p.id === f.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.personId === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
@@ -542,7 +569,9 @@ function addEntry() {
                 <label>What it is worth now (optional)<input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(f.assetValue)}" data-model="add.assetValue" placeholder="same as the price"></label></div>
                 <small>The description is used as the asset's name in My assets.</small>` : ''}
             ${emiBlock(f)}
+            ${!editing && (f.type === 'expense' || f.type === 'income') && !f.onEmi && !f.paidByMode ? `<label class="check"><input type="checkbox" ${f.repeat ? 'checked' : ''} data-model="add.repeat" data-rerender> Repeats every month (adds it to Monthly bills, due on day ${Math.min(28, Number(String(f.date).slice(8, 10)) || 1)})</label>` : ''}
             <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
+            ${['expense', 'income', 'asset'].includes(f.type) ? receiptsBlock(f) : ''}
             <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && (f.type === 'expense' || f.type === 'asset') ? 'Save EMI purchase' : `Save ${L.TYPES[f.type].label}`}</button>
             ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
@@ -550,6 +579,49 @@ function addEntry() {
             ? `<section class="list">${recent.map((e) => entryRow(e, true)).join('')}</section>`
             : `<div class="empty-state">${icon('calendar')}<b>No entries yet</b><small>What you save appears here, newest first, ready to edit or delete.</small></div>`}</div>`}
     </main>`;
+}
+
+/** A chosen file, ready to save: photos are shrunk to a JPEG of at most 1600 px; a PDF must be small enough. */
+async function receiptFile(file) {
+    const read = (blob) => new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(new Error('The file could not be read.'));
+        r.readAsDataURL(blob);
+    });
+    if (file.type.startsWith('image/')) {
+        const img = await new Promise((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = () => reject(new Error('That picture could not be opened.'));
+            i.src = URL.createObjectURL(file);
+        });
+        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * scale), height: Math.round(img.height * scale) });
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(img.src);
+        let data = canvas.toDataURL('image/jpeg', 0.72);
+        if (data.length > 750000) {
+            data = canvas.toDataURL('image/jpeg', 0.5);
+        }
+        return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', type: 'image/jpeg', data };
+    }
+    if (file.size > 600 * 1024) {
+        throw new Error(`${file.name} is larger than 600 KB. Save a smaller PDF, or a photo of the page.`);
+    }
+    return { name: file.name, type: file.type || 'application/pdf', data: await read(file) };
+}
+
+/** Receipts on the entry form: saved ones (view, remove) and chosen ones waiting to be saved with the entry. */
+function receiptsBlock(f) {
+    const kept = (f.receipts || []).filter((r) => !(f.removed || []).includes(r.id));
+    const rows = [
+        ...kept.map((r) => `<div class="receipt">${icon('table')}<span>${esc(r.name)}</span><button class="link-btn" data-action="receiptView" data-id="${r.id}">View</button><button class="link-btn danger" data-action="receiptRemove" data-id="${r.id}">Remove</button></div>`),
+        ...(f.files || []).map((x, i) => `<div class="receipt">${icon('table')}<span>${esc(x.name)}</span><small>saved with the entry</small><button class="link-btn danger" data-action="receiptDrop" data-i="${i}">Remove</button></div>`)
+    ].join('');
+    return `<div class="receipts"><h3>Receipts</h3>${rows}
+        <label class="btn file">${icon('plus')} Attach a photo or PDF<input type="file" accept="image/*,application/pdf" data-file="receipt" multiple hidden></label>
+        <small>Encrypted like the rest of your data. Photos are made smaller first; a PDF can be up to 600 KB.</small></div>`;
 }
 
 function daily() {
@@ -588,6 +660,7 @@ function daily() {
                 : `<button class="link-btn" data-action="dailyCustom">${icon('calendar')} Custom dates</button>`}
             ${days.length ? `<button class="link-btn" data-action="dailyToggleAll">${d.closed.size ? 'Expand all' : 'Collapse all'}</button>` : ''}
         </div>
+        ${!d.custom && d.month === thisMonth() ? dueList(d.view) : ''}
         <div id="daily-days">${dailyDays(days)}</div>
     </main>`;
 }
@@ -642,6 +715,9 @@ function budget() {
             <button class="btn primary wide-only" data-action="budgetSave" ${dirty ? '' : 'disabled'}>${dirty ? 'Save budget' : 'Budget saved'}</button></div>
         ${table('In use this month', inUse)}
         ${table(inUse.length ? 'Other categories' : 'Categories', unused)}
+        <section class="card"><div class="card-head"><h2>Budget alerts</h2></div>
+            <label>Tell me when a category reaches<select data-setting="budgetAlert">${[['80', '80% of its budget'], ['90', '90% of its budget'], ['100', '100% (over budget)'], ['off', 'Never']].map(([v, l]) => `<option value="${v}" ${String((S.prefs() || {}).budgetAlert || '90') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            <small>Checked each time you save an expense: a message on screen, and a notification when notifications are on for this device. Going over the budget is always mentioned.</small></section>
         <div class="savebar" ${dirty ? '' : 'hidden'}><span>You have unsaved budget changes.</span><button class="btn primary" data-action="budgetSave">Save budget</button></div>
     </main>`;
 }
@@ -688,7 +764,7 @@ function payView() {
     const loans = loanRows().filter((l) => l.left).sort((a, b) => (a.next < b.next ? -1 : 1));
     const cards = activeAccounts().filter((a) => a.kind === 'card').map((a) => ({ ...a, owed: Math.max(0, -L.accountBalance(a, S.data.entries)) }));
     const isCardPay = (e) => e.type === 'transfer' && (byId(S.data.accounts, e.toAccountId) || {}).kind === 'card';
-    const paid = S.data.entries.filter((e) => e.loanId || isCardPay(e)).sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1));
+    const paid = S.data.entries.filter((e) => e.loanId || e.billId || isCardPay(e)).sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1));
     const month = thisMonth();
     const dueNow = dueEmis();
     const sum = (list, fn) => list.reduce((t, x) => t + fn(x), 0);
@@ -712,9 +788,11 @@ function payView() {
     return `<header class="hero">
         ${backLink('menu')}
         <small class="eyebrow">Payments</small><h1>EMIs and card bills</h1>
-        <div class="stats">${stat('EMIs due now', L.money(sum(dueNow, (d) => Number(d.loan.emi))))}${stat('Card owed', L.money(sum(cards, (a) => a.owed)))}${stat('Paid this month', L.money(sum(paid.filter((e) => L.monthKey(e.date) === month), (e) => Number(e.amount))))}</div>
+        <div class="stats">${stat('Due this month', L.money(sum(dueItems(), (d) => d.amount)))}${stat('Card owed', L.money(sum(cards, (a) => a.owed)))}${stat('Paid this month', L.money(sum(paid.filter((e) => L.monthKey(e.date) === month), (e) => Number(e.amount))))}</div>
     </header>
     <main>
+        ${dueList()}
+        ${billsSection()}
         <h3>EMIs</h3>
         ${loanList ? `<section class="list atable">${loanList}</section>` : `<div class="empty-state">${icon('repaid')}<b>No EMIs to pay</b><small>Loans appear here when you buy something on EMI from Add Entry.</small></div>`}
         <small>An EMI you pay is recorded as an expense under loan payments, so it shows in your spending and budget.</small>
@@ -724,6 +802,77 @@ function payView() {
         <h3>Paid recently</h3>
         ${paid.length ? `<section class="list">${paid.slice(0, 15).map((e) => entryRow(e, true)).join('')}</section>` : '<p class="empty">Nothing paid yet.</p>'}
     </main>`;
+}
+
+/** A notification on this device (when it is allowed), else nothing: the caller also shows a message on screen. */
+async function localNotify(title, body, route) {
+    try {
+        if (!('Notification' in window) || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) {
+            return;
+        }
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+            await reg.showNotification(title, { body, tag: `lifedesk-${route}`, data: { link: `#${route}` }, icon: 'icons/icon-192.png' });
+        }
+    } catch (e) {
+        // a notification is a courtesy: the message on screen is enough
+    }
+}
+
+/** After an expense is saved: has its category reached the alert level (or gone over) this month? */
+function budgetAlert(entry) {
+    const level = String((S.prefs() || {}).budgetAlert || '90');
+    if (!entry || entry.type !== 'expense' || !entry.categoryId || level === 'off') {
+        return;
+    }
+    const key = L.monthKey(entry.date);
+    const row = L.budgetRows(S.data, key).find((r) => r.id === entry.categoryId);
+    if (!row || !(row.planned > 0)) {
+        return;
+    }
+    const before = row.spent - Number(entry.amount);
+    const limit = (row.planned * Number(level)) / 100;
+    let text = '';
+    if (row.spent > row.planned && before <= row.planned) {
+        text = `${row.name} is over budget: ${L.money(row.spent)} of ${L.money(row.planned)} spent in ${L.monthLabel(key)}.`;
+    } else if (level !== '100' && row.spent >= limit && before < limit) {
+        text = `${row.name} has reached ${row.percent}% of its budget: ${L.money(row.planned - row.spent)} left for ${L.monthLabel(key)}.`;
+    }
+    if (text) {
+        setTimeout(() => toast(text, 'warn'), 3400); // after the "saved" message
+        localNotify('Budget alert', text, 'budget');
+    }
+}
+
+/** Monthly bills: rent, society, insurance, recharge... each with its day; they come up in Due this month. */
+function billsSection() {
+    const f = state.bills.form;
+    const key = thisMonth();
+    const rows = [...(S.data.bills || [])].sort((a, b) => (a.active === false) - (b.active === false) || Number(a.day) - Number(b.day)).map((b) => {
+        const paid = S.data.entries.find((e) => e.billId === b.id && L.monthKey(e.date) === key);
+        const skipped = (b.skipped || []).includes(key);
+        const status = b.active === false ? 'Stopped' : !L.billRuns(b, key) ? (b.end && b.end < key ? 'Ended' : 'Starts later') : paid ? `Paid ${shortDate(paid.date)}` : skipped ? 'Skipped this month' : `Due ${shortDate(L.billDate(b, key))}`;
+        return `<div class="acct-row bill-row">
+            <div class="a-name"><span class="row-icon">${icon(b.type === 'income' ? 'income' : 'calendar')}</span><span><b>${esc(b.description)}</b><small>${esc([b.type === 'income' ? 'Income' : categoryName(b.categoryId), `every month on day ${b.day}`, b.accountId ? `from ${accountName(b.accountId)}` : '', b.end ? `until ${L.monthLabel(b.end)}` : ''].filter(Boolean).join(' · '))}</small></span></div>
+            <div class="a-detail"><small class="${status.startsWith('Due') && L.billDate(b, key) < today() ? 'over' : ''}">${status}</small></div>
+            <div class="a-bal"><b class="big">${L.money(b.amount)}</b><small>a month</small></div>
+            <div class="a-actions"><button class="btn" data-action="billEdit" data-id="${b.id}">Edit</button><button class="btn ghost danger" data-action="billDelete" data-id="${b.id}">Delete</button></div>
+        </div>`;
+    }).join('');
+    const cats = S.data.categories.filter((c) => c.type === (f ? f.type : 'expense')).sort((a, b) => a.name.localeCompare(b.name));
+    return `<div class="card-head plain"><h3>Monthly bills</h3>${f ? '' : `<button class="btn" data-action="billNew">${icon('plus')} Add a bill</button>`}</div>
+        ${f ? `<section class="card form"><h3>${f.id ? 'Change the bill' : 'New monthly bill'}</h3>
+            <div class="grid3"><label>What<input type="text" maxlength="120" value="${esc(f.description)}" data-model="bills.form.description" placeholder="e.g. Rent, Society, Mobile recharge"></label>
+            <label>Type<select data-model="bills.form.type" data-rerender>${[['expense', 'Expense'], ['income', 'Income']].map(([v, l]) => `<option value="${v}" ${v === f.type ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            <label>Amount<input type="number" inputmode="decimal" min="0" value="${esc(f.amount)}" data-model="bills.form.amount"></label>
+            <label>Category<select data-model="bills.form.categoryId"><option value="">Choose a category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === f.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+            <label>${f.type === 'income' ? 'Received into' : 'Paid from'}<select data-model="bills.form.accountId">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === f.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+            <label>Day of the month<select data-model="bills.form.day">${Array.from({ length: 28 }, (_, i) => `<option ${String(i + 1) === String(f.day) ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></label>
+            <label>From month<input type="month" value="${esc(f.start)}" data-model="bills.form.start"></label>
+            <label>Until month (optional)<input type="month" value="${esc(f.end || '')}" data-model="bills.form.end"></label>
+            <label class="check"><input type="checkbox" ${f.active !== false ? 'checked' : ''} data-model="bills.form.active"> Running</label></div>
+            <div class="split"><button class="btn" data-action="billCancel">Cancel</button><button class="btn primary" data-action="billSave">Save</button></div></section>` : ''}
+        ${rows ? `<section class="list atable">${rows}</section>` : f ? '' : '<p class="empty">No monthly bills yet. Add rent, society, insurance or a recharge, or tick "Repeats every month" on Add Entry.</p>'}`;
 }
 
 // ---------- push notifications (renewal reminders, start of month) ----------
@@ -760,6 +909,22 @@ function pushBlocker() {
 const pushDates = (on = !(S.push && S.push.renewals === false), named = !!(S.push && S.push.email && S.push.emailDetails)) => (!on ? [] : S.data.reminders.filter((r) => !r.done && r.due)
     .map((r) => ({ due: r.due, remind: Number(r.remindDays ?? 30), ...(named ? { name: r.name, amount: Number(r.amount) ? L.money(r.amount) : '' } : {}) }))
     .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : String(a.name || '').localeCompare(String(b.name || '')))));
+/** Dates of bills, SIP instalments and maturities for the sender: [{ due, kind }] only (no names or amounts). */
+const pushItems = (on = !(S.push && S.push.money === false)) => {
+    if (!on) {
+        return [];
+    }
+    const items = [];
+    const key = thisMonth();
+    [key, L.addMonths(key, 1)].forEach((k) => (S.data.bills || []).forEach((b) => {
+        if (L.billRuns(b, k) && !(b.skipped || []).includes(k) && !S.data.entries.some((e) => e.billId === b.id && L.monthKey(e.date) === k)) {
+            items.push({ due: L.billDate(b, k), kind: 'bill' });
+        }
+    }));
+    (S.data.sips || []).filter((x) => x.status === 'Active' && x.nextDue && !String(x.id).startsWith('sample-')).forEach((x) => items.push({ due: x.nextDue, kind: 'sip' }));
+    (S.data.investments || []).filter((i) => (i.status || 'Active') === 'Active' && i.maturityDate && i.maturityDate >= today() && !String(i.id).startsWith('sample-')).forEach((i) => items.push({ due: i.maturityDate, kind: 'maturity' }));
+    return items.filter((x) => x.due >= today()).sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.kind.localeCompare(b.kind)));
+};
 const pushZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 let pushTimer = null;
 /** Keeps the dates in the schedule in step with the reminders, from whichever device changes them. */
@@ -770,8 +935,9 @@ function syncPushSoon() {
             return;
         }
         const dates = pushDates();
-        if (JSON.stringify(dates) !== JSON.stringify(S.push.dates || []) || S.push.tz !== pushZone()) {
-            await S.pushUpdate({ dates, tz: pushZone() }).catch((e) => console.error(e));
+        const items = pushItems();
+        if (JSON.stringify(dates) !== JSON.stringify(S.push.dates || []) || JSON.stringify(items) !== JSON.stringify(S.push.items || []) || S.push.tz !== pushZone()) {
+            await S.pushUpdate({ dates, items, tz: pushZone() }).catch((e) => console.error(e));
         }
     }, 1200);
 }
@@ -806,7 +972,7 @@ function notificationsCard() {
     const blocker = on ? null : pushBlocker();
     const pill = [on ? 'This device' : '', mail ? 'Email' : ''].filter(Boolean).join(' + ') || 'Off';
     return `<section class="card"><div class="card-head"><h2>Notifications</h2><span class="pill">${pill}</span></div>
-        <small>Around 9 in the morning, your time, when a renewal is due and at the start of each month, even when LifeDesk is closed.</small>
+        <small>Around 9 in the morning, your time: renewals, bills, SIP instalments and maturities that are due, and the start of each month, even when LifeDesk is closed.</small>
         <b class="sub">On this device</b>
         ${on ? `<small>${(p.tokens || []).length > 1 ? `On. ${(p.tokens || []).length} devices get them.` : 'On. Only this device gets them; turn them on on your other devices too.'}</small>
             <div class="split wrap"><button class="btn" data-action="pushTest" ${busy}>Show a test notification</button><button class="btn ghost danger" data-action="pushOff" ${busy}>Turn off on this device</button></div>`
@@ -817,8 +983,9 @@ function notificationsCard() {
             <small>${p.emailDetails ? 'Names and amounts of your reminders are kept readable for the email sender. The rest of your data stays encrypted.' : 'Off: emails say when a renewal is due, not which one, because names and amounts are encrypted.'}</small>` : ''}
         ${on || mail ? `<b class="sub">What to send</b>
             <label class="check"><input type="checkbox" data-action="pushPref" data-pref="renewals" ${p.renewals !== false ? 'checked' : ''} ${busy}> Renewal reminders: every day from the remind-me day until you press Renewed (also while overdue)</label>
-            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>` : ''}
-        <small>Privacy: to know when to remind you, the due dates of your reminders are kept without encryption${p.emailDetails ? ', and so are their names and amounts (you chose to include them in emails)' : ', with nothing else: no names, amounts or notes'}. All of it is deleted when you turn off notifications on your last device and email.</small>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="monthStart" ${p.monthStart !== false ? 'checked' : ''} ${busy}> Start of each month: a nudge to look at last month</label>
+            <label class="check"><input type="checkbox" data-action="pushPref" data-pref="money" ${p.money !== false ? 'checked' : ''} ${busy}> Bills and SIP instalments on their day, and a deposit maturing (a week before and on the day)</label>` : ''}
+        <small>Privacy: to know when to remind you, the due dates of your reminders, bills, SIPs and maturities are kept without encryption${p.emailDetails ? ', and so are their names and amounts (you chose to include them in emails)' : ', with nothing else: no names, amounts or notes'}. All of it is deleted when you turn off notifications on your last device and email.</small>
     </section>`;
 }
 
@@ -943,6 +1110,11 @@ function renewals() {
     </main>`;
 }
 
+/** People who owe you, with a follow-up date that has come. */
+function followUpsDue() {
+    return S.data.people.filter((p) => p.direction === 'owesMe' && (p.status || 'Active') === 'Active' && p.followUp && p.followUp <= today() && L.personOutstanding(p, S.data.entries) > 0);
+}
+
 function loansView() {
     const s = state.people;
     const loans = loanRows().sort((a, b) => b.outstanding - a.outstanding);
@@ -951,7 +1123,16 @@ function loansView() {
         <div class="a-name"><span class="row-icon">${icon('repaid')}</span><span><b>${esc(l.name)}</b><small>${[l.lender ? esc(l.lender) : '', `${l.rate}% a year${l.rateCalculated ? ' (calculated)' : ''}`, `financed ${L.money(l.financed)}`, `interest paid ${L.money(l.interestPaid)}, to pay ${L.money(l.interestLeft)}`].filter(Boolean).join(' · ')}</small></span></div>
         <div class="a-detail"><div class="bar"><i style="width:${Math.round((l.paid / l.months) * 100)}%"></i></div><small>${l.paid} of ${l.months} EMIs paid · ${l.left ? `next ${longDate(l.next)}` : 'fully paid'}</small></div>
         <div class="a-bal"><b class="big">${L.money(l.outstanding)}</b><small>${l.left} × ${L.money(l.emi)} to pay</small></div>
-        <div class="a-actions">${l.left ? `<button class="btn primary" data-action="payEmi" data-id="${l.id}">Pay EMI</button>` : ''}<button class="btn ghost danger" data-action="loanDelete" data-id="${l.id}">Delete</button></div>
+        <div class="a-actions">${l.left ? `<button class="btn primary" data-action="payEmi" data-id="${l.id}">Pay EMI</button>` : ''}<button class="btn" data-action="loanEdit" data-id="${l.id}">Edit plan</button><button class="btn ghost danger" data-action="loanDelete" data-id="${l.id}">Delete</button></div>
+        ${s.loanForm && s.loanForm.id === l.id ? `<div class="a-panel"><div class="form"><h3>Change the EMI plan</h3>
+            <div class="grid3"><label>Name<input type="text" value="${esc(s.loanForm.name)}" data-model="people.loanForm.name"></label>
+            <label>Financed by<input type="text" value="${esc(s.loanForm.lender)}" data-model="people.loanForm.lender"></label>
+            <label>EMI<input type="number" inputmode="decimal" min="0" value="${esc(s.loanForm.emi)}" data-model="people.loanForm.emi"></label>
+            <label>Total number of EMIs<input type="number" inputmode="numeric" min="${l.paid}" value="${esc(s.loanForm.months)}" data-model="people.loanForm.months"></label>
+            <label>First EMI date<input type="date" value="${esc(s.loanForm.firstDate)}" data-model="people.loanForm.firstDate"></label>
+            <label>Paid from<select data-model="people.loanForm.accountId">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === s.loanForm.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label></div>
+            <small>${l.paid} EMIs are paid already and stay as they are. Due dates follow the first EMI date, one a month; the interest rate is worked out again from the new plan.</small>
+            <div class="split"><button class="btn" data-action="loanEditCancel">Cancel</button><button class="btn primary" data-action="loanEditSave">Save plan</button></div></div></div>` : ''}
     </div>`).join('');
     return `<header class="hero">
         ${backLink('menu')}
@@ -987,7 +1168,7 @@ function people() {
                 <button class="card-head p-head" data-action="personOpen" data-id="${p.id}" aria-expanded="${open}">
                     <span class="avatar">${esc(initials(p.name))}</span>
                     <span class="p-name"><b>${esc(p.name)}</b><small>${p.direction === 'owesMe' ? 'Owes you' : 'You owe'}</small></span>
-                    <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span>
+                    <span class="badge ${status === 'Bad Debt' ? 'bad' : status === 'Settled' ? 'done' : ''}">${status}</span>${p.direction === 'owesMe' && p.followUp && p.followUp <= today() && p.out > 0 && status === 'Active' ? `<span class="badge follow">Follow up${p.followUp < today() ? ' (overdue)' : ' today'}</span>` : ''}
                     <b class="big">${L.money(p.out)}</b>${icon(open ? 'chevDown' : 'chevRight')}
                 </button>
                 ${open ? `<div class="p-panel">
@@ -1001,6 +1182,9 @@ function people() {
                         <h3>Status</h3><div class="seg fit">${['Active', 'Settled', 'Bad Debt'].map((x) => `<button class="${x === status ? 'on' : ''}" data-action="personStatus" data-status="${x}">${x}</button>`).join('')}</div>
                         <div class="grid2"><label>Phone<input type="tel" value="${esc(p.phone || '')}" data-person-field="phone" data-id="${p.id}"></label>
                         <label>Notes<input type="text" value="${esc(p.notes || '')}" data-person-field="notes" data-id="${p.id}"></label></div>
+                        ${p.direction === 'owesMe' ? `<div class="grid2"><label>Follow up on<input type="date" value="${esc(p.followUp || '')}" data-person-field="followUp" data-id="${p.id}"></label>
+                            <label>Follow-up note<input type="text" value="${esc(p.followNote || '')}" placeholder="e.g. said he will pay after salary" data-person-field="followNote" data-id="${p.id}"></label></div>` : ''}
+                        ${p.phone && p.out > 0 ? `<div class="split wrap"><button class="btn" data-action="personWhatsApp" data-id="${p.id}">${p.direction === 'owesMe' ? 'Remind on WhatsApp' : 'Message on WhatsApp'}</button></div>` : ''}
                         ${history.length ? '' : `<div><button class="btn ghost danger" data-action="personDelete" data-id="${p.id}">${icon('trash')} Delete person</button></div>`}
                     </div>
                     <div class="pane"><h3>History</h3><div class="list">${history.map((e) => entryRow(e, true)).join('') || `<p class="empty">No entries yet.${p.opening ? ` Balance comes from the opening amount of ${L.money(p.opening)}.` : ''}</p>`}</div></div>
@@ -1111,7 +1295,7 @@ function menu() {
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account Management</small><h1>More</h1></header>
     <main class="dash">
         <section class="card span"><div class="list inner flush">
-            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '24 tables with totals and CSV download')}
+            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '28 tables with totals and CSV download')}
             ${link('invest', 'chart', 'Investments', 'Mutual funds, SIPs, shares, deposits, gold, goals')}${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
         </div></section>
         <section class="card"><div class="card-head"><h2>Categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
@@ -1156,7 +1340,7 @@ const invest = investTool({
     get state() {
         return state;
     },
-    S, L, icon, esc, stat, toast, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today,
+    S, L, icon, esc, stat, toast, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today, localNotify: (t, b, r) => localNotify(t, b, r),
     yearOf: (iso) => yearOf(iso, yearStart()).label
 });
 let investOpened = false; // the screen's opening work (due SIPs, prices) runs once each time it is opened
@@ -1244,7 +1428,7 @@ function render() {
         const el = app.querySelector(`[data-model="${focus}"]`);
         if (el) {
             el.focus();
-            if (el.setSelectionRange && el.type !== 'number' && el.type !== 'date') {
+            if (el.setSelectionRange && ['text', 'search', 'tel', 'url', 'email', 'password'].includes(el.type)) {
                 el.setSelectionRange(el.value.length, el.value.length);
             }
         }
@@ -2086,7 +2270,45 @@ const actions = {
         }
         render();
     },
+    setPaidBy() {
+        const f = state.add;
+        f.paidByMode = !f.paidByMode;
+        if (!f.paidByMode) {
+            f.paidBy = null;
+            f.accountId = f.accountId || (defaultAccount() || {}).id || null;
+        }
+        render();
+    },
+    async receiptView(el) {
+        try {
+            const file = await S.getFile(el.dataset.id);
+            if (!file) {
+                return toast('That file is not there any more.', 'warn');
+            }
+            const bin = atob(file.data.split(',')[1]);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) {
+                bytes[i] = bin.charCodeAt(i);
+            }
+            const url = URL.createObjectURL(new Blob([bytes], { type: file.type }));
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) {
+            toast(errorText(e), 'warn');
+        }
+    },
+    receiptRemove(el) {
+        const f = state.add;
+        f.removed = [...(f.removed || []), el.dataset.id];
+        render();
+    },
+    receiptDrop(el) {
+        state.add.files.splice(Number(el.dataset.i), 1);
+        render();
+    },
     setAccount(el) {
+        state.add.paidByMode = false;
+        state.add.paidBy = null;
         state.add.accountId = el.dataset.id;
         if (state.add.toAccountId === el.dataset.id) {
             state.add.toAccountId = null;
@@ -2330,7 +2552,7 @@ const actions = {
                 return toast(/permission|denied|abort/i.test(`${e.name} ${e.message}`) ? 'This browser window cannot receive notifications. Private or incognito windows cannot; open LifeDesk in a normal window and try again.' : `Notifications could not be turned on: ${e.message}`, 'warn');
             }
             const p = S.push || {};
-            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(), dates: pushDates() });
+            await S.pushAdd(token, { enabled: true, renewals: p.renewals !== false, monthStart: p.monthStart !== false, money: p.money !== false, tz: pushZone(), dates: pushDates(), items: pushItems(p.money !== false) });
             localStorage.setItem(pushSlot(), token);
             toast('Notifications are on for this device.');
         } finally {
@@ -2353,8 +2575,8 @@ const actions = {
     async pushPref(el) {
         const key = el.dataset.pref;
         const value = !(S.push && S.push[key] !== false);
-        await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : { [key]: value });
-        toast(`${key === 'renewals' ? 'Renewal reminders' : 'Start-of-month reminder'} turned ${value ? 'on' : 'off'}.`);
+        await S.pushUpdate(key === 'renewals' ? { renewals: value, dates: pushDates(value) } : key === 'money' ? { money: value, items: pushItems(value) } : { [key]: value });
+        toast(`${key === 'renewals' ? 'Renewal reminders' : key === 'money' ? 'Bill, SIP and maturity reminders' : 'Start-of-month reminder'} turned ${value ? 'on' : 'off'}.`);
     },
     async emailToggle() {
         const value = !(S.push && S.push.email);
@@ -2363,8 +2585,8 @@ const actions = {
         try {
             if (value) {
                 const p = S.push || {};
-                await S.pushUpdate({ enabled: true, email: true, emailDetails: false, renewals: p.renewals !== false, monthStart: p.monthStart !== false, tz: pushZone(),
-                    dates: pushDates(p.renewals !== false, false) });
+                await S.pushUpdate({ enabled: true, email: true, emailDetails: false, renewals: p.renewals !== false, monthStart: p.monthStart !== false, money: p.money !== false, tz: pushZone(),
+                    dates: pushDates(p.renewals !== false, false), items: pushItems(p.money !== false) });
                 toast(`Reminders will also be emailed to ${S.user.contact}.`);
             } else {
                 await S.pushUpdate({ email: false, emailDetails: false, dates: pushDates(undefined, false) });
@@ -2549,9 +2771,111 @@ const actions = {
         }
         const number = loan.paid + 1;
         const category = S.data.categories.find((c) => c.type === 'expense' && /loan|instalment|emi/i.test(c.name));
-        await S.save('entries', { id: S.newId(), type: 'expense', amount: Number(loan.emi), date: loan.next > today() ? today() : loan.next, description: `${loan.name} – EMI ${number} of ${loan.months}`,
-            accountId: loan.accountId, toAccountId: null, categoryId: category ? category.id : loan.categoryId, personId: null, notes: '', loanId: loan.id, createdAt: Date.now() });
+        const emiEntry = { id: S.newId(), type: 'expense', amount: Number(loan.emi), date: loan.next > today() ? today() : loan.next, description: `${loan.name} – EMI ${number} of ${loan.months}`,
+            accountId: loan.accountId, toAccountId: null, categoryId: category ? category.id : loan.categoryId, personId: null, notes: '', loanId: loan.id, createdAt: Date.now() };
+        await S.save('entries', emiEntry);
+        budgetAlert(emiEntry);
         toast(`EMI ${number} of ${loan.months} paid. ${L.money((loan.left - 1) * loan.emi)} still to pay.`);
+    },
+    // monthly bills
+    billNew() {
+        const acc = defaultAccount();
+        state.bills.form = { id: null, description: '', type: 'expense', amount: '', categoryId: '', accountId: acc ? acc.id : '', day: String(Math.min(28, Number(today().slice(8, 10)))), start: thisMonth(), end: '', active: true };
+        render();
+    },
+    billEdit(el) {
+        const b = byId(S.data.bills, el.dataset.id);
+        state.bills.form = { ...b, day: String(b.day), end: b.end || '', categoryId: b.categoryId || '', accountId: b.accountId || '' };
+        render();
+        window.scrollTo(0, 0);
+    },
+    billCancel() {
+        state.bills.form = null;
+        render();
+    },
+    async billSave() {
+        const f = state.bills.form;
+        if (!String(f.description).trim() || !(Number(f.amount) > 0)) {
+            return toast('Enter what the bill is and its amount.', 'warn');
+        }
+        if (!f.categoryId) {
+            return toast('Choose a category, so it counts in the right place in your budget.', 'warn');
+        }
+        const old = f.id ? byId(S.data.bills, f.id) : null;
+        await S.save('bills', { id: f.id || S.newId(), description: String(f.description).trim(), type: f.type, amount: Number(f.amount), categoryId: f.categoryId, accountId: f.accountId || null,
+            day: Number(f.day) || 1, start: f.start || thisMonth(), end: f.end || null, active: f.active !== false, skipped: old ? old.skipped || [] : [], createdAt: old ? old.createdAt : Date.now() });
+        state.bills.form = null;
+        toast('Monthly bill saved.');
+    },
+    async billDelete(el) {
+        const b = byId(S.data.bills, el.dataset.id);
+        if (window.confirm(`Delete the monthly bill "${b.description}"?\nWhat you already paid stays as entries.`)) {
+            await S.remove('bills', b.id);
+            toast('Monthly bill deleted.');
+        }
+    },
+    async billPay(el) {
+        const b = byId(S.data.bills, el.dataset.id);
+        const due = L.billDate(b, thisMonth());
+        const accountId = b.accountId && byId(S.data.accounts, b.accountId) ? b.accountId : (defaultAccount() || {}).id;
+        const entry = { id: S.newId(), type: b.type, amount: Number(b.amount), date: due > today() ? today() : due, description: b.description, accountId, toAccountId: null,
+            categoryId: b.categoryId || null, personId: null, notes: '', billId: b.id, receipts: [], createdAt: Date.now() };
+        const problem = L.validateEntry(entry, S.data);
+        if (problem) {
+            return toast(`${b.description}: ${problem} Edit the bill under Payments.`, 'warn');
+        }
+        await S.save('entries', entry);
+        toast(`${b.description} · ${L.money(b.amount)} paid.`, 'ok', { label: 'Undo', run: async () => {
+            await S.remove('entries', entry.id);
+            toast('Payment undone.');
+        } });
+        budgetAlert(entry);
+    },
+    async billSkip(el) {
+        const b = byId(S.data.bills, el.dataset.id);
+        await S.save('bills', { ...b, skipped: [...new Set([...(b.skipped || []), thisMonth()])] });
+        toast(`${b.description} skipped for ${L.monthLabel(thisMonth())}.`);
+    },
+    // people: a reminder on WhatsApp
+    personWhatsApp(el) {
+        const p = byId(S.data.people, el.dataset.id);
+        const out = L.personOutstanding(p, S.data.entries);
+        let phone = String(p.phone || '').replace(/[^\d+]/g, '').replace(/^\+/, '');
+        if (phone.length === 10 && L.currentFormat().currency === 'INR') {
+            phone = `91${phone}`; // an Indian mobile number without its country code
+        }
+        const text = p.direction === 'owesMe'
+            ? `Hi ${p.name.split(' ')[0]}, a gentle reminder about the ${L.money(out)} you owe me. Please let me know when you can return it. Thank you!`
+            : `Hi ${p.name.split(' ')[0]}, I owe you ${L.money(out)}. I will pay it back soon. Thank you!`;
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+    },
+    // loans: change the EMI plan
+    loanEdit(el) {
+        const l = byId(S.data.loans, el.dataset.id);
+        state.people.loanForm = { id: l.id, name: l.name, lender: l.lender || '', emi: String(l.emi), months: String(l.months), firstDate: l.firstDate, accountId: l.accountId || '' };
+        render();
+    },
+    loanEditCancel() {
+        state.people.loanForm = null;
+        render();
+    },
+    async loanEditSave() {
+        const f = state.people.loanForm;
+        const l = byId(S.data.loans, f.id);
+        const paid = S.data.entries.filter((e) => e.loanId === l.id).length;
+        const emi = Number(f.emi);
+        const months = Math.round(Number(f.months));
+        if (!(emi > 0) || !(months > 0) || !f.firstDate) {
+            return toast('Enter the EMI, the number of EMIs and the first EMI date.', 'warn');
+        }
+        if (months < paid) {
+            return toast(`${paid} EMIs are already paid: the plan cannot have fewer.`, 'warn');
+        }
+        const next = { ...l, name: String(f.name).trim() || l.name, lender: String(f.lender).trim(), emi, months, firstDate: f.firstDate, accountId: f.accountId || l.accountId };
+        next.rate = L.impliedRate(Number(next.financed), emi, months);
+        await S.save('loans', next);
+        state.people.loanForm = null;
+        toast(`${next.name}: ${months - paid} EMIs of ${L.money(emi)} left.`);
     },
     async loanDelete(el) {
         const loan = byId(S.data.loans, el.dataset.id);
@@ -2574,6 +2898,17 @@ const actions = {
             personId = S.newId();
             pairs.push(['people', { id: personId, name: f.newPerson.trim(), direction: f.type === 'lent' || f.type === 'gotback' ? 'owesMe' : 'iOwe', opening: 0, status: 'Active' }]);
         }
+        let paidBy = null;
+        if (f.paidByMode && (f.type === 'expense' || f.type === 'asset')) {
+            paidBy = f.paidBy;
+            if (paidBy === '__new') {
+                if (!String(f.newPayer || '').trim()) {
+                    return toast("Enter the name of the person who paid.", 'warn');
+                }
+                paidBy = S.newId();
+                pairs.push(['people', { id: paidBy, name: f.newPayer.trim(), direction: 'iOwe', opening: 0, status: 'Active' }]);
+            }
+        }
         const existing = f.id ? byId(S.data.entries, f.id) : null;
         const entry = {
             id: f.id || S.newId(),
@@ -2581,7 +2916,8 @@ const actions = {
             amount: Number(f.amount),
             date: f.date,
             description: f.description.trim() || L.TYPES[f.type].label,
-            accountId: f.accountId,
+            accountId: paidBy ? null : f.accountId,
+            paidBy,
             toAccountId: f.type === 'transfer' ? f.toAccountId : null,
             categoryId: f.type === 'expense' || f.type === 'income' ? f.categoryId || null : null,
             personId: L.PERSON_TYPES.includes(f.type) ? personId : null,
@@ -2590,8 +2926,15 @@ const actions = {
             // links an edit must keep
             loanId: existing ? existing.loanId || null : null,
             loanDown: existing ? existing.loanDown || null : null,
-            assetId: existing ? existing.assetId || null : null
+            assetId: existing ? existing.assetId || null : null,
+            billId: existing ? existing.billId || null : null,
+            receipts: (f.receipts || []).filter((r) => !(f.removed || []).includes(r.id))
         };
+        if (f.repeat && !f.id && (f.type === 'expense' || f.type === 'income')) {
+            entry.billId = S.newId();
+            pairs.push(['bills', { id: entry.billId, description: entry.description, type: f.type, amount: entry.amount, categoryId: entry.categoryId, accountId: entry.accountId,
+                day: Math.min(28, Number(f.date.slice(8, 10)) || 1), start: L.monthKey(f.date), end: null, active: true, skipped: [], createdAt: Date.now() }]);
+        }
         if (f.type === 'asset' && !f.id) {
             if (!f.description.trim()) {
                 return toast('Enter what you bought in Description: it becomes the asset name.', 'warn');
@@ -2603,11 +2946,27 @@ const actions = {
         if (problem) {
             return toast(problem, 'warn');
         }
+        // receipt files: the new ones are uploaded first, so the entry only lists files that are saved
+        try {
+            for (const x of f.files || []) {
+                const id = S.newId();
+                await S.saveFile(id, { name: x.name, type: x.type, data: x.data, entryId: entry.id });
+                entry.receipts.push({ id, name: x.name, type: x.type });
+            }
+            for (const id of f.removed || []) {
+                await S.removeFile(id).catch(() => {});
+            }
+        } catch (e) {
+            return toast(`The receipt could not be saved: ${errorText(e)}`, 'warn');
+        }
         pairs.push(['entries', entry]);
         const back = f.back;
         state.add = blankEntry(f.id ? null : f);
         await S.saveMany(pairs);
         toast(f.id ? 'Changes saved.' : `${entry.description} · ${L.money(entry.amount)} saved.`);
+        if (!f.id) {
+            budgetAlert(entry);
+        }
         if (back) {
             go(back);
         }
@@ -2623,7 +2982,7 @@ const actions = {
             state.invest.open = e.investmentId;
             return go('invest');
         }
-        state.add = { ...blankEntry(), ...e, amount: String(e.amount), categoryTouched: true, newPerson: '', notes: e.notes || '', label: `${e.description} · ${L.money(e.amount)} · ${shortDate(e.date)}`, back: state.route === 'add' ? null : state.route };
+        state.add = { ...blankEntry(), ...e, amount: String(e.amount), categoryTouched: true, newPerson: '', notes: e.notes || '', paidByMode: !!e.paidBy, receipts: e.receipts || [], files: [], removed: [], label: `${e.description} · ${L.money(e.amount)} · ${shortDate(e.date)}`, back: state.route === 'add' ? null : state.route };
         if (state.route === 'add') {
             render();
             window.scrollTo(0, 0);
@@ -2642,8 +3001,10 @@ const actions = {
             return;
         }
         const back = f.back;
+        const files = (f.receipts || []).map((r) => r.id);
         state.add = blankEntry();
         await S.remove('entries', f.id);
+        files.forEach((id) => S.removeFile(id).catch(() => {}));
         toast('Entry deleted.');
         if (back) {
             go(back);
@@ -2947,6 +3308,8 @@ const actions = {
         S.data.invTxns.forEach((t) => pairs.push(['invTxns', { ...t, price: x(t.price), amount: x(t.amount), charges: x(t.charges) }]));
         S.data.sips.forEach((p) => pairs.push(['sips', { ...p, amount: x(p.amount), stepUpAmount: x(p.stepUpAmount) }]));
         S.data.goals.forEach((g) => pairs.push(['goals', { ...g, target: x(g.target) }]));
+        S.data.bills.forEach((b) => pairs.push(['bills', { ...b, amount: x(b.amount) }]));
+        S.data.invSnapshots.forEach((v) => pairs.push(['invSnapshots', { ...v, value: x(v.value), invested: x(v.invested) }]));
         pairs.push(['settings', { ...(S.prefs() || { id: 'prefs' }), currency: to }]);
         state.more.busy = true;
         render();
@@ -3215,6 +3578,12 @@ app.addEventListener('change', async (event) => {
             await S.save('settings', { ...(S.prefs() || { id: 'prefs' }), [el.dataset.setting]: el.value });
             toast('Saved.');
         }
+        if (el.dataset.file === 'receipt' && el.files.length) {
+            for (const file of el.files) {
+                state.add.files.push(await receiptFile(file));
+            }
+            render();
+        }
         if (el.dataset.file === 'import' && el.files[0]) {
             const n = await S.importJson(await el.files[0].text());
             toast(`${n} records restored.`);
@@ -3405,7 +3774,7 @@ S.init((status) => {
     state.status = status;
     if (status === 'ready' && !sipsChecked) {
         sipsChecked = true;
-        invest.recordDueSips().then((r) => (r.recorded || r.pending) && toast(`${r.recorded ? `${plural(r.recorded, 'SIP instalment')} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm on Investments` : ''}.`)).catch((e) => console.error(e));
+        invest.recordDueSips().then((r) => (invest.snapshot().catch(() => {}), (r.recorded || r.pending) && toast(`${r.recorded ? `${plural(r.recorded, 'SIP instalment')} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm on Investments` : ''}.`))).catch((e) => console.error(e));
     }
     if (status === 'ready' && !S.isDemo) {
         if (pushFor !== S.user.uid) {

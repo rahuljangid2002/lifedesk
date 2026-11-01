@@ -238,6 +238,14 @@ export function personOutstanding(person, entries, upTo) {
             out += e.type === 'borrowed' ? amt : e.type === 'repaid' ? -amt : 0;
         }
     }
+    // "paid by someone": a purchase this person paid for you, so you owe them
+    if (person.direction === 'iOwe') {
+        for (const e of entries) {
+            if (e.paidBy === person.id && (!upTo || e.date <= upTo)) {
+                out += num(e.amount);
+            }
+        }
+    }
     return out;
 }
 
@@ -402,7 +410,15 @@ export function validateEntry(e, data) {
     if (e.date > isoDate()) {
         return 'The date cannot be in the future.';
     }
-    if (!e.accountId) {
+    if (e.paidBy) {
+        if (e.type !== 'expense' && e.type !== 'asset') {
+            return 'Only an expense or an asset can be paid by someone else.';
+        }
+        const p = data.people.find((x) => x.id === e.paidBy);
+        if (!p || p.direction !== 'iOwe') {
+            return 'Choose who paid (a person you owe).';
+        }
+    } else if (!e.accountId) {
         return 'Choose an account.';
     }
     if (e.type === 'transfer') {
@@ -463,4 +479,50 @@ export function nextDue(r) {
 /** What the repeating reminders cost over a year (one-time ones are left out). */
 export function yearlyCost(reminders) {
     return Math.round(reminders.filter((r) => !r.done && num(r.repeat) > 0).reduce((s, r) => s + (num(r.amount) * 12) / num(r.repeat), 0) * 100) / 100;
+}
+
+// ---------- monthly bills (recurring entries) ----------
+/** A bill's due date in a month (YYYY-MM): its day, at most the 28th. */
+export const billDate = (bill, key) => `${key}-${String(Math.min(28, Math.max(1, Number(bill.day) || 1))).padStart(2, '0')}`;
+/** True when the bill runs in that month. */
+export const billRuns = (bill, key) => bill.active !== false && (!bill.start || bill.start <= key) && (!bill.end || bill.end >= key);
+/** The bills of a month that are not paid or skipped yet: [{ bill, date, overdue }], oldest first. */
+export function billsDue(data, key, today) {
+    return (data.bills || [])
+        .filter((b) => billRuns(b, key) && !(b.skipped || []).includes(key) && !data.entries.some((e) => e.billId === b.id && monthKey(e.date) === key))
+        .map((b) => ({ bill: b, date: billDate(b, key), overdue: billDate(b, key) < today }))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.bill.description.localeCompare(b.bill.description)));
+}
+
+// ---------- what left your accounts in a month ----------
+/**
+ * Invested (into investments), spent + invested, and everything that left a bank, cash or card in the month:
+ * spending, EMIs, lending, repayments, assets and investments. Transfers between your own accounts and purchases
+ * someone else paid for are not money out (card bills are transfers, so card spending is not counted twice).
+ */
+export function monthFlows(data, key) {
+    let invested = 0;
+    let out = 0;
+    for (const e of data.entries) {
+        if (monthKey(e.date) !== key) {
+            continue;
+        }
+        const amt = num(e.amount);
+        if (e.type === 'invest') {
+            invested += amt;
+        }
+        if (e.accountId && !e.paidBy && e.type !== 'transfer' && TYPES[e.type] && TYPES[e.type].sign < 0) {
+            out += amt;
+        }
+    }
+    const { expense } = monthSummary(data, key);
+    return { invested, spentAndInvested: expense + invested, moneyOut: out };
+}
+
+/** Entered more than 3 days after its date (from the time it was first saved). */
+export function isBackDated(e) {
+    if (!e.createdAt || !e.date) {
+        return false;
+    }
+    return daysBetween(e.date, isoDate(new Date(e.createdAt))) > 3;
 }

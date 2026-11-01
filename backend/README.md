@@ -78,3 +78,10 @@ does not answer browsers, so LifeDesk asks this small Apps Script instead. Witho
 
 It reads only public market data, keeps nothing and needs no key. Test: open the /exec address with
 `?action=quote&symbol=AAPL&currency=INR` added; it answers with the price.
+
+## Bill, SIP and maturity reminders (push-sender.gs, November 2026)
+
+The sender now also sends "Due today" for monthly bills and SIP instalments, and a note a week before and on the day a
+deposit matures (only the dates are stored, as `items` in the schedule: no names or amounts). To switch it on, open the
+existing "LifeDesk push sender" Apps Script project, replace its code with the new backend/push-sender.gs and save.
+The hourly trigger keeps running and uses the new code from its next run; nothing has to be deployed again.
