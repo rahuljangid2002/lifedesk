@@ -17,13 +17,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), 'docs')
 SHOTS = os.path.join(OUT, 'shots')
 NAME = 'LifeDesk - Demo Guide'
-URL = 'http://localhost:8765/'
+URL = 'http://127.0.0.1:8765/'
 DEMO = URL + '?demo=1'
 TODAY = datetime.date.today().strftime('%-d %B %Y')
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 INTRO = ('LifeDesk is a web app with one login and several everyday tools. Account Management covers accounts, entries (typed or spoken), '
-         'daily expenses, a monthly budget, people and loans, dashboards and reports. Renewal reminders keeps insurance, subscriptions, '
+         'daily expenses, monthly bills, a monthly budget, investments, people and loans, dashboards and reports. Renewal reminders keeps insurance, subscriptions, '
          'documents and bills in one list and reminds you by notification and email. It works in any browser on a phone or a desktop, '
          'in any currency, and can be added to a phone\'s home screen.')
 NOTE = ('Every name, amount and date in this guide is made-up sample data, loaded with the app\'s own "Load sample data" button in demo mode. '
@@ -53,6 +53,8 @@ SECTIONS = [
     ]),
     ('Money home and net worth', ['04_home'], [
         'This month\'s income, expense and net balance, with money in hand, card owed and money owed to people.',
+        'Below them: Invested this month, Spent + invested, Total money out (spending, investing, lending and EMIs together) and Card owed, which opens Payments.',
+        'A notice tells you when monthly bills or EMIs are due; it opens Payments.',
         'Net balance = bank + wallets + cash − credit card owed − money owed to people.',
         'Net worth = net balance + money owed to you + what your assets are worth − loan principal still owed.',
         'Notices for EMIs due and card bills lead to the Payments screen. Shortcuts to every screen.',
@@ -63,7 +65,34 @@ SECTIONS = [
         'Account chips show each balance; a credit card shows what it owes.',
         'Recent entries are listed beside the form. The pencil opens an entry to change or delete it; balances, budget and people follow.',
         'A short message at the top confirms every save, change and delete.',
-        '"Speak it" starts voice entry (next page).',
+        '"Speak it" starts voice entry (see Voice entry).',
+    ]),
+    ('Monthly bills and Due this month', ['27_bills', '28_due'], [
+        'Monthly bills: rent, society, insurance, a recharge or a salary, each with its amount, category, account and day of the month. Add them on Payments → Add a bill, or tick "Repeats every month" on Add Entry.',
+        'Each month they come up in "Due this month · not paid yet" on Add Entry, Daily Expenses and Payments, together with the EMIs due; Home shows a notice.',
+        'Paid records the expense (or income) at once, dated today when paid early. Skip leaves out this month only.',
+        'A bill can have a start and an end month, and can be stopped. With notifications on, a reminder is sent on the day a bill is due.',
+    ]),
+    ('Receipts and someone paid', ['29_paid_by', '30_receipts'], [
+        'Someone paid: for an expense that someone else paid for you. No account is used; the amount is added to what you owe that person (People & Loans → I owe).',
+        'Receipts: attach photos or PDFs to any entry. They are encrypted like the rest of your data and opened only when you tap View.',
+        'Photos are made smaller before saving; a PDF can be up to 600 KB.',
+        'Reports list entries without a receipt, and everything paid for you.',
+    ]),
+    ('Investments', ['31_invest', '32_invest_open'], [
+        'Mutual funds, shares, ETFs, fixed and recurring deposits, gold, bonds, provident fund, NPS and crypto in one portfolio.',
+        'At the top: current value, invested, gain, today\'s change and XIRR (the yearly return that takes the timing of every rupee in and out into account).',
+        'Open a holding to buy more, sell or redeem (first in, first out, with short- and long-term gains), record a dividend or interest, a bonus or split, charges, maturity, or start a SIP.',
+        'Buying now takes the money from the account you choose; money taken out comes back to it. These ledger entries are not counted as spending.',
+        'Prices: Indian mutual fund NAVs are fetched automatically; share, ETF and crypto prices come from the LifeDesk price service. Anything else can be typed in.',
+        'Price alerts: a message when a price goes above or below the level you set.',
+    ]),
+    ('Investments: SIPs, goals and insights', ['33_sips', '34_goals', '35_invest_insights'], [
+        'SIPs: monthly, quarterly or weekly, recorded on their day at that day\'s price, paid from the account you choose, with an optional yearly step-up. Skip, pause, stop or resume any time.',
+        'Goals: link investments to a goal and see how far along you are and what to put in each month to reach it.',
+        'Insights: allocation by asset class, by type and by platform; value and cost by month; money in and out by month; best performers and those in loss; what is coming up; gains and income by year.',
+        'Calculators: SIP, one-time investment and goal planner.',
+        'Search by name when adding: the fund or share is found and today\'s price filled in.',
     ]),
     ('Voice entry', ['m_voice_menu', 'm_voice', 'm_voice_edit'], [
         'Say an entry instead of typing it, in English or Hindi: "Spent 450 on groceries from HDFC".',
@@ -87,6 +116,8 @@ SECTIONS = [
         'Every credit card with what it owes: pay in full or in part, from any account.',
         'An EMI paid is an expense (spending and budget). A card bill is a transfer, because the purchases were already counted when they were made.',
         'Paid recently lists the last payments, each with a pencil to edit.',
+        'Monthly bills are listed here too, with Add a bill, Edit and Delete.',
+        'Edit plan (People & Loans → Loans) changes the EMI, number of EMIs, first EMI date, lender or account of a loan; the rate is worked out again.',
     ]),
     ('Daily Expenses', ['07_daily'], [
         'Every entry date by date, with the total and the number of entries for each day.',
@@ -99,6 +130,7 @@ SECTIONS = [
         'Categories in use come first, largest budget on top; last month and the 3-month average are shown as hints.',
         '"See entries" opens the expenses behind a category.',
         'Copy last month or use the 3-month average. After a change, a bar at the bottom offers to save.',
+        'Budget alerts: choose 80%, 90% or 100%. Saving an expense that takes a category past that level shows a message, and a notification when notifications are on.',
     ]),
     ('Dashboards: Monthly', ['10_dash_monthly', '11_dash_monthly_charts'], [
         'Opening balance, closing balance and money in hand; income, expense and savings with the change against last month.',
@@ -117,9 +149,10 @@ SECTIONS = [
         'A table of every loan and every asset with its interest.',
     ]),
     ('Reports', ['14_report_category', '15_report_pivot'], [
-        '18 reports as tables with totals: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, '
+        '28 reports as tables with totals: monthly summary, spend by category, category by month, daily spend, budget vs actual, top expenses, '
         'spend by account, income by source, year over year, lending activity, money to receive, owed to people, bad debts, account balances, '
-        'asset register, loan summary, EMI payments, all entries.',
+        'asset register, loan summary, EMI payments, all entries, six investment reports (holdings, allocation, transactions, gains by year, '
+        'SIPs, goals), back-dated entries, missing receipts, paid for me and monthly bills.',
         'Choose the period: this month, last month, last 3 months, this year, last year, all time, or custom dates.',
         'Download CSV opens in any spreadsheet.',
     ]),
@@ -139,9 +172,11 @@ SECTIONS = [
         'Notifications never contain your data: they only say that something is due. The names and amounts stay encrypted in the app.',
         'A private or incognito window cannot receive notifications; the app says so.',
     ]),
-    ('People & Loans', ['16_people'], [
+    ('People & Loans', ['16_people', '26_people_follow'], [
         'Who owes you and whom you owe, with the amount still outstanding and a status: Active, Settled or Bad Debt.',
         'Open a person for quick actions (got money back, gave more, paid back, borrowed more), phone, notes and the full history.',
+        'Follow up on: a date to ask for the money, with a note. Home shows a notice when follow-ups are due, and the person is marked "Follow up".',
+        'Remind on WhatsApp opens WhatsApp with the person\'s number and a message with the amount filled in.',
         'The Loans tab lists every EMI loan with its progress and interest. Bad debts are kept out of "to receive".',
     ]),
     ('My Accounts', ['17_accounts', '18_pay_card'], [
@@ -179,7 +214,8 @@ FACTS = [
     ('Cost', 'Free to use; hosted on free services'),
     ('Voice entry', 'English and Hindi; Chrome, Edge and Safari (the browser does the listening)'),
     ('Reminders', 'A notification and an optional email every morning until a renewal is marked Renewed'),
-    ('Not included yet', 'Changing an EMI plan, recurring bills, receipts, month-end email, mobile-number sign-in'),
+    ('Investments', 'Funds, shares, ETFs, deposits, gold, bonds, provident fund and crypto; SIPs, goals, XIRR and automatic prices'),
+    ('Not included yet', 'Month-end email, mobile-number sign-in'),
 ]
 
 
@@ -271,6 +307,45 @@ def take_shots():
         pg.locator('[data-currency]').select_option('USD'); time.sleep(4); shot('21_currency')
         pg.get_by_role('button', name='Cancel').click(); time.sleep(0.3)
         pg.get_by_role('button', name='System', exact=True).click()
+        # monthly bills, someone paid, receipts
+        go('pay'); pg.locator('[data-action="billNew"]').click()
+        pg.locator('[data-model="bills.form.description"]').fill('Society maintenance'); pg.locator('[data-model="bills.form.amount"]').fill('2500')
+        pg.locator('[data-model="bills.form.categoryId"]').select_option(label='Housing & Society'); pg.locator('[data-model="bills.form.day"]').select_option(str(min(28, datetime.date.today().day)))
+        pg.locator('[data-action="billSave"]').click(); time.sleep(0.6)
+        if pg.locator('.toast-close').count():
+            pg.locator('.toast-close').click()
+        pg.locator('.bill-row').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -260); time.sleep(0.5); shot('27_bills')
+        pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8); pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
+        pg.get_by_label('Amount').fill(''); pg.get_by_label('Description').fill(''); time.sleep(0.3)
+        pg.locator('.due-card').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('28_due')
+        pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8)
+        pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
+        if pg.get_by_label('Bought on EMI / finance').count() and pg.get_by_label('Bought on EMI / finance').is_checked():
+            pg.get_by_label('Bought on EMI / finance').uncheck(); time.sleep(0.3)
+        pg.get_by_label('Amount').fill('1800'); pg.get_by_label('Description').fill('Dinner, Alex paid')
+        pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
+        pg.locator('[data-model="add.paidBy"]').scroll_into_view_if_needed(); time.sleep(0.4); shot('29_paid_by')
+        pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
+        pg.locator('.receipts').scroll_into_view_if_needed(); pg.mouse.wheel(0, 120); time.sleep(0.4); shot('30_receipts')
+        # follow-up and WhatsApp
+        go('people'); time.sleep(0.4)
+        if not pg.locator('input[data-person-field="phone"]').count():
+            pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.4)
+        ph = pg.locator('input[data-person-field="phone"]').first; ph.fill('9876543210'); ph.blur(); time.sleep(0.4)
+        fu = pg.locator('input[data-person-field="followUp"]').first; fu.fill(datetime.date.today().isoformat()); fu.blur(); time.sleep(0.6)
+        pg.locator('input[data-person-field="followNote"]').first.fill('Said he will pay after salary'); pg.locator('input[data-person-field="followNote"]').first.blur(); time.sleep(0.5)
+        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.3); shot('26_people_follow')
+        # investments with the sample portfolio
+        go('invest', 1.2); pg.locator('[data-action="invSamples"]').click(); time.sleep(1)
+        if pg.locator('.toast-close').count():
+            pg.locator('.toast-close').click()
+        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.4); shot('31_invest')
+        pg.locator('[data-action="invOpen"]', has_text='Flexi Cap').click(); time.sleep(0.5)
+        pg.locator('.inv-row.open').scroll_into_view_if_needed(); pg.mouse.wheel(0, -200); time.sleep(0.4); shot('32_invest_open')
+        pg.evaluate('window.scrollTo(0, 0)')
+        for tab, name in (('sips', '33_sips'), ('goals', '34_goals'), ('insights', '35_invest_insights')):
+            pg.locator(f'[data-action="invTab"][data-tab="{tab}"]').click(); time.sleep(0.6); shot(name)
+        pg.locator('[data-action="invTab"][data-tab="holdings"]').click(); time.sleep(0.3)
         state = ctx.storage_state()
         ctx.close()
 

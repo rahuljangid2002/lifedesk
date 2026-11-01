@@ -24,7 +24,7 @@ FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 VOICE, RATE = 'Samantha', '178'  # American English, female
 W, H = 1440, 900
 MW, MH, MSCALE = 432, 768, 2.5  # phone viewport (9:16); x 2.5 = 1080 x 1920
-URL = 'http://localhost:8765/'
+URL = 'http://127.0.0.1:8765/'
 DEMO = URL + '?demo=1'
 MARK = {}
 
@@ -154,8 +154,8 @@ def s_hub(page):
     page.locator('a.tool').first.hover()
     time.sleep(2.5)
     tap(page, page.locator('a.tool').first, 1.2)
-    caption(page, 'Home: this month at a glance')
-    time.sleep(3.5)
+    caption(page, 'Home: income, expense, invested, total money out and card owed')
+    time.sleep(4.5)
     scroll(page, 330)
     caption(page, 'Net worth: balance, money owed to you and assets, less loans')
     time.sleep(4)
@@ -225,7 +225,13 @@ def s_pay(page):
     tap(page, page.get_by_role('button', name='Pay', exact=True), 2)
     scroll(page, 420)
     caption(page, 'Paid recently')
-    time.sleep(3)
+    time.sleep(2.5)
+    nav(page, 'people', 1.2)
+    tap(page, page.get_by_role('button', name='Loans', exact=True), 1.2)
+    tap(page, page.get_by_role('button', name='Edit plan').first, 1.2)
+    caption(page, 'Edit plan: change the EMI, months or first date of a loan')
+    time.sleep(3.5)
+    tap(page, page.get_by_role('button', name='Cancel'), 0.8)
 
 
 def s_daily(page):
@@ -258,7 +264,11 @@ def s_budget(page):
     box.evaluate('el => el.blur()')
     caption(page, 'Change an amount: a bar offers to save')
     time.sleep(2.5)
-    tap(page, page.locator('.savebar').get_by_role('button', name='Save budget'), 2.5)
+    tap(page, page.locator('.savebar').get_by_role('button', name='Save budget'), 1.5)
+    alert = page.locator('[data-setting="budgetAlert"]')
+    alert.scroll_into_view_if_needed(); alert.hover()
+    caption(page, 'Budget alerts: a message when a category reaches 80, 90 or 100%')
+    time.sleep(3.5)
 
 
 def s_dash(page):
@@ -293,7 +303,7 @@ def s_dash(page):
 
 def s_reports(page):
     start(page, DEMO + '#reports')
-    caption(page, 'Reports: 18 tables with totals')
+    caption(page, 'Reports: 28 tables with totals')
     time.sleep(3.5)
     page.locator('[data-model="reports.id"]').hover(); time.sleep(0.4)
     page.locator('[data-model="reports.id"]').select_option('spend-by-category')
@@ -319,6 +329,18 @@ def s_people(page):
     box = page.locator('.person .amount input')
     box.click(); page.keyboard.press('Meta+A'); page.keyboard.type('1000', delay=150)
     tap(page, page.locator('.person .form').get_by_role('button', name='Save'), 2.5)
+    phone = page.locator('input[data-person-field="phone"]').first
+    phone.scroll_into_view_if_needed(); phone.click(); page.keyboard.press('Meta+A'); page.keyboard.type('9876543210', delay=60); phone.evaluate('el => el.blur()')
+    time.sleep(0.8)
+    follow = page.locator('input[data-person-field="followUp"]').first
+    follow.scroll_into_view_if_needed(); follow.hover()
+    caption(page, 'A follow-up date, and a reminder on WhatsApp')
+    time.sleep(2)
+    wa = page.get_by_role('button', name='Remind on WhatsApp')
+    if wa.count():
+        wa.first.scroll_into_view_if_needed(); wa.first.hover()
+    time.sleep(3)
+    page.evaluate('window.scrollTo({ top: 0, behavior: "smooth" })'); time.sleep(0.8)
     tap(page, page.get_by_role('button', name='I owe', exact=True), 2.5)
 
 
@@ -410,6 +432,84 @@ def s_renew(page):
     time.sleep(5)
 
 
+def s_invest(page):
+    start(page, DEMO + '#invest')
+    if page.locator('[data-action="invSamples"]', has_text='Try with samples').count():
+        tap(page, page.locator('[data-action="invSamples"]'), 1.5)
+    page.evaluate('window.scrollTo(0, 0)')
+    caption(page, 'Investments: funds, shares, deposits, gold, provident fund and crypto')
+    time.sleep(4)
+    page.locator('.hero .stat').last.hover()
+    caption(page, 'Current value, invested, gain, today and XIRR')
+    time.sleep(3)
+    tap(page, page.locator('[data-action="invOpen"]').first, 1.2)
+    caption(page, 'Open one: buy more, sell, dividends, SIPs, price alerts, every transaction')
+    time.sleep(4.5)
+    tap(page, page.locator('[data-action="invTab"][data-tab="sips"]'), 1.2)
+    caption(page, 'SIPs: recorded on their day, with a yearly step-up')
+    time.sleep(3.5)
+    tap(page, page.locator('[data-action="invTab"][data-tab="goals"]'), 1.2)
+    caption(page, 'Goals: how far along, and what to put in each month')
+    time.sleep(3.5)
+    tap(page, page.locator('[data-action="invTab"][data-tab="insights"]'), 1.2)
+    caption(page, 'Insights: by type, value by month, and gains by year')
+    time.sleep(2.5)
+    scroll(page, 500)
+    time.sleep(2)
+    page.evaluate('window.scrollTo({ top: 0, behavior: "smooth" })'); time.sleep(0.8)
+    tap(page, page.locator('[data-action="invTab"][data-tab="holdings"]'), 0.8)
+    tap(page, page.locator('[data-action="invNew"]'), 1)
+    page.locator('[data-model="invest.form.type"]').select_option('Stock')
+    caption(page, 'Add one: search the share, and today\'s price is filled in')
+    q = page.locator('[data-model="invest.search.q"]')
+    q.click(); q.type('reliance', delay=90)
+    tap(page, page.locator('[data-action="invSearch"]'), 0.5)
+    page.wait_for_selector('.results .result', timeout=40000)
+    time.sleep(1.2)
+    tap(page, page.locator('.results .result', has_text='NSE').first, 0.5)
+    page.wait_for_function("() => (document.querySelector('[data-model=\"invest.form.price\"]') || {}).value", timeout=40000)
+    caption(page, 'Buying now takes the money from your bank account')
+    page.locator('[data-model="invest.form.mode"]').hover()
+    time.sleep(3.5)
+    tap(page, page.locator('[data-action="invCancel"]').first, 1)
+
+
+def s_bills(page):
+    from datetime import date
+    start(page, DEMO + '#pay')
+    caption(page, 'Monthly bills: rent, society, insurance, recharge')
+    scroll(page, 700); time.sleep(1)
+    tap(page, page.locator('[data-action="billNew"]'), 1)
+    page.locator('[data-model="bills.form.description"]').type('Society maintenance', delay=55)
+    page.locator('[data-model="bills.form.amount"]').type('2500', delay=110)
+    page.locator('[data-model="bills.form.categoryId"]').select_option(label='Housing & Society')
+    page.locator('[data-model="bills.form.day"]').select_option(str(min(28, date.today().day)))
+    caption(page, 'Each with its day of the month')
+    time.sleep(2)
+    tap(page, page.locator('[data-action="billSave"]'), 1.5)
+    if page.locator('.toast-close').count():
+        page.locator('.toast-close').click()
+    page.evaluate('window.scrollTo({ top: 0, behavior: "smooth" })'); time.sleep(1)
+    caption(page, 'Due this month, on Add entry, Daily and Payments')
+    due = page.locator('.due-card').first
+    due.locator('.row', has_text='Society maintenance').scroll_into_view_if_needed(); due.locator('.row', has_text='Society maintenance').hover(); time.sleep(3)
+    tap(page, due.locator('.row', has_text='Society maintenance').get_by_role('button', name='Paid'), 2)
+    caption(page, 'Paid: it becomes an expense at once')
+    time.sleep(2)
+    if page.locator('.toast-close').count():
+        page.locator('.toast-close').click()
+    nav(page, 'add', 1.2)
+    page.get_by_label('Amount').click(); page.keyboard.type('1800', delay=110)
+    page.get_by_label('Description').click(); page.get_by_label('Description').type('Dinner, Alex paid', delay=55)
+    tap(page, page.locator('[data-action="setPaidBy"]'), 1)
+    caption(page, 'Someone paid for you: no account, it adds to what you owe them')
+    time.sleep(3)
+    tap(page, page.locator('[data-action="setPaidBy"]'), 0.6)
+    page.locator('.receipts').scroll_into_view_if_needed(); page.locator('.receipts').hover()
+    caption(page, 'Attach receipts: photos or PDFs, encrypted')
+    time.sleep(3.5)
+
+
 def s_outro(page):
     start(page, card('outro', 'LifeDesk', 'All your money, in one place. More tools on the way.',
                      ['rahuljangid2002.github.io/lifedesk', 'Add to Home screen on your phone', 'Encrypted: only you can read your data']), 0.6)
@@ -419,16 +519,18 @@ def s_outro(page):
 SCENES = [
     ('title', s_title, 'card', "This is LifeDesk: one login for your everyday tools. The first tool is Account Management, a personal finance app that runs in any browser, on a phone or a desktop, in any currency. Everything in this demo is made-up sample data."),
     ('login', s_login, 'login', "You sign in with an email and password, or with Google. A new account confirms its email with a six digit code. Then you choose a data passphrase. Your data is encrypted on your own device before it is saved, so nobody else can read it, not even the people who run LifeDesk. You also get a recovery code, shown once, in case you forget the passphrase."),
-    ('hub', s_hub, 'app', "After signing in, you land on All tools. There are two tools: Account Management, and Renewal reminders. The home screen shows this month's income, expense and net balance. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
+    ('hub', s_hub, 'app', "After signing in, you land on All tools. There are two tools: Account Management, and Renewal reminders. The home screen shows this month's income, expense and net balance, what you invested, your spending plus investing, the total money out, and what your cards owe. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
     ('add', s_add, 'app', "Add Entry handles eight kinds of entry in one form. Type the amount and a description, and the category is filled in for you, from keywords and from what you chose before. Pick the account, and save. Every recent entry has a pencil, so a mistake can be corrected, or deleted, and all balances follow."),
     ('voice', s_voice, 'voice', "You can also speak an entry, in English or Hindi. Say several entries in one sentence. LifeDesk shows what it understood, asks for anything that is missing, and saves nothing until you confirm. You can change an entry first, and undo it after saving. Voice entry works in Chrome, Edge and Safari."),
+    ('bills', s_bills, 'app', "Monthly bills, like rent, society or a recharge, are added once with their day of the month. Each month they come up in Due this month, on Add Entry, Daily and Payments, and Home shows a notice. Press Paid, and it becomes an expense. When someone else pays for you, choose Someone paid: no account is used, and it adds to what you owe them. And any entry can carry receipts, photos or P D Fs, encrypted like everything else."),
+    ('invest', s_invest, 'app', "Investments tracks mutual funds, shares, E T Fs, fixed deposits, gold, provident fund and crypto. At the top: current value, what you invested, your gain, today's change and your X I R R. Open a holding to buy more, sell, record a dividend or start a S I P. S I Ps are recorded on their day, with a yearly step-up. Goals show how far along you are, and what to put in each month. Insights split it by type, show the value month by month, and the gains of each year. To add one, search for the share or fund, and today's price is filled in. Buying now takes the money from your bank account."),
     ('emi', s_emi, 'app', "When you buy something valuable, choose Asset. If you bought it on E M I, tick the box and enter the E M I and the number of months. The interest rate is worked out as you type. Saving creates the asset and its loan. My assets then shows what each thing cost, what it is worth, the loan left, and the interest paid and still to pay."),
-    ('pay', s_pay, 'app', "The Payments screen puts every E M I and credit card bill in one place. Paying an E M I records it as an expense. A card bill can be paid in full, or in part, and everything paid is listed below."),
+    ('pay', s_pay, 'app', "The Payments screen puts every E M I and credit card bill in one place. Paying an E M I records it as an expense. A card bill can be paid in full, or in part, and everything paid is listed below. And if a loan changes, Edit plan updates its E M I, number of months or first date."),
     ('daily', s_daily, 'app', "Daily Expenses lists every entry date by date, with the total for each day, the average per day and the highest day. You can filter by category, account or text, or switch between spending, income and all entries."),
-    ('budget', s_budget, 'app', "The Budget screen has one row for each category, with the largest first, showing what is spent and what is left. See entries opens the expenses behind a category. When you change an amount, a bar offers to save it."),
+    ('budget', s_budget, 'app', "The Budget screen has one row for each category, with the largest first, showing what is spent and what is left. See entries opens the expenses behind a category. When you change an amount, a bar offers to save it. Budget alerts tell you when a category reaches the level you choose."),
     ('dash', s_dash, 'app', "Dashboards turn the entries into pictures. The monthly dashboard compares income, expense and savings with last month, and shows spend by category, budget against actual, and spend for each day. The yearly dashboard shows income against expense, and the net balance trend. Balances shows every account, card and person. Loans and assets shows what is still owed, and how much of it is interest."),
-    ('reports', s_reports, 'app', "There are eighteen reports. Choose a report and a period, such as last month or the whole year. Each report is a table with totals, and it can be downloaded as a file that opens in any spreadsheet."),
-    ('people', s_people, 'app', "People and Loans shows who owes you, and whom you owe. Open a person to record money returned, or lent again, in one step, and to see the full history."),
+    ('reports', s_reports, 'app', "There are twenty eight reports. Choose a report and a period, such as last month or the whole year. Each report is a table with totals, and it can be downloaded as a file that opens in any spreadsheet."),
+    ('people', s_people, 'app', "People and Loans shows who owes you, and whom you owe. Open a person to record money returned, or lent again, in one step, and to see the full history. Set a follow-up date, and send a reminder on WhatsApp with the amount filled in."),
     ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance."),
     ('renew', s_renew, 'app', "Renewal reminders keeps insurance, subscriptions, documents and bills in one list, grouped into overdue, due soon and later. Press Renewed and it moves to its next date. With notifications turned on, you get a reminder on your phone, and by email if you like, every morning until it is renewed."),
     ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You can change your currency, and either convert every amount at today's exchange rate, or keep the numbers as they are. You can also add categories, download a backup, and load or remove the sample data."),

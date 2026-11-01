@@ -4,6 +4,7 @@
     offline     working without internet (opens with a punch line)
     voice       speaking an entry (opens with a punch line)
     reminders   Renewal reminders, a complete walkthrough (opens with a punch line)
+    invest      Investments: funds, shares, SIPs, goals and insights (opens with a punch line)
 Each goes to its own folder under docs/LinkedIn/.
 
     tools/serve_dev.py                                              (serves 4-Web-App on 127.0.0.1:8765)
@@ -435,9 +436,121 @@ REMINDERS = [
     ('r_outro', r_outro, 'card', "Add your first reminder today. It is free, and the link is in the comments."),
 ]
 
+
+# ================= video: Investments =================
+def samples(page):
+    """The made-up portfolio of the Investments screen (it writes nothing to the ledger)."""
+    btn = page.locator('[data-action="invSamples"]', has_text='Try with samples')
+    if btn.count():
+        btn.click(); w(0.6)
+    if page.locator('.toast-close').count():
+        page.locator('.toast-close').click()
+    page.evaluate('window.scrollTo(0, 0)'); w(0.3)
+
+
+def i_hook(page):
+    R.start(page, punch('i_hook', [('Funds in one app.', 'mid', 0.3), ('Shares in another.', 'mid', 1.0), ('FD in the bank.', 'mid', 1.7), ('See it all in one place.', 'accent', 2.8)]), 0.3)
+    time.sleep(6.4)
+
+
+def i_problem(page):
+    R.start(page, punch('i_problem', [('Is your money', 'big', 0.3), ('actually growing?', 'accent', 1.0), ('Most of us cannot say, because it is spread everywhere.', 'small', 2.6)]), 0.3)
+    time.sleep(6.2)
+
+
+def i_overview(page):
+    R.start(page, R.DEMO + '#invest'); slow(page); samples(page)
+    R.caption(page, 'Every investment, on one screen')
+    w(2.2)
+    page.locator('.hero .stat').nth(2).hover(); w(1.2)
+    R.caption(page, 'Value, gain, today, and your real return (XIRR)')
+    page.locator('.hero .stat').last.hover(); w(1.8)
+    R.caption(page, 'Funds, shares, FDs, PF, gold and crypto')
+    glide(page, 760, 2.4); w(0.6); glide(page, -760, 1.2); w(0.3)
+    tap(page, page.locator('[data-action="invOpen"]', has_text='Flexi Cap'), 1.4)
+    R.caption(page, 'Open one: buy more, sell, dividend, start a SIP')
+    w(2.4)
+    glide(page, 460, 2.0); w(1.6)
+    R.caption(page, 'Every transaction, with its units and price')
+    glide(page, 420, 1.8); w(1.8)
+
+
+def i_add(page):
+    R.start(page, R.DEMO + '#invest'); slow(page); samples(page)
+    R.caption(page, 'Bought a share? Search it')
+    tap(page, page.locator('[data-action="invNew"]'), 1.0)
+    page.locator('[data-model="invest.form.type"]').select_option('Stock'); w(0.6)
+    q = page.locator('[data-model="invest.search.q"]')
+    q.click(); q.type('reliance', delay=90 * SLOW)
+    tap(page, page.locator('[data-action="invSearch"]'), 0.3)
+    page.wait_for_selector('.results .result', timeout=40000); w(1.0)
+    tap(page, page.locator('.results .result', has_text='NSE').first, 0.3)
+    page.wait_for_function("() => (document.querySelector('[data-model=\"invest.form.price\"]') || {}).value", timeout=40000)
+    R.caption(page, "Today's price is filled in for you")
+    w(1.8)
+    units = page.locator('[data-model="invest.form.first.units"]')
+    units.scroll_into_view_if_needed(); units.click(); units.type('10', delay=160 * SLOW)
+    R.caption(page, 'And the money comes out of your bank account')
+    page.locator('[data-model="invest.form.first.accountId"]').scroll_into_view_if_needed(); page.locator('[data-model="invest.form.first.accountId"]').hover(); w(2.6)
+    tap(page, page.get_by_role('button', name='Save', exact=True), 1.6)
+    R.caption(page, 'Saved. Your bank balance follows')
+    w(1.6)
+
+
+def i_sip(page):
+    R.start(page, R.DEMO + '#invest'); slow(page); samples(page)
+    R.caption(page, 'SIPs record themselves, on their day')
+    tap(page, page.locator('[data-action="invTab"][data-tab="sips"]'), 1.6)
+    page.locator('.sip-row').first.hover(); w(1.6)
+    R.caption(page, 'With a yearly step-up, skip, pause or stop')
+    w(1.4)
+    page.locator('.sip-row').first.get_by_role('button', name='Skip next').hover(); w(1.2)
+    R.caption(page, 'Goals: how far along, and what to add each month')
+    tap(page, page.locator('[data-action="invTab"][data-tab="goals"]'), 1.6)
+    page.locator('main.inv .card, main.inv section').filter(has_text='House down payment').first.hover(); w(2.4)
+
+
+def i_insights(page):
+    R.start(page, R.DEMO + '#invest'); slow(page); samples(page)
+    R.caption(page, 'Where your money is, at a glance')
+    tap(page, page.locator('[data-action="invTab"][data-tab="insights"]'), 1.4)
+    glide(page, 620, 2.2); w(0.8)
+    R.caption(page, 'Best performers, and what is coming up')
+    glide(page, 900, 2.4); w(1.0)
+
+
+def i_how(page):
+    R.start(page, steps_card('i_how', 'Start in 3 steps', ['Open <b style="all:unset;font-weight:800">Investments</b> from More', 'Tap “Add investment” and search the fund or share', 'Add your SIPs once. They record themselves'],
+                             'Try it first with sample investments: one tap, and one more to remove them.'), 0.4)
+    time.sleep(9.5)
+
+
+def i_trust(page):
+    R.start(page, punch('i_trust', [('Not an expense.', 'big', 0.3), ('Not forgotten.', 'accent', 1.1), ('Investing leaves your bank, but never counts as spending.', 'small', 2.6), ('Encrypted on your device. No broker login. No ads.', 'small', 3.4)]), 0.3)
+    time.sleep(9.4)
+
+
+def i_outro(page):
+    R.start(page, punch('i_outro', [('All your money.', 'big', 0.3), ('One place.', 'accent', 1.1), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+INVEST = [
+    ('i_hook', i_hook, 'card', "Funds in one app. Shares in another. A fixed deposit in the bank. Now see it all in one place."),
+    ('i_problem', i_problem, 'card', "Is your money actually growing? Most of us cannot say, because it is spread everywhere."),
+    ('i_overview', i_overview, 'app', "This is Investments, in LifeDesk. Every investment on one screen: what it is worth, what you put in, your gain, today's change, and your real yearly return, the X I R R. Mutual funds, shares, fixed deposits, provident fund, gold and crypto, all together. Open any one to buy more, sell, record a dividend, or start a S I P."),
+    ('i_add', i_add, 'app', "Adding one is quick. Search for the share or the fund, and today's price is filled in for you. Enter how many you bought. The money comes out of your bank account, so your balance stays right, without a second entry."),
+    ('i_sip', i_sip, 'app', "S I Ps record themselves, on their day, at that day's price. Add a yearly step-up, or skip, pause and stop whenever you need to. And goals show how far along you are, and how much to add each month to get there."),
+    ('i_insights', i_insights, 'app', "Insights show where your money is: by asset class, by type and by platform. Your value month by month, your best performers, and what is coming up next."),
+    ('i_how', i_how, 'card', "To start: open Investments from the More menu. Tap add investment, and search for your fund or share. Add your S I Ps once, and they record themselves."),
+    ('i_trust', i_trust, 'card', "Investing leaves your bank account, but it is never counted as spending. Everything is encrypted on your own device. No broker login, and no ads."),
+    ('i_outro', i_outro, 'card', "All your money, in one place. LifeDesk is free, and the link is in the comments."),
+]
+
 # name -> (scenes, file title, folder under docs/LinkedIn)
 VIDEOS = {'ui': (DESIGN, 'LifeDesk - New UI', '1 - New UI'), 'offline': (OFFLINE, 'LifeDesk - Offline Mode', '2 - Offline mode'),
-          'voice': (VOICE, 'LifeDesk - Voice Entry', '3 - Voice entry'), 'reminders': (REMINDERS, 'LifeDesk - Renewal Reminders', '4 - Renewal Reminders')}
+          'voice': (VOICE, 'LifeDesk - Voice Entry', '3 - Voice entry'), 'reminders': (REMINDERS, 'LifeDesk - Renewal Reminders', '4 - Renewal Reminders'),
+          'invest': (INVEST, 'LifeDesk - Investments', '5 - Investments')}
 
 
 def main():
