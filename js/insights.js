@@ -4,6 +4,7 @@ import * as L from './logic.js';
 import * as S from './store.js';
 import * as R from './reports.js';
 import { columns, hbars, line, meters } from './charts.js';
+import { cashFlow, portfolio } from './invest.js';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -167,7 +168,37 @@ function loansAssets(st, h) {
     };
 }
 
-const TABS = [['monthly', 'Monthly', monthly], ['yearly', 'Yearly', yearly], ['balances', 'Balances', balances], ['loans', 'Loans & assets', loansAssets]];
+function investments(st, h) {
+    const today = h.today();
+    const sz = size();
+    const pf = portfolio(S.data, today, (d) => R.yearOf(d, yearStart()).label);
+    const months = Array.from({ length: 12 }, (_, i) => L.addMonths(L.monthKey(today), i - 11));
+    const putIn = (k) => (S.data.invTxns || []).filter((t) => t.status !== 'pending' && t.kind !== 'opening' && L.monthKey(t.date) === k).reduce((s, t) => { const f = cashFlow(t); return s + (f !== null && f < 0 ? -f : 0); }, 0);
+    const tableOf = (id) => table(R.REPORTS.find((r) => r.id === id).build(S.data, { today, yearStart: yearStart() }));
+    return {
+        hero: `<h1>Investments</h1>`,
+        body: `<div class="kpis">
+                ${kpi('Current value', L.money(pf.value))}
+                ${kpi('Invested', L.money(pf.invested))}
+                ${kpi('Gain', `${pf.gain >= 0 ? '+' : ''}${L.money(pf.gain)} (${pf.gainPct.toFixed(1)}%)`)}
+                ${kpi('XIRR', pf.xirr === null ? '–' : `${pf.xirr.toFixed(1)}%`)}
+                ${kpi('SIPs a month', L.money(pf.sipPerMonth))}
+                ${kpi('Total gain incl. sold', L.money(pf.totalGain))}
+            </div>
+            <div class="cards two">
+                ${card('Allocation', 'By asset class', hbars(pf.byClass.map((x) => ({ label: `${x.label} · ${x.pct}%`, value: x.value })), L.money, 'No investments yet.'))}
+                ${card('By type', 'What they are worth now', hbars(pf.byType.map((x) => ({ label: x.label, value: x.value })), L.money, 'No investments yet.'))}
+                ${card('Put in by month', 'Buys, SIPs and charges, last 12 months', columns(months.map((k) => ({ short: L.monthLabel(k).slice(0, 3), full: L.monthLabel(k) })), [{ name: 'Put in', slot: 1, values: months.map(putIn) }], L.money, L.compact, sz.half, sz.h))}
+                ${card('Value against cost, by type', 'Gain or loss', pf.byType.length ? columns(pf.byType.map((x) => ({ short: x.label.slice(0, 12), full: x.label })), [{ name: 'Value', slot: 1, values: pf.byType.map((x) => x.value) }, { name: 'Cost', slot: 2, values: pf.byType.map((x) => x.invested) }], L.money, L.compact, sz.half, sz.h) : '<p class="empty">No investments yet.</p>')}
+                ${card('Holdings', 'Units, cost, value, gain and XIRR', tableOf('investment-holdings'), true)}
+                ${card('Gains by year', 'Realised gains, dividends and interest', tableOf('investment-gains'), true)}
+                ${card('SIPs', 'Amount, next instalment, invested so far', tableOf('investment-sips'), true)}
+                ${card('Goals', 'Target, progress and the monthly investment needed', tableOf('investment-goals'), true)}
+            </div>`
+    };
+}
+
+const TABS = [['monthly', 'Monthly', monthly], ['yearly', 'Yearly', yearly], ['balances', 'Balances', balances], ['loans', 'Loans & assets', loansAssets], ['investments', 'Investments', investments]];
 
 export function dashboards(st, h) {
     const tab = TABS.find((t) => t[0] === st.tab) || TABS[0];

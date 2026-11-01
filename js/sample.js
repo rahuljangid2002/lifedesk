@@ -268,7 +268,7 @@ export function buildSample(data, today, currency) {
 /** [collection, id] pairs of everything the sample created. */
 export function sampleDocs(data) {
     const out = [];
-    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets', 'reminders']) {
+    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals']) {
         for (const doc of data[c]) {
             if (isSample(doc)) {
                 out.push([c, doc.id]);

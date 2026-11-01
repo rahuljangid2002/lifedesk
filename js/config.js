@@ -35,3 +35,7 @@ export const loginMethods = {
 // The sender is backend/push-sender.gs (see backend/README.md). vapidKey: Firebase console → Project settings →
 // Cloud Messaging → Web Push certificates (a public key, not a secret); empty uses Firebase's default key.
 export const pushSettings = { enabled: true, vapidKey: '' };
+
+// Share, ETF and crypto prices on the Investments screen: the web address of the deployed price service
+// (backend/prices.gs, see backend/README.md). Empty: mutual fund NAVs still come automatically, other prices are typed in.
+export const pricesEndpoint = '';

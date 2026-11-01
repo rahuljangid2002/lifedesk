@@ -66,3 +66,15 @@ On iPhone and iPad, notifications work only after LifeDesk is added to the Home 
 
 Nothing to deploy: the timer (Triggers, clock icon) runs `sendDue` every hour. Words of the messages: `TEXT` at
 the top of the script. To stop all notifications: delete the trigger.
+
+## Share, ETF and crypto prices (backend/prices.gs) - optional
+
+Mutual fund NAVs (India, AMFI) come straight from mfapi.in. Yahoo Finance, which has share, ETF and crypto prices,
+does not answer browsers, so LifeDesk asks this small Apps Script instead. Without it, those prices are typed in.
+
+1. script.google.com → New project → name it "LifeDesk prices" → paste backend/prices.gs.
+2. Deploy → New deployment → Web app: Execute as **Me**, Who has access **Anyone** → Deploy → copy the /exec address.
+3. Paste it into js/config.js as `pricesEndpoint`, then publish the app.
+
+It reads only public market data, keeps nothing and needs no key. Test: open the /exec address with
+`?action=quote&symbol=AAPL&currency=INR` added; it answers with the price.

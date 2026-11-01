@@ -8,7 +8,10 @@ export const TYPES = {
     gotback: { label: 'Got Back', short: 'Got back', icon: 'gotback', sign: 1, hint: 'Someone returned money they owed you.' },
     borrowed: { label: 'Borrowed', short: 'Borrowed', icon: 'borrowed', sign: 1, hint: 'Money you took from someone and will pay back.' },
     repaid: { label: 'Repaid', short: 'Repaid', icon: 'repaid', sign: -1, hint: 'You paid back someone you owe.' },
-    asset: { label: 'Asset purchase', short: 'Asset', icon: 'asset', sign: -1, hint: 'Something valuable you bought. Added to My assets.' }
+    asset: { label: 'Asset purchase', short: 'Asset', icon: 'asset', sign: -1, hint: 'Something valuable you bought. Added to My assets.' },
+    // written by Investments (not chosen on Add Entry): money into an investment, and money back from one
+    invest: { label: 'Investment', short: 'Invested', icon: 'chart', sign: -1, hint: 'Money put into an investment (not spending).', auto: true },
+    invreturn: { label: 'Investment return', short: 'Inv. return', icon: 'chart', sign: 1, hint: 'Money back from a sale or maturity (not income).', auto: true }
 };
 export const ASSET_TYPES = ['Vehicle', 'Electronics', 'Property', 'Gold & Jewellery', 'Furniture & Appliances', 'Investment', 'Other'];
 export const PERSON_TYPES = ['lent', 'gotback', 'borrowed', 'repaid'];

@@ -1,4 +1,5 @@
 // Figures for the dashboards and reports. Pure calculations over the user's data: no screen code here.
+import { TXN_KINDS, goalRows, portfolio } from './invest.js';
 import { TYPES, accountBalance, addMonths, budgetRows, isoDate, loanStatus, monthEnd, monthKey, monthLabel, monthSummary, personOutstanding, totals } from './logic.js';
 
 const num = (v) => Number(v) || 0;
@@ -115,12 +116,13 @@ export function assetRows(data, today) {
     });
 }
 
-/** Net worth = net balance + money owed to you + what your assets are worth - loan principal still owed. */
+/** Net worth = net balance + money owed to you + what your assets and investments are worth - loan principal still owed. */
 export function netWorth(data, today) {
     const t = totals(data);
     const assets = assetRows(data, today).filter((a) => a.status !== 'Sold').reduce((s, a) => s + a.value, 0);
+    const investments = (data.investments || []).length ? portfolio(data, today || isoDate()).value : 0;
     const loans = loanRows(data, today).reduce((s, l) => s + l.principalLeft, 0);
-    return { net: t.net, toReceive: t.toReceive, assets, loans, worth: Math.round((t.net + t.toReceive + assets - loans) * 100) / 100 };
+    return { net: t.net, toReceive: t.toReceive, assets, investments, loans, worth: Math.round((t.net + t.toReceive + assets + investments - loans) * 100) / 100 };
 }
 
 // ---------- reports ----------
@@ -279,6 +281,68 @@ export const REPORTS = [
             const rows = data.entries.filter((e) => e.loanId && inRange(e, p.from, p.to)).sort((a, b) => (a.date < b.date ? 1 : -1))
                 .map((e) => [e.date, nameOf(data.loans || [], e.loanId, 'Deleted loan'), e.description, nameOf(data.accounts, e.accountId, ''), num(e.amount)]);
             return { columns: [{ label: 'Date', kind: 'date' }, text('Loan'), text('Description'), text('Account'), money('Amount')], rows, total: ['Total', '', '', '', sumCol(rows, 4)] };
+        }
+    },
+    {
+        id: 'investment-holdings', name: 'Investment holdings', period: 'none', about: 'Every investment you hold: units, cost, value, gain and XIRR, grouped by type.',
+        build(data, p) {
+            const pf = portfolio(data, p.today, (d) => yearOf(d, p.yearStart || 4).label);
+            const rows = pf.rows.filter((r) => r.status === 'Active').sort((a, b) => a.type.localeCompare(b.type) || b.value - a.value)
+                .map((r) => [r.name, r.type, r.assetClass, r.platform || '', r.units, r.avgCost, r.price ?? null, r.invested, r.value, r.gain, r.gainPct === null ? null : r.gainPct / 100, r.income, r.xirr === null ? null : r.xirr / 100]);
+            return { columns: [text('Investment'), text('Type'), text('Asset class'), text('Platform'), { label: 'Units', kind: 'number' }, money('Average cost'), money('Price'), money('Invested'), money('Value'), money('Gain'), { label: 'Gain %', kind: 'rate' }, money('Dividends & interest'), { label: 'XIRR', kind: 'rate' }],
+                rows, total: ['Total', '', '', '', null, null, null, sumCol(rows, 7), sumCol(rows, 8), sumCol(rows, 9), null, sumCol(rows, 11), pf.xirr === null ? null : pf.xirr / 100] };
+        }
+    },
+    {
+        id: 'investment-allocation', name: 'Investment allocation', period: 'none', about: 'Value, cost and share of the portfolio by asset class, type and platform.',
+        build(data, p) {
+            const pf = portfolio(data, p.today);
+            const block = (by, list) => list.map((x) => [by, x.label, x.invested, x.value, x.value - x.invested, x.pct / 100]);
+            const rows = [...block('Asset class', pf.byClass), ...block('Type', pf.byType), ...block('Platform', pf.byPlatform)];
+            return { columns: [text('By'), text('Group'), money('Invested'), money('Value'), money('Gain'), { label: 'Share', kind: 'rate' }], rows, total: null };
+        }
+    },
+    {
+        id: 'investment-transactions', name: 'Investment transactions', period: 'range', about: 'Every buy, SIP instalment, sale, dividend and maturity in the period, with realised gains.',
+        build(data, p) {
+            const pf = portfolio(data, p.today);
+            const byId = Object.fromEntries(pf.rows.map((r) => [r.id, r]));
+            const rows = (data.invTxns || []).filter((t) => t.status !== 'pending' && inRange(t, p.from, p.to)).sort((a, b) => (a.date < b.date ? 1 : -1))
+                .map((t) => {
+                    const r = byId[t.investmentId] || {};
+                    const g = r.gains ? r.gains[t.id] : null;
+                    return [t.date, r.name || 'Deleted investment', TXN_KINDS[t.kind] || t.kind, t.units ?? null, t.price ?? null, num(t.amount), num(t.charges), nameOf(data.accounts, t.accountId, ''), g ? g.gain : null, g ? g.term : ''];
+                });
+            return { columns: [{ label: 'Date', kind: 'date' }, text('Investment'), text('Kind'), { label: 'Units', kind: 'number' }, money('Price'), money('Amount'), money('Charges'), text('Account'), money('Realised gain'), text('Term')],
+                rows, total: ['Total', '', '', null, null, null, sumCol(rows, 6), '', sumCol(rows, 8), ''] };
+        }
+    },
+    {
+        id: 'investment-gains', name: 'Investment gains by year', period: 'none', about: 'Money put in and taken out, short- and long-term realised gains, and dividends and interest for each year.',
+        build(data, p) {
+            const pf = portfolio(data, p.today, (d) => yearOf(d, p.yearStart || 4).label);
+            const rows = pf.years.map((y) => [y.year, y.invested, y.withdrawn, y.shortTerm, y.longTerm, y.income]);
+            return { columns: [text('Year'), money('Put in'), money('Taken out'), money('Short-term gain'), money('Long-term gain'), money('Dividends & interest')],
+                rows, total: ['Total', sumCol(rows, 1), sumCol(rows, 2), sumCol(rows, 3), sumCol(rows, 4), sumCol(rows, 5)] };
+        }
+    },
+    {
+        id: 'investment-sips', name: 'SIPs', period: 'none', about: 'Every SIP with its amount, next instalment, instalments done and total invested.',
+        build(data, p) {
+            const rows = (data.sips || []).map((s) => {
+                const done = (data.invTxns || []).filter((t) => t.sipId === s.id && t.status !== 'pending');
+                return [nameOf(data.investments || [], s.investmentId, ''), num(s.amount), s.frequency, s.status, s.nextDue || null, nameOf(data.accounts, s.accountId, ''), done.length, done.reduce((t, x) => t + num(x.amount) + num(x.charges), 0)];
+            }).sort((a, b) => (a[3] === b[3] ? 0 : a[3] === 'Active' ? -1 : 1));
+            return { columns: [text('Investment'), money('Instalment'), text('Frequency'), text('Status'), { label: 'Next', kind: 'date' }, text('Paid from'), { label: 'Done', kind: 'number' }, money('Invested')],
+                rows, total: ['Total', null, '', '', null, '', null, sumCol(rows, 7)] };
+        }
+    },
+    {
+        id: 'investment-goals', name: 'Investment goals', period: 'none', about: 'Each goal with its target, value so far, progress and the monthly investment needed.',
+        build(data, p) {
+            const pf = portfolio(data, p.today);
+            const rows = goalRows(data, pf.rows, p.today).map((g) => [g.name, num(g.target), g.targetDate || null, g.value, g.progress / 100, g.needed, g.sipPerMonth, g.onTrack ? 'On track' : 'Behind']);
+            return { columns: [text('Goal'), money('Target'), { label: 'By', kind: 'date' }, money('Value now'), { label: 'Progress', kind: 'rate' }, money('Needed a month'), money('SIPs a month'), text('Status')], rows, total: null };
         }
     },
     {

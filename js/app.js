@@ -10,6 +10,9 @@ import { currentReport, dashboards, reports } from './insights.js';
 import { netWorth, toCsv } from './reports.js';
 import { pushSettings as PUSH } from './config.js';
 import * as Voice from './voice.js';
+import { INV_STATE, investTool } from './investui.js';
+import { yearStart } from './insights.js';
+import { yearOf } from './reports.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -27,6 +30,7 @@ const state = {
     more: { addingCategory: false, busy: false, change: null },
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false, leaving: [], leavingAt: 0, arrived: [], arrivedAt: 0 },
+    invest: INV_STATE(),
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
     voice: { open: false, lang: 'en', phase: 'idle', interim: '', note: '', log: [], review: null },
@@ -396,7 +400,7 @@ function welcome() {
 // Back links return to the screen the user came from. trail = the screens visited, in order; going back pops it.
 const trail = [];
 const SCREEN_NAMES = { hub: 'LifeDesk', home: 'Home', menu: 'More', add: 'Add entry', daily: 'Daily', budget: 'Budget', pay: 'Payments', insights: 'Dashboards', reports: 'Reports',
-    people: 'People & Loans', accounts: 'My accounts', assets: 'My assets', renewals: 'Renewal reminders', more: 'Account & backup' };
+    people: 'People & Loans', accounts: 'My accounts', assets: 'My assets', invest: 'Investments', renewals: 'Renewal reminders', more: 'Account & backup' };
 /** The link at the top of an inner screen: to the previous screen when there is one, otherwise to `fallback`. */
 function backLink(fallback) {
     const prev = trail.length > 1 ? trail[trail.length - 2] : null;
@@ -463,12 +467,15 @@ function home() {
             <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
             <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
             <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
+            <a class="shortcut" href="#invest">${icon('chart')}<span>Investments</span></a>
             <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
         </div>
         ${dueEmis().length ? `<a class="notice span" href="#pay">${dueEmis().length} EMI${dueEmis().length > 1 ? 's' : ''} due this month – tap to pay</a>` : ''}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
         ${(() => { const w = netWorth(S.data, today()); return `<a class="card link span worth" href="#insights"><div class="card-head"><span><small>Net worth</small><b class="big">${L.money(w.worth)}</b></span>
-            <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small><small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
+            <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small>${w.investments ? `<small>+ investments ${L.money(w.investments)}</small>` : ''}<small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
+        ${(() => { const p = invest.port(); return `<a class="card link span" href="#invest"><div class="card-head"><h2>Investments</h2>${p.pending.length ? '<span class="pill warn">Confirm SIP</span>' : p.rows.length ? `<b>${L.money(p.value)}</b>` : icon('chevRight')}</div>
+            ${p.rows.length ? `<div class="lines"><small class="${p.gain < 0 ? 'out' : 'in'}">Gain ${p.gain >= 0 ? '+' : ''}${L.money(p.gain)} (${p.gainPct.toFixed(1)}%)${p.dayChange ? ` · today ${p.dayChange > 0 ? '+' : ''}${L.money(p.dayChange)}` : ''}</small><small>${p.sipPerMonth ? `SIPs ${L.money(p.sipPerMonth)} a month` : 'No SIP running'}${p.pending.length ? ` · ${p.pending.length} to confirm` : ''}</small></div>` : '<small>Mutual funds, SIPs, shares, deposits, gold – tap to add</small>'}</a>`; })()}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
         <div class="stack">
             <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span class="pill">${planned ? `${pct}%` : 'Not set'}</span></div>
@@ -490,6 +497,7 @@ function addEntry() {
     const m = L.monthSummary(S.data, thisMonth());
     const t = L.totals(S.data);
     const tiles = Object.entries(L.TYPES)
+        .filter(([, v]) => !v.auto)
         .map(([k, v]) => `<button class="tile-btn t-${k} ${f.type === k ? 'on' : ''}" data-action="setType" data-type="${k}" title="${v.label}" aria-pressed="${f.type === k}">${icon(v.icon)}<span>${v.short}</span></button>`)
         .join('');
     const chips = (selected, action, skip) =>
@@ -1092,7 +1100,7 @@ function currencyChange(from) {
     return `<div class="form"><b>Change from ${from} to ${c.to}</b>
         <label>Exchange rate: 1 ${from} = how many ${c.to}?<input type="number" inputmode="decimal" min="0" step="any" value="${esc(c.rate)}" data-model="more.change.rate" placeholder="${c.loading ? 'getting today\'s rate…' : 'type the rate'}"></label>
         <small>${c.loading ? 'Getting today\'s rate…' : c.source ? `Today's rate from ${esc(c.source)}. You can change it.` : 'Could not get today\'s rate. Type it to convert.'}</small>
-        <small><b>Convert amounts</b> multiplies every amount you have saved (entries, account opening balances and limits, people, budgets, loans) by this rate, once. <b>Keep the numbers</b> only changes the symbol.</small>
+        <small><b>Convert amounts</b> multiplies every amount you have saved (entries, account opening balances and limits, people, budgets, loans, investments) by this rate, once. <b>Keep the numbers</b> only changes the symbol.</small>
         <label class="check"><input type="checkbox" data-action="currencyBackup" ${c.backup ? 'checked' : ''}> Download a backup file before converting (recommended)</label>
         <div class="split wrap"><button class="btn primary" data-action="currencyConvert" ${busy}>Convert amounts</button><button class="btn" data-action="currencyKeep" ${busy}>Keep the numbers</button><button class="btn ghost" data-action="currencyCancel" ${busy}>Cancel</button></div></div>`;
 }
@@ -1103,8 +1111,8 @@ function menu() {
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account Management</small><h1>More</h1></header>
     <main class="dash">
         <section class="card span"><div class="list inner flush">
-            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '18 tables with totals and CSV download')}
-            ${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
+            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '24 tables with totals and CSV download')}
+            ${link('invest', 'chart', 'Investments', 'Mutual funds, SIPs, shares, deposits, gold, goals')}${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
         </div></section>
         <section class="card"><div class="card-head"><h2>Categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
@@ -1143,9 +1151,20 @@ function more() {
     </main>`;
 }
 
+// Investments (js/investui.js): the screen and its actions, with the helpers it shares
+const invest = investTool({
+    get state() {
+        return state;
+    },
+    S, L, icon, esc, stat, toast, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today,
+    yearOf: (iso) => yearOf(iso, yearStart()).label
+});
+let investOpened = false; // the screen's opening work (due SIPs, prices) runs once each time it is opened
+let sipsChecked = false; // due SIP instalments are recorded once per visit, whichever screen is open
+
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow, back: () => backLink('menu') };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
@@ -1153,7 +1172,7 @@ const TAB_ROUTES = NAV.map(([route]) => route);
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Account Management', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
+    ['Account Management', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['invest', 'chart', 'Investments'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
     ['Renewals', [['renewals', 'bell', 'Renewal reminders']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
@@ -1232,6 +1251,10 @@ function render() {
     }
     markEntered();
     fillNavbar();
+    if (state.route === 'invest' && !investOpened) {
+        investOpened = true;
+        invest.onOpen();
+    }
 }
 // ---------- voice entry ----------
 // The browser listens and speaks (Web Speech API: no service is added by LifeDesk); js/voice.js turns the words into
@@ -2594,6 +2617,12 @@ const actions = {
         if (!e) {
             return;
         }
+        if (e.investmentId) {
+            toast('This entry belongs to an investment. Change or delete it on the Investments screen.', 'warn');
+            state.invest.tab = 'holdings';
+            state.invest.open = e.investmentId;
+            return go('invest');
+        }
         state.add = { ...blankEntry(), ...e, amount: String(e.amount), categoryTouched: true, newPerson: '', notes: e.notes || '', label: `${e.description} · ${L.money(e.amount)} · ${shortDate(e.date)}`, back: state.route === 'add' ? null : state.route };
         if (state.route === 'add') {
             render();
@@ -2914,6 +2943,10 @@ const actions = {
         S.data.loans.forEach((l) => pairs.push(['loans', { ...l, price: x(l.price), downPayment: x(l.downPayment), financed: x(l.financed), emi: x(l.emi) }]));
         S.data.assets.forEach((a) => pairs.push(['assets', { ...a, price: x(a.price), value: x(a.value) }]));
         S.data.reminders.forEach((r) => pairs.push(['reminders', { ...r, amount: x(r.amount) }]));
+        S.data.investments.forEach((i) => pairs.push(['investments', { ...i, price: x(i.price), prevPrice: x(i.prevPrice), manualValue: x(i.manualValue), alertAbove: x(i.alertAbove), alertBelow: x(i.alertBelow) }]));
+        S.data.invTxns.forEach((t) => pairs.push(['invTxns', { ...t, price: x(t.price), amount: x(t.amount), charges: x(t.charges) }]));
+        S.data.sips.forEach((p) => pairs.push(['sips', { ...p, amount: x(p.amount), stepUpAmount: x(p.stepUpAmount) }]));
+        S.data.goals.forEach((g) => pairs.push(['goals', { ...g, target: x(g.target) }]));
         pairs.push(['settings', { ...(S.prefs() || { id: 'prefs' }), currency: to }]);
         state.more.busy = true;
         render();
@@ -3025,10 +3058,15 @@ function trackRoute() {
 }
 
 // ---------- events ----------
+Object.assign(actions, invest.actions);
+
 function setPath(path, value) {
     const keys = path.split('.');
     let obj = state;
     for (const k of keys.slice(0, -1)) {
+        if (!obj[k] && obj === state.invest.pending) {
+            obj[k] = {}; // a pending SIP instalment's fields, typed before anything else was
+        }
         obj = obj[k];
         if (!obj) {
             return;
@@ -3321,6 +3359,7 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
     state.addMenu = false;
+    investOpened = false;
     if (state.voice.open) {
         // another screen was opened while the sheet was up: stop listening, the sheet does not follow
         voiceStop();
@@ -3364,6 +3403,10 @@ S.init((status) => {
         trail.push('hub');
     }
     state.status = status;
+    if (status === 'ready' && !sipsChecked) {
+        sipsChecked = true;
+        invest.recordDueSips().then((r) => (r.recorded || r.pending) && toast(`${r.recorded ? `${plural(r.recorded, 'SIP instalment')} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm on Investments` : ''}.`)).catch((e) => console.error(e));
+    }
     if (status === 'ready' && !S.isDemo) {
         if (pushFor !== S.user.uid) {
             pushFor = S.user.uid;

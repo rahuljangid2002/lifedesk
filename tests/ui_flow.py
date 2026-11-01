@@ -126,7 +126,7 @@ with sync_playwright() as p:
     check('bottom bar: Home, Daily, Add, Budget, More', [t.strip() for t in pg.locator('.tabbar a').all_inner_texts()] == ['Home', 'Daily', 'Add', 'Budget', 'More'], str(pg.locator('.tabbar a').all_inner_texts()))
     pg.locator('.tabbar a', has_text='More').click(); time.sleep(0.3)
     links = pg.locator('main .row b').all_inner_texts()
-    check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Payments', 'Dashboards', 'Reports', 'People & Loans', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))
+    check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Payments', 'Dashboards', 'Reports', 'Investments', 'People & Loans', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))
     pg.locator('main .row', has_text='My assets').click(); time.sleep(0.3)
     check('More → My assets opens it', pg.url.endswith('#assets'))
     pg.goto(URL + '#menu'); pg.get_by_role('button', name='＋ Add').click(); pg.locator('#nc-name').fill('Pets'); pg.locator('#nc-keys').fill('vet, pet food'); pg.get_by_role('button', name='Add category').click(); time.sleep(0.3)
@@ -284,7 +284,7 @@ with sync_playwright() as p:
         pg.locator('[data-model="reports.id"]').select_option(value); time.sleep(0.15)
         if pg.locator('.hero h1').count() != 1 or (pg.locator('table.report').count() == 0 and pg.locator('main .empty').count() == 0):
             broken.append(value)
-    check(f'reports: all {len(names)} open without an error', len(names) == 18 and not broken, str(broken))
+    check(f'reports: all {len(names)} open without an error', len(names) == 24 and not broken, str(broken))
     pg.locator('[data-model="reports.id"]').select_option('spend-by-category'); pg.locator('[data-model="reports.preset"]').select_option('last-month'); time.sleep(0.3)
     total = money(pg.locator('table.report tfoot td').nth(2).inner_text())
     check('report: spend by category for last month totals the month expense', total == round(spent_lm), f'{total} vs {spent_lm}')
