@@ -123,7 +123,7 @@ with sync_playwright() as p:
     pg.wait_for_selector('.tabbar')
     check('Account Management tile opens its home, named in the header', pg.url.endswith('#home') and pg.locator('.tabbar').count() == 1 and pg.locator('.hero .eyebrow').inner_text().lower() == 'account management', pg.url)
     # the bottom bar is the tool's own: its last tab is More (the tool's other screens), not the LifeDesk account page
-    check('bottom bar: Home, Daily, Add, Budget, More', [t.strip() for t in pg.locator('.tabbar a').all_inner_texts()] == ['Home', 'Daily', 'Add', 'Budget', 'More'], str(pg.locator('.tabbar a').all_inner_texts()))
+    check('bottom bar: a capsule with Home, Daily, Budget, More and the round + beside it', [t.strip() for t in pg.locator('.dock-pill a').all_inner_texts()] == ['Home', 'Daily', 'Budget', 'More'] and pg.locator('.tabbar a.add.fab').count() == 1, str(pg.locator('.tabbar a').all_inner_texts()))
     pg.locator('.tabbar a', has_text='More').click(); time.sleep(0.3)
     links = pg.locator('main .row b').all_inner_texts()
     check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Assistant', 'Payments', 'Dashboards', 'Reports', 'Investments', 'People & Loans', 'Trips', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))

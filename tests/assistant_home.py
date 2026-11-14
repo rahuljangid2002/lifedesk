@@ -121,7 +121,9 @@ with sync_playwright() as p:
     # ---------- phone: the + opens a sheet of quick actions ----------
     pg.set_viewport_size({'width': 390, 'height': 844}); pg.goto(URL + '#home'); time.sleep(1.2)
     pg.locator('.tabbar a.add').click(); time.sleep(0.7)
-    check('+: a bottom sheet of quick actions slides up', pg.locator('.add-menu .sheet-head', has_text='Quick actions').count() == 1 and pg.evaluate("Math.round(document.querySelector('.add-menu').getBoundingClientRect().bottom) === window.innerHeight"))
+    geo = pg.evaluate("(() => { const m = document.querySelector('.add-menu').getBoundingClientRect(), d = document.querySelector('.dock-pill').getBoundingClientRect(); return { bottom: m.bottom, top: m.top, dockTop: d.top, h: innerHeight }; })()")
+    check('+: a half-height card of quick actions grows above the dock', pg.locator('.add-menu .sheet-head', has_text='Quick actions').count() == 1 and geo['bottom'] <= geo['dockTop'] and (geo['bottom'] - geo['top']) <= geo['h'] * 0.52, json.dumps(geo))
+    check('+: the + turns into a close button', pg.locator('.tabbar a.add.fab.open').count() == 1)
     check('+: the page behind is tinted, blurred and pulled back', pg.locator('.app.sheet-open').count() == 1 and 'blur' in pg.evaluate("getComputedStyle(document.querySelector('.add-menu-back')).backdropFilter") and pg.evaluate("getComputedStyle(document.querySelector('.app > .shell')).transform") != 'none')
     check('+: speak, type, the sample trip, 8 kinds and 12 screens', pg.locator('.qa-main [role=menuitem]').count() == 3 and pg.locator('.qa-grid').first.locator('.qa').count() == 8 and pg.locator('.qa-grid').last.locator('.qa').count() == 12)
     check('+: the sheet scrolls', pg.locator('.sheet-body').evaluate('e => e.scrollHeight > e.clientHeight'))
