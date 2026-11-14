@@ -1510,9 +1510,10 @@ function render() {
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
         <div class="navbar" aria-hidden="true"></div>
         <div class="shell ${fresh}">${screen()}</div>
-        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => (r === 'add'
-            ? `<a href="#add" class="add ${state.route === r ? 'on' : ''} ${state.addMenu ? 'open' : ''}" data-action="addMenu" aria-haspopup="menu" aria-expanded="${!!state.addMenu}" title="Add an entry: tap to choose, hold to speak"><span>${icon(ic)}</span>${label}</a>`
-            : `<a href="#${r}" class="${state.route === r ? 'on' : ''}"><span>${icon(ic)}</span>${label}</a>`)).join('')}</nav>
+        ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar dock">
+            <div class="dock-pill">${NAV.filter(([r]) => r !== 'add').map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}"><span>${icon(ic)}</span>${label}</a>`).join('')}</div>
+            <a href="#add" class="add fab ${state.route === 'add' ? 'on' : ''} ${state.addMenu === true ? 'open' : ''}" data-action="addMenu" aria-haspopup="menu" aria-expanded="${state.addMenu === true}" title="Add an entry: tap to choose, hold to speak"><span>${icon('plus')}</span><b class="sr-only">Add</b></a>
+        </nav>
             ${state.addMenu ? addSheet() : ''}`}
     </div>${voiceSheet()}${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
     app.querySelectorAll('.chips').forEach((el, n) => {
