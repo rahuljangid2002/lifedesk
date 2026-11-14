@@ -32,7 +32,7 @@ with sync_playwright() as p:
     demo = lambda js: pg.evaluate(f"(() => {{ const s = JSON.parse(localStorage.getItem('lifedesk-demo')); return {js}; }})()")
 
     # ---------- pure rules ----------
-    rules = pg.evaluate("""import('/js/trips.js').then((T) => ({
+    rules = pg.evaluate("""import('./js/trips.js').then((T) => ({
         three: T.splitShares(1000, ['a', 'b', 'a', null], true),
         others: T.splitShares(100, ['a', 'b', 'c'], false),
         none: T.splitShares(100, [], false),

@@ -35,12 +35,12 @@ with sync_playwright() as p:
     demo = lambda js: pg.evaluate(f"(() => {{ const s = JSON.parse(localStorage.getItem('lifedesk-demo')); return {js}; }})()")
 
     # ---------- the rules on their own ----------
-    topics = pg.evaluate("""import('/js/assistant.js').then((A) => ['Give me a complete summary', 'What should I do this month?', 'Where is my money going?', 'Am I within budget?',
+    topics = pg.evaluate("""import('./js/assistant.js').then((A) => ['Give me a complete summary', 'What should I do this month?', 'Where is my money going?', 'Am I within budget?',
         'How much am I saving?', 'How is my net worth changing?', 'Are my EMIs too high?', 'Should I prepay loans or invest?', 'Which bills are due?', 'Who owes me money?',
         'Is my portfolio too risky?', 'Which investments are doing best and worst?', 'Am I investing enough?', 'What about tax on my gains?', 'hello'].map(A.topicOf))""")
     check('questions go to the right topic', topics == ['summary', 'todo', 'spending', 'budget', 'saving', 'networth', 'emi', 'loans', 'bills', 'people',
         'investments-risk', 'investments-performance', 'investments-enough', 'investments-tax', 'help'], json.dumps(topics))
-    empty = pg.evaluate("""Promise.all([import('/js/assistant.js'), import('/js/logic.js')]).then(([A, L]) => {
+    empty = pg.evaluate("""Promise.all([import('./js/assistant.js'), import('./js/logic.js')]).then(([A, L]) => {
         const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], loans: [], assets: [], reminders: [], investments: [], invTxns: [], sips: [], goals: [], bills: [], trips: [] };
         const r = A.checkup(data, L.isoDate(), {});
         return { areas: r.areas.length, score: r.score, keys: r.tips.map((t) => t.key) };
@@ -84,7 +84,7 @@ with sync_playwright() as p:
     pg.goto(URL + '#home'); time.sleep(1)
     check('Home: Money health tile with the same score', int(pg.locator('.as-home .as-ring b').inner_text()) == score and pg.locator('.as-home .as-ha').count() == 5)
     # ---------- Home: six-month averages ----------
-    avg = pg.evaluate("Promise.all([import('/js/logic.js')]).then(([L]) => { const s = JSON.parse(localStorage.getItem('lifedesk-demo')); return L.averages(s, L.monthKey(L.isoDate()), 6); })")
+    avg = pg.evaluate("Promise.all([import('./js/logic.js')]).then(([L]) => { const s = JSON.parse(localStorage.getItem('lifedesk-demo')); return L.averages(s, L.monthKey(L.isoDate()), 6); })")
     figs = pg.locator('.avg-figs b').all_inner_texts()
     check('averages: six completed months', avg['months'] == 6 and 'six months' in pg.locator('.avg-card h2').inner_text(), json.dumps(avg))
     check('averages: income, expense and saved match the months', abs(money(figs[0]) - avg['income']) < 1 and abs(money(figs[1]) - avg['expense']) < 1 and abs(money(figs[2]) - avg['saved']) < 1, str(figs))
