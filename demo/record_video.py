@@ -474,7 +474,7 @@ def s_settings(page):
 
 def s_mobile(page):
     start(page, DEMO + '#home')
-    caption(page, 'On a phone: the same app, with a bottom bar')
+    caption(page, 'On a phone: a floating bar of tabs, with a round plus beside it')
     time.sleep(3.5)
     scroll(page, 500, steps=25)
     time.sleep(1.5)
@@ -622,14 +622,14 @@ def s_sheet(page):
     caption(page, 'The plus button opens quick actions')
     time.sleep(2.5)
     tap(page, page.locator('.tabbar a.add'), 1.2)
-    caption(page, 'The sheet slides up and the page behind steps back')
+    caption(page, 'Quick actions grow out of the plus, the page behind steps back')
     time.sleep(3)
     sheet_scroll(page, 360)
     caption(page, 'Every kind of entry and every screen, in one place')
     time.sleep(3)
     sheet_scroll(page, -360)
     time.sleep(1.5)
-    caption(page, 'Tap outside and it slides away')
+    caption(page, 'Tap the cross, or outside, to close it')
     page.mouse.click(30, 60)
     time.sleep(2.5)
     tap(page, page.locator('.tabbar a.add'), 1.2)
@@ -665,8 +665,8 @@ SCENES = [
     ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance."),
     ('renew', s_renew, 'app', "Renewal reminders keeps insurance, subscriptions, documents and bills in one list, grouped into overdue, due soon and later. Press Renewed and it moves to its next date. With notifications turned on, you get a reminder on your phone, and by email if you like, every morning until it is renewed."),
     ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You can change your currency, and either convert every amount at today's exchange rate, or keep the numbers as they are. You can also add categories, download a backup, and load or remove the sample data."),
-    ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a floating bar at the bottom, and screens that slide like a phone's own apps. The plus button opens a sheet of quick actions: speak an entry, type one, add a trip expense, or jump to any screen. Add it to the home screen, and it opens like any other app."),
-    ('sheet', s_sheet, 'app', "On a phone, the plus button opens a sheet of quick actions. It slides up from the bottom, and the page behind steps back. Speak an entry, type one, add a trip expense, choose any kind of entry, or jump to any screen. Tap outside, and it slides away."),
+    ('mobile', s_mobile, 'phone', "On a phone, the tabs sit in a floating bar, with a round plus button beside it, and screens slide like a phone's own apps. The plus button opens quick actions: speak an entry, type one, add a trip expense, or jump to any screen. Add it to the home screen, and it opens like any other app."),
+    ('sheet', s_sheet, 'app', "On a phone, the plus button opens quick actions. They grow out of the button in a circle, covering half the screen, while the page behind tilts back. Speak an entry, type one, add a trip expense, choose any kind of entry, or jump to any screen. The plus turns into a cross: tap it, or outside, to close."),
     ('outro', s_outro, 'card', "That is LifeDesk. Your data is encrypted and private to you, and it is free to host. Thank you for watching."),
 ]
 
