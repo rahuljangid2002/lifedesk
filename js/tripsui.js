@@ -18,7 +18,8 @@ export function tripTool(c) {
     const dates = (t) => `${range(t)} · ${plural(T.tripDays(t), 'day')}`;
     const owesMePeople = () => S.data.people.filter((p) => p.direction === 'owesMe' && p.status !== 'Bad Debt').sort((a, b) => a.name.localeCompare(b.name));
     const nameOf = (id) => (S.data.people.find((p) => p.id === id) || {}).name || 'Someone';
-    const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+    // only words that start with a letter or digit, so "Alex (sample)" gives A, not A(
+    const initials = (name) => String(name).split(/\s+/).filter((w) => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
     const statusWords = (t, status) => {
         if (status !== 'Upcoming') {
             return status;
@@ -220,8 +221,17 @@ export function tripTool(c) {
         f.forTrip = true;
         pick(f, id);
         f.back = c.state.route === 'add' ? null : c.state.route;
+        f.backTrip = c.state.route === 'trips' ? id : null; // after saving, the trip it came from opens again
         c.state.add = f;
         c.state.route === 'add' ? c.render() : c.go('add');
+    }
+
+    /** Going back to the Trips screen after saving: open the trip the expense was started from. */
+    function returnTo(id) {
+        st().open = id;
+        st().form = null;
+        st().settle = null;
+        st().opening = true;
     }
 
     /** The entries to save for a trip expense on the form, or a message when something is missing. */
@@ -434,5 +444,5 @@ export function tripTool(c) {
         return rows.length ? rows[0].t : null;
     }
 
-    return { screen, homeCard, arrive, current, addBlock, splitText, entriesFor, startExpense, actions, summary };
+    return { screen, homeCard, arrive, current, returnTo, addBlock, splitText, entriesFor, startExpense, actions, summary };
 }

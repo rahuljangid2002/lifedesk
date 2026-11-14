@@ -3108,6 +3108,9 @@ const actions = {
         if (!f.id) {
             budgetAlert(shared ? { ...entry, amount: shared.entries[0].type === 'expense' ? shared.entries[0].amount : 0 } : entry);
         }
+        if (back === 'trips' && f.backTrip) {
+            trips.returnTo(f.backTrip);
+        }
         if (back) {
             go(back);
         }
