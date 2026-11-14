@@ -1012,33 +1012,136 @@ button.shortcut {
 .voice-back:active {
     transform: none;
 }
+/* ---------- the + of the bottom bar: a bottom sheet of quick actions ----------
+   It slides up from the bottom; the page behind shrinks back a little under a dark, blurred tint (like a phone's own
+   sheets). Closing plays it in reverse ('closing' state in app.js) before it is removed. */
+.app > .shell,
+.app > .navbar {
+    transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1), border-radius 0.38s ease, filter 0.38s ease;
+    transform-origin: 50% 0;
+}
+.app.sheet-open > .shell {
+    transform: scale(0.94) translateY(1.2rem);
+    border-radius: 1.4rem;
+    overflow: hidden;
+    filter: saturate(0.9);
+}
 .add-menu-back {
     position: fixed;
     inset: 0;
-    z-index: 4;
+    z-index: 20;
     border: 0;
-    background: rgba(8, 12, 24, 0.28);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
+    padding: 0;
+    background: rgba(8, 12, 24, 0.42);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
     cursor: default;
+    animation: sheet-fade-in 0.3s ease both;
+}
+.add-menu-back.closing {
+    animation: sheet-fade-out 0.28s ease both;
+}
+.add-menu-back:active {
+    transform: none;
 }
 .add-menu {
     position: fixed;
-    z-index: 5;
+    z-index: 21;
     left: 50%;
-    bottom: calc(var(--tab-h) + 0.4rem + env(safe-area-inset-bottom));
+    bottom: 0;
     transform: translateX(-50%);
-    width: min(21rem, calc(100vw - 1.4rem));
-    display: grid;
-    gap: 0.15rem;
-    padding: 0.4rem;
-    border-radius: 1.5rem;
+    width: min(36rem, 100vw);
+    max-height: min(80vh, 46rem);
+    display: flex;
+    flex-direction: column;
+    border-radius: 1.6rem 1.6rem 0 0;
     border: 1px solid var(--hair);
-    background: color-mix(in srgb, var(--surface) 86%, transparent);
+    border-bottom: 0;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
     -webkit-backdrop-filter: blur(26px) saturate(180%);
     backdrop-filter: blur(26px) saturate(180%);
-    box-shadow: 0 18px 44px rgba(16, 24, 40, 0.24), 0 2px 6px rgba(16, 24, 40, 0.08);
-    transform-origin: 50% 100%;
+    box-shadow: 0 -12px 40px rgba(16, 24, 40, 0.28);
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.add-menu.closing {
+    animation: sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+}
+@keyframes sheet-up {
+    from {
+        transform: translate(-50%, 100%);
+    }
+    to {
+        transform: translate(-50%, 0);
+    }
+}
+@keyframes sheet-down {
+    from {
+        transform: translate(-50%, 0);
+    }
+    to {
+        transform: translate(-50%, 100%);
+    }
+}
+@keyframes sheet-fade-in {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes sheet-fade-out {
+    to {
+        opacity: 0;
+    }
+}
+.sheet-grip {
+    flex: none;
+    display: grid;
+    place-items: center;
+    padding: 0.55rem 0 0.2rem;
+    cursor: pointer;
+}
+.sheet-grip i {
+    width: 2.6rem;
+    height: 0.32rem;
+    border-radius: 999px;
+    background: var(--hair, #c7c7cc);
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+.sheet-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.1rem 1rem 0.5rem 1.2rem;
+}
+.sheet-head b {
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+}
+.sheet-head .icon-btn {
+    font-size: 1.4rem;
+    line-height: 1;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--surface-2);
+}
+.sheet-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem 1rem;
+}
+.sheet-body h4 {
+    margin: 1rem 0.2rem 0.5rem;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+}
+.qa-main {
+    display: grid;
+    gap: 0.4rem;
 }
 .add-menu [role='menuitem'] {
     display: flex;
@@ -1048,20 +1151,17 @@ button.shortcut {
     padding: 0.7rem 0.8rem;
     border: 0;
     border-radius: 1.1rem;
-    background: transparent;
+    background: var(--surface-2);
     color: var(--text);
     font: inherit;
     text-align: left;
+    text-decoration: none;
     cursor: pointer;
     transition: background-color 0.18s ease, transform 0.2s var(--ease);
 }
-.add-menu [role='menuitem']:hover,
-.add-menu [role='menuitem']:focus-visible {
-    background: var(--surface-2);
-    outline: none;
-}
-.add-menu [role='menuitem']:active {
-    transform: scale(0.98);
+.add-menu [role='menuitem']:active,
+.qa:active {
+    transform: scale(0.97);
 }
 .add-menu .mi {
     flex: none;
@@ -1078,21 +1178,84 @@ button.shortcut {
     background: var(--brand);
     background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
 }
+.add-menu .mi.trip {
+    color: light-dark(#5a1ba9, #c9a8ff);
+    background: light-dark(#f2e9ff, #2a1d42);
+}
 .add-menu .mi .ic {
     width: 1.4rem;
     height: 1.4rem;
 }
-.add-menu b {
+.add-menu [role='menuitem'] b {
     display: block;
     font-size: 1rem;
 }
 .add-menu small {
     color: var(--muted);
 }
+.qa-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+.qa {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.65rem 0.25rem;
+    border: 0;
+    border-radius: 1rem;
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s var(--ease), background-color 0.18s ease;
+    animation: qa-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.qa:nth-child(n + 5) {
+    animation-delay: 0.04s;
+}
+.qa:nth-child(n + 9) {
+    animation-delay: 0.08s;
+}
+@keyframes qa-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.6rem);
+    }
+}
+.qa-ic {
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.8rem;
+    background: var(--surface);
+    color: var(--brand-ink);
+}
+.qa-ic .ic {
+    width: 1.25rem;
+    height: 1.25rem;
+}
 .add-menu-tip {
-    padding: 0.35rem 0.8rem 0.45rem;
+    display: block;
+    padding: 1rem 0.8rem 0.2rem;
     text-align: center;
     font-size: 0.74rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    .add-menu,
+    .add-menu-back,
+    .qa {
+        animation: none;
+    }
+    .app > .shell {
+        transition: none;
+    }
 }
 .tabbar:has(a.add.open) {
     z-index: 6;

@@ -427,5 +427,12 @@ export function tripTool(c) {
         st().opening = false;
     }
 
-    return { screen, homeCard, arrive, addBlock, splitText, entriesFor, startExpense, actions, summary };
+    /** The trip a quick trip expense goes to: the ongoing one, else the soonest upcoming one. */
+    function current() {
+        const rows = trips().map((t) => ({ t, status: T.tripStatus(t, today()) })).filter((r) => r.status !== 'Completed');
+        rows.sort((a, b) => (a.status === b.status ? (a.t.start < b.t.start ? -1 : 1) : a.status === 'Ongoing' ? -1 : 1));
+        return rows.length ? rows[0].t : null;
+    }
+
+    return { screen, homeCard, arrive, current, addBlock, splitText, entriesFor, startExpense, actions, summary };
 }

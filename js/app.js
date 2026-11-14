@@ -1434,6 +1434,35 @@ const SIDE = [
 ];
 
 let renderedRoute = null; // the screen the last drawing was for
+/** The sheet the + of the bottom bar opens: speak or type an entry, a kind of entry straight away, and every screen. */
+function addSheet() {
+    const closing = state.addMenu === 'closing';
+    const kinds = Object.entries(L.TYPES).filter(([, v]) => !v.auto)
+        .map(([k, v]) => `<button class="qa t-${k}" data-action="addMenuKind" data-type="${k}"><span class="qa-ic">${icon(v.icon)}</span><span>${esc(v.short)}</span></button>`).join('');
+    const trip = trips.current();
+    const screens = [['trips', 'trip', 'Trips'], ['assistant', 'spark', 'Assistant'], ['people', 'users', 'People & Loans'], ['pay', 'card', 'Payments'], ['budget', 'target', 'Budget'],
+        ['daily', 'calendar', 'Daily'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['invest', 'chart', 'Investments'], ['accounts', 'wallet', 'My accounts'],
+        ['assets', 'asset', 'My assets'], ['renewals', 'bell', 'Renewals']]
+        .map(([r, ic, label]) => `<button class="qa" data-action="addMenuGo" data-route="${r}"><span class="qa-ic">${icon(ic)}</span><span>${esc(label)}</span></button>`).join('');
+    return `<button class="add-menu-back ${closing ? 'closing' : ''}" data-action="addMenuClose" aria-label="Close quick actions"></button>
+        <div class="add-menu ${closing ? 'closing' : ''}" role="menu" aria-label="Quick actions">
+            <div class="sheet-grip" data-action="addMenuClose" aria-hidden="true"><i></i></div>
+            <div class="sheet-head"><b>Quick actions</b><button class="icon-btn" data-action="addMenuClose" aria-label="Close">×</button></div>
+            <div class="sheet-body">
+                <div class="qa-main">
+                    <button role="menuitem" data-action="addMenuVoice"><span class="mi speak">${icon('mic')}</span><span><b>Speak an entry</b><small>Say it in English or हिन्दी</small></span></button>
+                    <a role="menuitem" href="#add" data-action="addMenuType"><span class="mi">${icon('edit')}</span><span><b>Type an entry</b><small>Fill in the form yourself</small></span></a>
+                    ${trip ? `<button role="menuitem" data-action="addMenuTrip" data-id="${trip.id}"><span class="mi trip">${icon('trip')}</span><span><b>Trip expense</b><small>${esc(trip.name)}: split with the people on the trip</small></span></button>` : ''}
+                </div>
+                <h4>Add</h4>
+                <div class="qa-grid">${kinds}</div>
+                <h4>Go to</h4>
+                <div class="qa-grid">${screens}</div>
+                <small class="add-menu-tip">Tip: press and hold + to speak straight away</small>
+            </div>
+        </div>`;
+}
+
 function render() {
     if (state.net.offline && !state.net.dismissed) {
         app.innerHTML = offlineScreen() + toastHtml();
@@ -1477,19 +1506,14 @@ function render() {
     const slid = renderedRoute === state.route ? [...app.querySelectorAll('.chips')].map((el) => el.scrollLeft) : [];
     renderedRoute = state.route;
     const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>${r === 'add' ? `<button class="side-voice" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>` : ''}`).join('')}`).join('');
-    app.innerHTML = `<div class="app">
+    app.innerHTML = `<div class="app ${state.addMenu === true ? 'sheet-open' : ''}">
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
         <div class="navbar" aria-hidden="true"></div>
         <div class="shell ${fresh}">${screen()}</div>
         ${NO_TABS.includes(state.route) ? '' : `<nav class="tabbar">${NAV.map(([r, ic, label]) => (r === 'add'
             ? `<a href="#add" class="add ${state.route === r ? 'on' : ''} ${state.addMenu ? 'open' : ''}" data-action="addMenu" aria-haspopup="menu" aria-expanded="${!!state.addMenu}" title="Add an entry: tap to choose, hold to speak"><span>${icon(ic)}</span>${label}</a>`
             : `<a href="#${r}" class="${state.route === r ? 'on' : ''}"><span>${icon(ic)}</span>${label}</a>`)).join('')}</nav>
-            ${state.addMenu ? `<button class="add-menu-back" data-action="addMenuClose" aria-label="Close the menu"></button>
-            <div class="add-menu" role="menu" aria-label="Add an entry">
-                <button role="menuitem" data-action="addMenuVoice"><span class="mi speak">${icon('mic')}</span><span><b>Speak an entry</b><small>Say it in English or हिन्दी</small></span></button>
-                <a role="menuitem" href="#add" data-action="addMenuType"><span class="mi">${icon('edit')}</span><span><b>Type an entry</b><small>Fill in the form yourself</small></span></a>
-                <small class="add-menu-tip">Tip: press and hold + to speak straight away</small>
-            </div>` : ''}`}
+            ${state.addMenu ? addSheet() : ''}`}
     </div>${voiceSheet()}${state.net.offline ? `<button class="net-chip" data-action="netShow" title="You are offline. Changes are sent when you are back online."><i></i> Offline</button>` : ''}${toastHtml()}`;
     app.querySelectorAll('.chips').forEach((el, n) => {
         if (slid[n]) {
@@ -2457,18 +2481,47 @@ const actions = {
             plusHeld = false; // the press was a hold: voice is already open
             return;
         }
-        state.addMenu = !state.addMenu;
+        if (state.addMenu === true) {
+            return actions.addMenuClose();
+        }
+        state.addMenu = true;
         render();
     },
     addMenuClose() {
-        state.addMenu = false;
+        if (state.addMenu !== true) {
+            return;
+        }
+        // the sheet slides down and the page comes back before it is removed (css/ios.css)
+        state.addMenu = 'closing';
         render();
+        window.clearTimeout(actions.addMenuClose.timer);
+        actions.addMenuClose.timer = window.setTimeout(() => {
+            if (state.addMenu === 'closing') {
+                state.addMenu = false;
+                render();
+            }
+        }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 280);
     },
     addMenuType() {
         state.addMenu = false;
         if (state.route === 'add') {
             render(); // already there: the link changes nothing, so only the menu is closed
         }
+    },
+    addMenuKind(el) {
+        state.addMenu = false;
+        const f = blankEntry();
+        f.type = el.dataset.type;
+        state.add = f;
+        state.route === 'add' ? render() : go('add');
+    },
+    addMenuGo(el) {
+        state.addMenu = false;
+        state.route === el.dataset.route ? render() : go(el.dataset.route);
+    },
+    addMenuTrip(el) {
+        state.addMenu = false;
+        trips.startExpense(el.dataset.id);
     },
     addMenuVoice() {
         state.addMenu = false;
@@ -3851,6 +3904,9 @@ window.addEventListener('popstate', () => {
     }
 });
 window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.addMenu === true) {
+        actions.addMenuClose();
+    }
     if (event.key === 'Escape' && state.voice.open) {
         actions.voiceClose();
     }
