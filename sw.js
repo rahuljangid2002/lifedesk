@@ -1,5 +1,5 @@
 // Keeps the app's own files available offline. Data is handled by the app (Firestore keeps its own offline copy).
-const CACHE = 'lifedesk-v42';
+const CACHE = 'lifedesk-v43';
 const FILES = ['./', 'index.html', 'css/app.css', 'css/ios.css', 'js/app.js', 'js/logic.js', 'js/store.js', 'js/config.js', 'js/seed.js', 'js/icons.js', 'js/sample.js', 'js/vault.js', 'js/reports.js', 'js/charts.js', 'js/insights.js', 'js/voice.js', 'js/invest.js', 'js/investui.js', 'js/prices.js', 'js/trips.js', 'js/tripsui.js', 'js/assistant.js', 'js/assistantui.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 

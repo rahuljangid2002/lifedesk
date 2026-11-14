@@ -140,6 +140,13 @@ with sync_playwright() as p:
     check('phone: no sideways scrolling on Home', not wide)
     pg.goto(URL + '#trips'); time.sleep(1.2); pg.locator('.trip-card').first.click(); time.sleep(1.5); shot('t6_phone_trip')
     check('phone: no sideways scrolling on the trip', not pg.evaluate('document.documentElement.scrollWidth > window.innerWidth + 1'))
+    # forms open as a sheet on the phone: it must sit fully on the screen (an animation name clash once pushed it half off)
+    pg.goto(URL + '#home'); time.sleep(0.8); pg.goto(URL + '#trips'); time.sleep(1.2); pg.get_by_role('button', name='New trip').click(); time.sleep(1.2)
+    r = pg.evaluate("(() => { const b = document.querySelector('section.card.form').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth]; })()")
+    check('phone: the New trip sheet sits fully on the screen', r[0] >= 0 and r[1] <= r[2], str(r))
+    pg.goto(URL + '#people'); time.sleep(1.2); pg.get_by_role('button', name='Add person').click(); time.sleep(1.2)
+    r = pg.evaluate("(() => { const b = document.querySelector('section.card.form').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth]; })()")
+    check('phone: the Add person sheet sits fully on the screen', r[0] >= 0 and r[1] <= r[2], str(r))
 
     check('no script errors', not errors, '; '.join(errors[:3]))
     b.close()

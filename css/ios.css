@@ -1062,12 +1062,12 @@ button.shortcut {
     backdrop-filter: blur(26px) saturate(180%);
     box-shadow: 0 -12px 40px rgba(16, 24, 40, 0.28);
     padding-bottom: env(safe-area-inset-bottom);
-    animation: sheet-up 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation: qa-sheet-up 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 .add-menu.closing {
-    animation: sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+    animation: qa-sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
 }
-@keyframes sheet-up {
+@keyframes qa-sheet-up {
     from {
         transform: translate(-50%, 100%);
     }
@@ -1075,7 +1075,7 @@ button.shortcut {
         transform: translate(-50%, 0);
     }
 }
-@keyframes sheet-down {
+@keyframes qa-sheet-down {
     from {
         transform: translate(-50%, 0);
     }
