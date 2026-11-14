@@ -11,6 +11,8 @@ import { netWorth, toCsv } from './reports.js';
 import { pushSettings as PUSH } from './config.js';
 import * as Voice from './voice.js';
 import { INV_STATE, investTool } from './investui.js';
+import { TRIP_STATE, tripTool } from './tripsui.js';
+import { ASSIST_STATE, assistantTool } from './assistantui.js';
 import { yearStart } from './insights.js';
 import { yearOf } from './reports.js';
 
@@ -31,6 +33,9 @@ const state = {
     assets: { form: null },
     renewals: { form: null, renew: null, showDone: false, leaving: [], leavingAt: 0, arrived: [], arrivedAt: 0 },
     invest: INV_STATE(),
+    trips: TRIP_STATE(),
+    quick: null, // the one-line entry bar on Home
+    assistant: ASSIST_STATE(),
     bills: { form: null },
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
@@ -146,6 +151,10 @@ function blankEntry(keep) {
         paidBy: null,
         newPayer: '',
         repeat: false, // also add it to Monthly bills
+        forTrip: keep ? !!keep.forTrip : false, // a trip expense, split equally (js/tripsui.js)
+        tripId: keep ? keep.tripId || null : null,
+        tripShare: keep ? [...(keep.tripShare || [])] : [],
+        tripMe: keep ? keep.tripMe !== false : true,
         receipts: [], // saved files: [{ id, name, type }]
         files: [], // chosen, not uploaded yet: [{ name, type, data }]
         removed: [] // saved files to delete on save
@@ -198,7 +207,7 @@ function emiSummary(f) {
     return `<div class="banner"><div><b>Financed ${L.money(s.financed)} · ${s.months} × ${L.money(s.emi)}</b><small>Total to pay ${L.money(s.total)} · interest ${L.money(Math.max(0, s.interest))} · ${s.rate}% a year${s.typed ? '' : ' (calculated)'}</small></div></div>`;
 }
 function emiBlock(f) {
-    if ((f.type !== 'expense' && f.type !== 'asset') || f.id) {
+    if ((f.type !== 'expense' && f.type !== 'asset') || f.id || (f.forTrip && f.type === 'expense')) {
         return '';
     }
     const m = emiSums(f);
@@ -421,7 +430,7 @@ function welcome() {
 // Back links return to the screen the user came from. trail = the screens visited, in order; going back pops it.
 const trail = [];
 const SCREEN_NAMES = { hub: 'LifeDesk', home: 'Home', menu: 'More', add: 'Add entry', daily: 'Daily', budget: 'Budget', pay: 'Payments', insights: 'Dashboards', reports: 'Reports',
-    people: 'People & Loans', accounts: 'My accounts', assets: 'My assets', invest: 'Investments', renewals: 'Renewal reminders', more: 'Account & backup' };
+    people: 'People & Loans', accounts: 'My accounts', assets: 'My assets', invest: 'Investments', trips: 'Trips', assistant: 'Assistant', renewals: 'Renewal reminders', more: 'Account & backup' };
 /** The link at the top of an inner screen: to the previous screen when there is one, otherwise to `fallback`. */
 function backLink(fallback) {
     const prev = trail.length > 1 ? trail[trail.length - 2] : null;
@@ -458,6 +467,46 @@ function hub() {
     </main>`;
 }
 
+/** Home: the last six completed months on average, and this month so far against that average. */
+function averagesCard() {
+    const key = thisMonth();
+    const a = L.averages(S.data, key, 6);
+    if (!a.months) {
+        return '';
+    }
+    const m = L.monthSummary(S.data, key);
+    const soFar = (now, avg) => (avg > 0 ? `${Math.round((now / avg) * 100)}% so far` : '');
+    const period = a.months === 1 ? L.monthLabel(a.to) : `${L.monthLabel(a.from).split(' ')[0]} – ${L.monthLabel(a.to)}`;
+    return `<section class="card span avg-card">
+        <div class="card-head"><span><h2>Last ${a.months === 6 ? 'six' : a.months} months on average</h2><small>${esc(period)} · a month</small></span><a href="#insights">Dashboards</a></div>
+        <div class="avg-figs">
+            <span><small>Income</small><b class="in">${L.money(a.income)}</b><small>${soFar(m.income, a.income)}</small></span>
+            <span><small>Expense</small><b class="out">${L.money(a.expense)}</b><small>${soFar(m.expense, a.expense)}</small></span>
+            <span><small>Saved</small><b>${L.money(a.saved)}</b><small>${a.rate === null ? '' : `${a.rate}% of income`}</small></span>
+        </div>
+        ${a.expense > 0 ? `<div class="avg-pace"><small>This month's spending: ${L.money(m.expense)} of a usual ${L.money(a.expense)}</small><div class="bar"><i class="${m.expense > a.expense ? 'red' : m.expense > a.expense * 0.9 ? 'orange' : ''}" style="width:${Math.min(100, Math.round((m.expense / a.expense) * 100))}%"></i></div></div>` : ''}
+    </section>`;
+}
+
+/** Home: add an expense or income in one line, without opening Add Entry. */
+function quickBar() {
+    if (!state.quick) {
+        const acc = defaultAccount();
+        state.quick = { type: 'expense', amount: '', description: '', categoryId: null, touched: false, accountId: acc ? acc.id : null };
+    }
+    const q = state.quick;
+    const cats = S.data.categories.filter((c) => c.type === q.type).sort((a, b) => a.name.localeCompare(b.name));
+    return `<section class="card span quick" data-form="quickAdd">
+        <div class="seg fit quick-type">${[['expense', 'Expense'], ['income', 'Income']].map(([k, label]) => `<button class="${q.type === k ? 'on' : ''}" data-action="quickType" data-type="${k}">${label}</button>`).join('')}</div>
+        <label class="quick-amt"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount" value="${esc(q.amount)}" data-model="quick.amount" aria-label="Quick add: how much"></label>
+        <input class="quick-desc" type="text" maxlength="255" placeholder="What for? e.g. Groceries, Salary" value="${esc(q.description)}" data-model="quick.description" data-then="quickSuggest" aria-label="Quick add: what for">
+        <select id="quick-category" class="quick-cat" data-model="quick.categoryId" data-then="quickTouch" aria-label="Quick add: kind of spend"><option value="">Category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === q.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+        <select class="quick-acc" data-model="quick.accountId" aria-label="Quick add: money from">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === q.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+        <button class="btn primary quick-add" data-action="quickAdd">${icon('plus')} Add ${q.type === 'income' ? 'income' : 'expense'}</button>
+        <a class="link-btn quick-more" href="#add">More kinds</a>
+    </section>`;
+}
+
 function home() {
     const key = thisMonth();
     const m = L.monthSummary(S.data, key);
@@ -491,8 +540,12 @@ function home() {
             <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
             <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
             <a class="shortcut" href="#invest">${icon('chart')}<span>Investments</span></a>
+            <a class="shortcut" href="#trips">${icon('trip')}<span>Trips</span></a>
+            <a class="shortcut" href="#assistant">${icon('spark')}<span>Assistant</span></a>
             <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
         </div>
+        ${quickBar()}
+        ${averagesCard()}
         ${(() => { const due = dueItems(); const emis = due.filter((d) => d.kind === 'emi').length; const bills = due.length - emis; return due.length ? `<a class="notice span" href="#pay">${[emis ? plural(emis, 'EMI') : '', bills ? plural(bills, 'bill') : ''].filter(Boolean).join(' and ')} due this month (${L.money(due.reduce((x, d) => x + d.amount, 0))}) – tap to pay</a>` : ''; })()}
         ${(() => { const n = followUpsDue().length; return n ? `<a class="notice span" href="#people">${plural(n, 'follow-up')} due with people who owe you – tap to see</a>` : ''; })()}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
@@ -500,6 +553,8 @@ function home() {
             <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small>${w.investments ? `<small>+ investments ${L.money(w.investments)}</small>` : ''}<small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
         ${(() => { const p = invest.port(); return `<a class="card link span" href="#invest"><div class="card-head"><h2>Investments</h2>${p.pending.length ? '<span class="pill warn">Confirm SIP</span>' : p.rows.length ? `<b>${L.money(p.value)}</b>` : icon('chevRight')}</div>
             ${p.rows.length ? `<div class="lines"><small class="${p.gain < 0 ? 'out' : 'in'}">Gain ${p.gain >= 0 ? '+' : ''}${L.money(p.gain)} (${p.gainPct.toFixed(1)}%)${p.dayChange ? ` · today ${p.dayChange > 0 ? '+' : ''}${L.money(p.dayChange)}` : ''}</small><small>${p.sipPerMonth ? `SIPs ${L.money(p.sipPerMonth)} a month` : 'No SIP running'}${p.pending.length ? ` · ${p.pending.length} to confirm` : ''}</small></div>` : '<small>Mutual funds, SIPs, shares, deposits, gold – tap to add</small>'}</a>`; })()}
+        ${assist.homeCard()}
+        ${trips.homeCard()}
         <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
         <div class="stack">
             <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span class="pill">${planned ? `${pct}%` : 'Not set'}</span></div>
@@ -532,7 +587,8 @@ function addEntry() {
                 return `<button class="chip ${a.id === selected ? 'on' : ''}" data-action="${action}" data-id="${a.id}">${icon(KIND_ICON[a.kind])}<span><b>${esc(a.name)}</b><small>${a.kind === 'card' ? `Owes ${L.money(Math.max(0, -bal))}` : L.money(bal)}</small></span></button>`;
             })
             .join('');
-    const needsCategory = f.type === 'expense' || f.type === 'income';
+    const tripEntry = f.forTrip && f.type === 'expense' && !editing && !f.onEmi && !f.paidByMode;
+    const needsCategory = (f.type === 'expense' || f.type === 'income') && !(tripEntry && !f.tripMe);
     const needsPerson = L.PERSON_TYPES.includes(f.type);
     const direction = f.type === 'lent' || f.type === 'gotback' ? 'owesMe' : 'iOwe';
     const cats = S.data.categories.filter((c) => c.type === f.type).sort((a, b) => a.name.localeCompare(b.name));
@@ -557,7 +613,7 @@ function addEntry() {
                 <label>Description<input type="text" placeholder="e.g. Fuel, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
             </div>
             <h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>
-            <div class="chips">${chips(f.paidByMode ? null : f.accountId, 'setAccount')}${(f.type === 'expense' || f.type === 'asset') && !f.onEmi ? `<button class="chip ${f.paidByMode ? 'on' : ''}" data-action="setPaidBy">${icon('users')}<span><b>Someone paid</b><small>You owe them</small></span></button>` : ''}</div>
+            <div class="chips">${chips(f.paidByMode ? null : f.accountId, 'setAccount')}${(f.type === 'expense' || f.type === 'asset') && !f.onEmi && !tripEntry ? `<button class="chip ${f.paidByMode ? 'on' : ''}" data-action="setPaidBy">${icon('users')}<span><b>Someone paid</b><small>You owe them</small></span></button>` : ''}</div>
             ${f.paidByMode && (f.type === 'expense' || f.type === 'asset') ? `<label>Who paid for you<select data-model="add.paidBy" data-rerender><option value="">Choose a person</option>${S.data.people.filter((p) => p.direction === 'iOwe').map((p) => `<option value="${p.id}" ${p.id === f.paidBy ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.paidBy === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
                 ${f.paidBy === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPayer)}" data-model="add.newPayer"></label>` : ''}
                 <small>It counts as your spending, no account changes, and you owe them the amount (People &amp; Loans → I owe).</small>` : ''}
@@ -568,11 +624,12 @@ function addEntry() {
             ${f.type === 'asset' && !editing ? `<div class="grid2"><label>Kind of asset<select data-model="add.assetType">${L.ASSET_TYPES.map((x) => `<option ${x === f.assetType ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
                 <label>What it is worth now (optional)<input type="number" inputmode="decimal" min="0" step="0.01" value="${esc(f.assetValue)}" data-model="add.assetValue" placeholder="same as the price"></label></div>
                 <small>The description is used as the asset's name in My assets.</small>` : ''}
+            ${trips.addBlock(f)}
             ${emiBlock(f)}
-            ${!editing && (f.type === 'expense' || f.type === 'income') && !f.onEmi && !f.paidByMode ? `<label class="check"><input type="checkbox" ${f.repeat ? 'checked' : ''} data-model="add.repeat" data-rerender> Repeats every month (adds it to Monthly bills, due on day ${Math.min(28, Number(String(f.date).slice(8, 10)) || 1)})</label>` : ''}
+            ${!editing && (f.type === 'expense' || f.type === 'income') && !f.onEmi && !f.paidByMode && !tripEntry ? `<label class="check"><input type="checkbox" ${f.repeat ? 'checked' : ''} data-model="add.repeat" data-rerender> Repeats every month (adds it to Monthly bills, due on day ${Math.min(28, Number(String(f.date).slice(8, 10)) || 1)})</label>` : ''}
             <label>Notes (optional)<input type="text" value="${esc(f.notes)}" data-model="add.notes"></label>
             ${['expense', 'income', 'asset'].includes(f.type) ? receiptsBlock(f) : ''}
-            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && (f.type === 'expense' || f.type === 'asset') ? 'Save EMI purchase' : `Save ${L.TYPES[f.type].label}`}</button>
+            <button class="btn primary wide" data-action="saveEntry">${editing ? 'Save changes' : f.onEmi && (f.type === 'expense' || f.type === 'asset') ? 'Save EMI purchase' : tripEntry ? 'Save trip expense' : `Save ${L.TYPES[f.type].label}`}</button>
             ${editing ? `<div class="split"><button class="btn" data-action="cancelEdit">Cancel</button><button class="btn danger" data-action="deleteEntry">${icon('trash')} Delete entry</button></div>` : ''}
         </div>
         ${editing ? '' : `<div class="pane"><h3>Recent entries</h3>${recent.length
@@ -1295,8 +1352,8 @@ function menu() {
     return `<header class="hero"><a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a><small class="eyebrow">Account Management</small><h1>More</h1></header>
     <main class="dash">
         <section class="card span"><div class="list inner flush">
-            ${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '28 tables with totals and CSV download')}
-            ${link('invest', 'chart', 'Investments', 'Mutual funds, SIPs, shares, deposits, gold, goals')}${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
+            ${link('assistant', 'spark', 'Assistant', 'Money check-up, suggestions and questions')}${link('pay', 'card', 'Payments', 'EMIs and credit card bills')}${link('insights', 'chart', 'Dashboards', 'Monthly, yearly, balances, loans and assets')}${link('reports', 'table', 'Reports', '28 tables with totals and CSV download')}
+            ${link('invest', 'chart', 'Investments', 'Mutual funds, SIPs, shares, deposits, gold, goals')}${link('people', 'users', 'People &amp; Loans', 'Who owes you, whom you owe, loans on EMI')}${link('trips', 'trip', 'Trips', 'Trip expenses split with family and friends')}${link('accounts', 'wallet', 'My accounts', 'Banks, cash, wallets and credit cards')}${link('assets', 'asset', 'My assets', 'What you own and what it is worth')}
         </div></section>
         <section class="card"><div class="card-head"><h2>Categories</h2><button class="link-btn" data-action="categoryToggle">${state.more.addingCategory ? 'Cancel' : '＋ Add'}</button></div>
             ${state.more.addingCategory ? `<div class="form"><label>Name<input type="text" id="nc-name"></label><label>Type<select id="nc-type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Keywords, comma separated (used to suggest it)<input type="text" id="nc-keys" placeholder="e.g. fuel, diesel"></label><button class="btn primary" data-action="categorySave">Add category</button></div>` : ''}
@@ -1343,12 +1400,27 @@ const invest = investTool({
     S, L, icon, esc, stat, toast, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today, localNotify: (t, b, r) => localNotify(t, b, r),
     yearOf: (iso) => yearOf(iso, yearStart()).label
 });
+// Trips (js/tripsui.js): the screen, the Home tile and "For a trip" on Add Entry
+const trips = tripTool({
+    get state() {
+        return state;
+    },
+    S, L, icon, esc, stat, toast, render, go, backLink, activeAccounts, shortDate, categoryName, accountName, today, blankEntry
+});
+// Assistant (js/assistantui.js): the money check-up, questions and the Money health tile on Home
+const assist = assistantTool({
+    get state() {
+        return state;
+    },
+    S, L, icon, esc, render, go, backLink, today, netWorth,
+    yearOf: (iso) => yearOf(iso, yearStart()).label
+});
 let investOpened = false; // the screen's opening work (due SIPs, prices) runs once each time it is opened
 let sipsChecked = false; // due SIP instalments are recorded once per visit, whichever screen is open
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow, back: () => backLink('menu') };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), trips: () => trips.screen(), assistant: () => assist.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
@@ -1356,7 +1428,7 @@ const TAB_ROUTES = NAV.map(([route]) => route);
 // wide screens: side menu
 const SIDE = [
     ['LifeDesk', [['hub', 'grid', 'All tools']]],
-    ['Account Management', [['home', 'home', 'Home'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['invest', 'chart', 'Investments'], ['people', 'users', 'People & Loans'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
+    ['Account Management', [['home', 'home', 'Home'], ['assistant', 'spark', 'Assistant'], ['add', 'plus', 'Add entry'], ['daily', 'calendar', 'Daily expenses'], ['budget', 'target', 'Budget'], ['pay', 'card', 'Payments'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['invest', 'chart', 'Investments'], ['people', 'users', 'People & Loans'], ['trips', 'trip', 'Trips'], ['accounts', 'wallet', 'My accounts'], ['assets', 'asset', 'My assets']]],
     ['Renewals', [['renewals', 'bell', 'Renewal reminders']]],
     ['You', [['more', 'user', 'Account & backup']]]
 ];
@@ -2942,9 +3014,20 @@ const actions = {
             entry.assetId = S.newId();
             pairs.push(['assets', { id: entry.assetId, name: f.description.trim(), type: f.assetType, price: entry.amount, value: Number(f.assetValue) || entry.amount, boughtOn: f.date, loanId: null, status: 'Owned', createdAt: Date.now() }]);
         }
-        const problem = L.validateEntry(entry, { people: [...S.data.people, ...pairs.map((p) => p[1])] });
+        const tripEntry = f.forTrip && f.type === 'expense' && !f.id && !f.onEmi && !paidBy;
+        // a trip expense you paid only for the others has no share of yours, so no category
+        const problem = L.validateEntry(tripEntry && !f.tripMe ? { ...entry, categoryId: 'none' } : entry, { people: [...S.data.people, ...pairs.map((p) => p[1])] });
         if (problem) {
             return toast(problem, 'warn');
+        }
+        let shared = null; // a trip expense: your share and each person's share, saved together
+        if (tripEntry) {
+            const { id: _id, type: _type, amount: _amount, description: _d, categoryId: _c, personId: _p, ...base } = entry;
+            shared = trips.entriesFor(f, { ...base, receipts: [] });
+            if (shared.problem) {
+                return toast(shared.problem, 'warn');
+            }
+            entry.id = shared.entries[0].id; // receipts go on the first entry (your share when you shared it)
         }
         // receipt files: the new ones are uploaded first, so the entry only lists files that are saved
         try {
@@ -2959,22 +3042,51 @@ const actions = {
         } catch (e) {
             return toast(`The receipt could not be saved: ${errorText(e)}`, 'warn');
         }
-        pairs.push(['entries', entry]);
+        if (shared) {
+            shared.entries[0].receipts = entry.receipts;
+            shared.entries.forEach((x) => pairs.push(['entries', x]));
+        } else {
+            pairs.push(['entries', entry]);
+        }
         const back = f.back;
         state.add = blankEntry(f.id ? null : f);
         await S.saveMany(pairs);
-        toast(f.id ? 'Changes saved.' : `${entry.description} · ${L.money(entry.amount)} saved.`);
+        toast(f.id ? 'Changes saved.' : shared ? `${entry.description} · ${L.money(entry.amount)} saved${shared.count > 1 ? `, split ${shared.count} ways` : ''}.` : `${entry.description} · ${L.money(entry.amount)} saved.`);
         if (!f.id) {
-            budgetAlert(entry);
+            budgetAlert(shared ? { ...entry, amount: shared.entries[0].type === 'expense' ? shared.entries[0].amount : 0 } : entry);
         }
         if (back) {
             go(back);
         }
     },
+    quickType(el) {
+        state.quick.type = el.dataset.type;
+        state.quick.categoryId = null;
+        state.quick.touched = false;
+        render();
+    },
+    async quickAdd() {
+        const q = state.quick;
+        const entry = { id: S.newId(), type: q.type, amount: Number(q.amount), date: today(), description: String(q.description || '').trim() || L.TYPES[q.type].label, accountId: q.accountId,
+            toAccountId: null, categoryId: q.categoryId || null, personId: null, paidBy: null, notes: '', createdAt: Date.now(), receipts: [] };
+        const problem = L.validateEntry(entry, S.data);
+        if (problem) {
+            return toast(problem, 'warn');
+        }
+        const acc = q.accountId;
+        state.quick = { type: q.type, amount: '', description: '', categoryId: null, touched: false, accountId: acc };
+        await S.save('entries', entry);
+        toast(`${entry.description} · ${L.money(entry.amount)} saved.`, 'ok', { label: 'Undo', run: () => S.remove('entries', entry.id) });
+        budgetAlert(entry);
+    },
     editEntry(el) {
         const e = byId(S.data.entries, el.dataset.id);
         if (!e) {
             return;
+        }
+        if (e.splitKey && Number(e.shareCount) > 1) {
+            toast('This is a shared trip expense. Delete it on the Trips screen and add it again.', 'warn');
+            return actions.tripOpen({ dataset: { id: e.tripId } });
         }
         if (e.investmentId) {
             toast('This entry belongs to an investment. Change or delete it on the Investments screen.', 'warn');
@@ -3297,7 +3409,8 @@ const actions = {
         }
         const x = (v) => (v === null || v === undefined || v === '' ? v : Math.round(Number(v) * r * 100) / 100);
         const pairs = [];
-        S.data.entries.forEach((e) => pairs.push(['entries', { ...e, amount: x(e.amount) }]));
+        S.data.entries.forEach((e) => pairs.push(['entries', { ...e, amount: x(e.amount), billAmount: x(e.billAmount) }]));
+        (S.data.trips || []).forEach((t) => pairs.push(['trips', { ...t, budget: x(t.budget) }]));
         S.data.accounts.forEach((a) => pairs.push(['accounts', { ...a, opening: x(a.opening), limit: x(a.limit) }]));
         S.data.people.forEach((p) => pairs.push(['people', { ...p, opening: x(p.opening) }]));
         S.data.budgets.forEach((b) => pairs.push(['budgets', { ...b, lines: Object.fromEntries(Object.entries(b.lines || {}).map(([k, v]) => [k, x(v)])) }]));
@@ -3421,7 +3534,7 @@ function trackRoute() {
 }
 
 // ---------- events ----------
-Object.assign(actions, invest.actions);
+Object.assign(actions, invest.actions, trips.actions, assist.actions);
 
 function setPath(path, value) {
     const keys = path.split('.');
@@ -3483,6 +3596,21 @@ app.addEventListener('input', (event) => {
             document.getElementById('emi-rate-pill').hidden = m.typed;
             emiBox.innerHTML = emiSummary(f);
         }
+        const splitBox = document.getElementById('trip-split');
+        if (splitBox && el.dataset.model === 'add.amount') {
+            splitBox.textContent = trips.splitText(state.add);
+        }
+        if (el.dataset.then === 'quickSuggest' && state.quick && !state.quick.touched) {
+            const id = L.suggestCategory(S.data.categories, state.quick.description, state.quick.type, S.data.entries);
+            state.quick.categoryId = id;
+            const select = document.getElementById('quick-category');
+            if (select) {
+                select.value = id || '';
+            }
+        }
+        if (el.dataset.then === 'quickTouch' && state.quick) {
+            state.quick.touched = true;
+        }
         if (el.dataset.then === 'touchCategory') {
             state.add.categoryTouched = true;
         }
@@ -3539,6 +3667,9 @@ app.addEventListener('change', async (event) => {
             }
             render();
             return actions.voiceSample();
+        }
+        if (el.dataset.actionChange) {
+            return actions[el.dataset.actionChange](el);
         }
         if (el.dataset.model && 'rerender' in el.dataset) {
             setPath(el.dataset.model, el.value);
@@ -3729,6 +3860,9 @@ window.addEventListener('hashchange', () => {
     state.route = window.location.hash.slice(1) || 'hub';
     state.addMenu = false;
     investOpened = false;
+    if (state.route === 'trips') {
+        trips.arrive();
+    }
     if (state.voice.open) {
         // another screen was opened while the sheet was up: stop listening, the sheet does not follow
         voiceStop();

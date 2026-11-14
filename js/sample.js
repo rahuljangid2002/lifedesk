@@ -247,6 +247,36 @@ export function buildSample(data, today, currency) {
             pairs.push(['budgets', { id: key, lines, sample: true }]);
         }
     }
+    // ---------- a trip running today: shared expenses split equally (your share = expense, theirs = lent) ----------
+    const shift = (n) => {
+        const d = new Date(`${today}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+    };
+    const priya = person('priya', 'Priya (sample)', 'owesMe', { notes: 'Friend from college.' });
+    const tripId = `${PREFIX}trip-hills`;
+    pairs.push(['trips', { id: tripId, name: 'Weekend in the hills (sample)', start: shift(-1), end: shift(1), budget: amt(900), notes: 'Three friends, one car', members: [alex, priya], createdAt: stamp }]);
+    const shared = (key, date, bill, description, accountId, categoryId, who, me = true) => {
+        const count = who.length + (me ? 1 : 0);
+        const cents = Math.round(bill * 100);
+        const each = Math.floor(cents / count);
+        let extra = cents - each * count;
+        const common = { tripId, splitKey: `${PREFIX}split-${key}`, billAmount: bill, shareCount: count };
+        if (me) {
+            add(date, 'expense', (each + extra) / 100, description, accountId, { ...common, categoryId });
+            extra = 0;
+        }
+        for (const [id, name] of who) {
+            add(date, 'lent', (each + extra) / 100, `${description} (${name} share)`, accountId, { ...common, personId: id });
+            extra = 0;
+        }
+    };
+    const trio = [[alex, 'Alex (sample)'], [priya, 'Priya (sample)']];
+    shared('fuel', shift(-1), amt(66), 'Fuel for the drive', bank, C.fuel || C.travel, trio);
+    shared('stay', shift(-1), amt(270), 'Cottage, two nights', bank, C.travel, trio);
+    shared('dinner', shift(0), amt(54), 'Dinner by the lake', cash, C.food, trio);
+    shared('tickets', shift(0), amt(30), 'Museum tickets for Alex and Priya', cash, null, trio, false);
+
     // ---------- renewal reminders, dated from today so some are always due ----------
     const inDays = (n) => { const d = new Date(`${today}T00:00:00`); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     const reminder = (key, name, kind, days, repeat, amount, remindDays, notes = '') =>
@@ -268,8 +298,8 @@ export function buildSample(data, today, currency) {
 /** [collection, id] pairs of everything the sample created. */
 export function sampleDocs(data) {
     const out = [];
-    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals', 'bills']) {
-        for (const doc of data[c]) {
+    for (const c of ['entries', 'people', 'accounts', 'budgets', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals', 'bills', 'trips']) {
+        for (const doc of data[c] || []) {
             if (isSample(doc)) {
                 out.push([c, doc.id]);
             }

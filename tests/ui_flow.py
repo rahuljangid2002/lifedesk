@@ -126,7 +126,7 @@ with sync_playwright() as p:
     check('bottom bar: Home, Daily, Add, Budget, More', [t.strip() for t in pg.locator('.tabbar a').all_inner_texts()] == ['Home', 'Daily', 'Add', 'Budget', 'More'], str(pg.locator('.tabbar a').all_inner_texts()))
     pg.locator('.tabbar a', has_text='More').click(); time.sleep(0.3)
     links = pg.locator('main .row b').all_inner_texts()
-    check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Payments', 'Dashboards', 'Reports', 'Investments', 'People & Loans', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))
+    check('More: the tool\'s other screens and its categories, with the bar still shown', pg.url.endswith('#menu') and links == ['Assistant', 'Payments', 'Dashboards', 'Reports', 'Investments', 'People & Loans', 'Trips', 'My accounts', 'My assets'] and pg.locator('.card', has_text='Categories').count() == 1 and pg.locator('.tabbar a.on').inner_text().strip() == 'More', str(links))
     pg.locator('main .row', has_text='My assets').click(); time.sleep(0.3)
     check('More → My assets opens it', pg.url.endswith('#assets'))
     pg.goto(URL + '#menu'); pg.get_by_role('button', name='＋ Add').click(); pg.locator('#nc-name').fill('Pets'); pg.locator('#nc-keys').fill('vet, pet food'); pg.get_by_role('button', name='Add category').click(); time.sleep(0.3)
@@ -220,7 +220,9 @@ with sync_playwright() as p:
     check('sample: budget planned and spent last month', money(stat('Planned')) > 0 and money(stat('Spent so far')) > 0)
     pg.goto(URL + '#people'); time.sleep(0.3); shot('s_people')
     # Alex: lent 300, paid back 200 -> 100; plus the 300 Friend A owes from earlier in this test. Sam is a bad debt, not counted.
-    check('sample: to receive is 400 (Alex 100 + Friend A 300)', money(stat('To receive')) == 400, stat('To receive'))
+    # The sample trip adds Alex's and Priya's shares of the trip expenses (lent).
+    trip_lent = pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).entries.filter(e => e.tripId && e.type === 'lent').reduce((x, e) => x + e.amount, 0)")
+    check('sample: to receive is 400 (Alex 100 + Friend A 300) + the sample trip shares', trip_lent > 0 and abs(money(stat('To receive')) - (400 + trip_lent)) < 0.01, f"{stat('To receive')} trip {trip_lent}")
     # Dashboards and reports, checked against totals worked out here from the raw entries
     import calendar
     today_d = today_d0

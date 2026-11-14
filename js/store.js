@@ -10,13 +10,13 @@ import { STARTER_CATEGORIES } from './seed.js';
 import * as V from './vault.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.5';
-const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals', 'bills', 'invSnapshots'];
+const COLLECTIONS = ['accounts', 'categories', 'entries', 'people', 'budgets', 'settings', 'loans', 'assets', 'reminders', 'investments', 'invTxns', 'sips', 'goals', 'bills', 'invSnapshots', 'trips'];
 const DEMO_KEY = 'lifedesk-demo';
 const EMAIL_KEY = 'lifedesk-email';
 
 export const isDemo = !firebaseConfig.apiKey || new URLSearchParams(window.location.search).get('demo') === '1';
 export const methods = loginMethods;
-export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [], investments: [], invTxns: [], sips: [], goals: [], bills: [], invSnapshots: [] };
+export const data = { accounts: [], categories: [], entries: [], people: [], budgets: [], settings: [], loans: [], assets: [], reminders: [], investments: [], invTxns: [], sips: [], goals: [], bills: [], invSnapshots: [], trips: [] };
 
 /** The user's preferences (currency, region); null until they have chosen. */
 export function prefs() {

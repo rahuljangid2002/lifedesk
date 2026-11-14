@@ -526,3 +526,29 @@ export function isBackDated(e) {
     }
     return daysBetween(e.date, isoDate(new Date(e.createdAt))) > 3;
 }
+
+// ---------- averages ----------
+/**
+ * Average income, expense and savings of the last `n` completed months before `key` that have entries
+ * (this month is left out, it is not finished). months = how many months were averaged (0 = none yet).
+ */
+export function averages(data, key, n = 6) {
+    const seen = [];
+    for (let i = 1; i <= n; i += 1) {
+        const k = addMonths(key, -i);
+        if (data.entries.some((e) => monthKey(e.date) === k)) {
+            seen.push(k);
+        }
+    }
+    let income = 0;
+    let expense = 0;
+    seen.forEach((k) => {
+        const s = monthSummary(data, k);
+        income += s.income;
+        expense += s.expense;
+    });
+    const m = seen.length;
+    const avgIncome = m ? Math.round((income / m) * 100) / 100 : 0;
+    const avgExpense = m ? Math.round((expense / m) * 100) / 100 : 0;
+    return { months: m, from: seen[seen.length - 1] || null, to: seen[0] || null, income: avgIncome, expense: avgExpense, saved: avgIncome - avgExpense, rate: avgIncome > 0 ? Math.round(((avgIncome - avgExpense) / avgIncome) * 100) : null };
+}

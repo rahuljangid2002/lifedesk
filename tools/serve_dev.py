@@ -25,6 +25,8 @@ class Fresh(http.server.SimpleHTTPRequestHandler):
 
 
 socketserver.TCPServer.allow_reuse_address = True
+socketserver.ThreadingTCPServer.request_queue_size = 128  # the browser asks for all the scripts at once
+socketserver.ThreadingTCPServer.daemon_threads = True
 with socketserver.ThreadingTCPServer(('127.0.0.1', PORT), Fresh) as httpd:
     print(f'LifeDesk test server on http://localhost:{PORT} (this computer only, nothing cached)')
     httpd.serve_forever()
