@@ -3,6 +3,7 @@
     python3 -m http.server 8765                 (in 4-Web-App)
     <venv>/python demo/build_guide.py           -> docs/LifeDesk - Demo Guide.docx / .pdf   (screenshots in docs/shots)
     <venv>/python demo/build_guide.py --no-shots   reuse the screenshots already taken
+    <venv>/python demo/build_guide.py --keep-signin   new screenshots, but keep the sign-in ones (no throw-away live account)
 """
 import datetime, html, os, subprocess, sys, time
 
@@ -23,7 +24,7 @@ TODAY = datetime.date.today().strftime('%-d %B %Y')
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 INTRO = ('LifeDesk is a web app with one login and several everyday tools. Account Management covers accounts, entries (typed or spoken), '
-         'daily expenses, monthly bills, a monthly budget, investments, people and loans, dashboards and reports. Renewal reminders keeps insurance, subscriptions, '
+         'daily expenses, monthly bills, a monthly budget, investments, people and loans, trips with shared expenses, a money check-up (Assistant), dashboards and reports. Renewal reminders keeps insurance, subscriptions, '
          'documents and bills in one list and reminds you by notification and email. It works in any browser on a phone or a desktop, '
          'in any currency, and can be added to a phone\'s home screen.')
 NOTE = ('Every name, amount and date in this guide is made-up sample data, loaded with the app\'s own "Load sample data" button in demo mode. '
@@ -57,7 +58,21 @@ SECTIONS = [
         'A notice tells you when monthly bills or EMIs are due; it opens Payments.',
         'Net balance = bank + wallets + cash − credit card owed − money owed to people.',
         'Net worth = net balance + money owed to you + what your assets are worth − loan principal still owed.',
-        'Notices for EMIs due and card bills lead to the Payments screen. Shortcuts to every screen.',
+        'Notices for EMIs due and card bills lead to the Payments screen. Shortcuts to every screen, including Trips and Assistant.',
+    ]),
+    ('Home: quick add, averages and money health', ['36_home_quick', '37_home_health'], [
+        'Quick add: one line on Home for an expense or an income: amount, what for, category and account, then Add. The category is suggested as you type, and the message after saving has Undo. "More kinds" opens Add Entry.',
+        'Last six months on average: income, expense and what was saved a month, over the last six completed months (this month is left out because it is not finished).',
+        'Under each average, this month so far as a percentage of a usual month, and a bar for this month\'s spending against a usual month.',
+        'Money health: the Assistant\'s score out of 100, its label, the most important suggestion and the five areas. Tap it to open the Assistant.',
+        'The current trip (or the next one) has its own tile: what it cost, your share, what friends owe you, Add trip expense and Open trip.',
+    ]),
+    ('Assistant: money check-up', ['m_assistant', '40_assistant', '41_assistant_chat'], [
+        'A check-up of all the money with a score out of 100 and five areas: Spending, Saving, Debt & cards, Investments, Bills & people. Each area has its own score and status.',
+        'It is worked out from your own entries by fixed rules, in your browser. Nothing is sent anywhere, and no AI service is used. It is general guidance, not financial advice.',
+        'Top 3 for today lists the most important suggestions first; each opens the screen to act on it (Budget, Payments, People & Loans, Investments...). Tap an area to see only its suggestions.',
+        'Done hides a suggestion for the rest of the day on this device; "Show done" brings them back.',
+        'Ask me anything: tap a ready question (a complete summary, what to do this month, where the money goes, savings, EMIs, bills, who owes you, portfolio risk, tax on gains) or type your own.',
     ]),
     ('Add Entry', ['05_add', '06_edit'], [
         'Eight kinds of entry in one form: Expense, Income, Transfer, Lent, Got back, Borrowed, Repaid, Asset. A line under the title explains the chosen kind.',
@@ -79,6 +94,14 @@ SECTIONS = [
         'Photos are made smaller before saving; a PDF can be up to 600 KB.',
         'Reports list entries without a receipt, and everything paid for you.',
     ]),
+    ('Trips: shared expenses', ['m_trip', '38_trip', '39_trip_add'], [
+        'Create a trip with a name, start and end dates, an optional budget and the people going (from People & Loans, or new names). You are always on your own trips.',
+        'On Add Entry choose an Expense and tick "For a trip?": pick the trip and tap who shared the expense. Everyone on the trip is ticked; leave out anyone who did not share it.',
+        'It is split equally. Your share is your expense (category, budget, spending). Each other person\'s share is recorded as money lent to them, so it shows in People & Loans as money they owe you. Your account goes down by the full amount.',
+        'The trip shows the total spent, your share, what is owed to you and the budget left; who owes what; and every expense with who shared it. Deleting an expense deletes every share together.',
+        'Settle up records the money a friend pays back for the trip. A shared entry is changed by deleting it on the trip and adding it again.',
+        'The + of the phone bar has a Trip expense shortcut for the current trip.',
+    ]),
     ('Investments', ['31_invest', '32_invest_open'], [
         'Mutual funds, shares, ETFs, fixed and recurring deposits, gold, bonds, provident fund, NPS and crypto in one portfolio.',
         'At the top: current value, invested, gain, today\'s change and XIRR (the yearly return that takes the timing of every rupee in and out into account).',
@@ -96,7 +119,7 @@ SECTIONS = [
     ]),
     ('Voice entry', ['m_voice_menu', 'm_voice', 'm_voice_edit'], [
         'Say an entry instead of typing it, in English or Hindi: "Spent 450 on groceries from HDFC".',
-        'Start it from the + of the bottom bar (tap and choose "Speak an entry", or press and hold +), from "Speak it" on Add Entry, or from the Voice entry shortcut on Home.',
+        'Start it from the + of the bottom bar (tap it and choose "Speak an entry" in Quick actions, or press and hold +), from "Speak it" on Add Entry, or from the Voice entry shortcut on Home.',
         'Several entries can be said in one sentence. Anything missing is asked for: how much, which account, which category, who.',
         'An account or bank that does not exist is not guessed: the assistant says so and asks which of your accounts to use.',
         'Nothing is saved until you confirm: say "yes" or tap Save. The pencil changes the amount, category, account, date or description first; "make it 500" changes it by voice.',
@@ -192,8 +215,9 @@ SECTIONS = [
         'Add your own categories with keywords for the suggestion.',
         'Download a backup file or restore one. Load or remove the sample data. Delete my account and data.',
     ]),
-    ('On a phone', ['m_home', 'm_add', 'm_dash'], [
+    ('On a phone', ['m_home', 'm_plus_sheet', 'm_dash'], [
         'The same app with a floating bar at the bottom: Home, Daily, + (add), Budget, More.',
+        'The + opens Quick actions, a sheet that slides up from the bottom while the page behind steps back under a soft blur: Speak an entry, Type an entry, a Trip expense, every kind of entry and every screen. It scrolls when it is taller than the screen; tap outside, the handle or × to close it.',
         'Screens slide in from the right and back to the left; forms open as a sheet from the bottom; the title stays in a frosted bar when you scroll.',
         'The Back link at the top, and the phone\'s own Back button, return to the screen you came from.',
         'Open the address in the phone\'s browser and choose "Add to Home screen": it opens like any other app.',
@@ -215,6 +239,8 @@ FACTS = [
     ('Voice entry', 'English and Hindi; Chrome, Edge and Safari (the browser does the listening)'),
     ('Reminders', 'A notification and an optional email every morning until a renewal is marked Renewed'),
     ('Investments', 'Funds, shares, ETFs, deposits, gold, bonds, provident fund and crypto; SIPs, goals, XIRR and automatic prices'),
+    ('Trips', 'Equal splits between the people who shared an expense; their shares show as money owed to you'),
+    ('Assistant', 'A money check-up with a score, suggestions and answers to questions, worked out in the browser (no AI service)'),
     ('Not included yet', 'Month-end email, mobile-number sign-in'),
 ]
 
@@ -248,126 +274,160 @@ def take_shots():
         go = lambda route, wait=0.6: (pg.evaluate("r => { location.hash = r; window.scrollTo(0, 0); }", route), time.sleep(wait))
 
         # sign-in screens (the real ones; the code request is answered here, so no email is sent and no account is made)
-        ctx.add_init_script(live.FLAGS)
-        live.answer_codes(ctx)
-        pg.goto(URL); pg.wait_for_selector('.login-form', timeout=30000); time.sleep(0.5); shot('01_login')
-        pg.get_by_role('button', name='Create an account').click()
-        pg.get_by_label('Your name').fill('Aarav Mehta'); pg.get_by_label('Email').fill(live.EMAIL)
-        pg.locator('[data-model="login.password"]').fill(live.PASSWORD); pg.get_by_role('button', name='Send verification code').click()
-        pg.wait_for_selector('input.code'); pg.locator('input.code').fill('482913'); time.sleep(3.5); shot('02_signup_code')
-        pg.get_by_role('button', name='Verify and create account').click(); pg.wait_for_selector('h2:has-text("Protect your data")', timeout=40000)
-        pg.locator('[data-model="vault.pass"]').fill('river-stone-lantern'); pg.locator('[data-model="vault.pass2"]').fill('river-stone-lantern'); time.sleep(0.4); shot('02b_passphrase')
-        pg.get_by_role('button', name='Set passphrase').click(); pg.wait_for_selector('#recovery-code', timeout=40000); time.sleep(3.5); shot('02c_recovery')
-        print('throw-away account deleted:', live.cleanup())
+        if '--keep-signin' not in sys.argv:
+            signin(ctx, pg, shot)
 
         # demo mode, rupees, sample data
-        pg.goto(DEMO); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR')
-        pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
-        go('more'); pg.get_by_role('button', name='Load sample data').click(); pg.wait_for_selector('button:has-text("Remove sample data")'); time.sleep(4)
-        go('hub'); shot('03_hub')
-        go('home'); shot('04_home')
-        go('add'); pg.get_by_label('Amount').fill('450'); pg.get_by_label('Description').fill('Coffee with team'); time.sleep(0.4); shot('05_add')
-        pg.locator('.row .icon-btn').first.click(); time.sleep(0.6); shot('06_edit')
-        pg.get_by_role('button', name='Cancel').first.click()
-        go('daily'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.5); shot('07_daily')
-        go('budget'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.5); shot('08_budget')
-        pg.locator('.budget-row', has_text='Food & Dining').get_by_role('button', name='See entries').click(); time.sleep(0.4)
-        pg.locator('.budget-row.open').scroll_into_view_if_needed(); pg.mouse.wheel(0, -160); time.sleep(0.4); shot('09_budget_entries')
-        go('insights'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.6); shot('10_dash_monthly')
-        pg.locator('.chart-card', has_text='Daily spend').scroll_into_view_if_needed(); pg.mouse.wheel(0, 120); time.sleep(0.4)
-        pg.locator('.chart-card', has_text='Daily spend').locator('.hit').nth(1).hover(force=True); time.sleep(0.4); shot('11_dash_monthly_charts')
-        pg.mouse.move(5, 5); pg.evaluate('window.scrollTo(0, 0)')
-        pg.get_by_role('button', name='Yearly', exact=True).click(); time.sleep(0.6); shot('12_dash_yearly')
-        pg.get_by_role('button', name='Balances', exact=True).click(); time.sleep(0.6); shot('13_dash_balances')
-        go('reports'); pg.locator('[data-model="reports.id"]').select_option('spend-by-category'); pg.locator('[data-model="reports.preset"]').select_option('last-month'); time.sleep(0.5); shot('14_report_category')
-        pg.locator('[data-model="reports.id"]').select_option('category-by-month'); time.sleep(0.5); shot('15_report_pivot')
-        go('pay'); shot('24_payments')
-        go('assets'); shot('23_assets')
-        go('insights'); pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.6); shot('25_dash_loans')
-        go('add'); pg.locator('.tile-btn[data-type=asset]').click(); pg.get_by_label('Amount').fill('120000'); pg.get_by_label('Description').fill('Motorbike')
-        pg.get_by_label('Kind of asset').select_option('Vehicle'); pg.get_by_label('Bought on EMI / finance').check(); time.sleep(0.2)
-        pg.get_by_label('EMI per month').fill('5500'); pg.get_by_label('Number of EMIs').fill('24'); time.sleep(0.3)
-        pg.locator('.pane-head').scroll_into_view_if_needed(); pg.mouse.wheel(0, 330); time.sleep(0.5); shot('22_emi_form')
-        go('renewals'); time.sleep(0.4)
-        if pg.get_by_role('button', name='Add sample reminders').count():
-            pg.get_by_role('button', name='Add sample reminders').click(); time.sleep(1)
-        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(4); shot('r_renewals')
-        pg.get_by_role('button', name='Add reminder').first.click(); time.sleep(0.8); shot('r_form')
-        pg.get_by_role('button', name='Cancel').first.click(); time.sleep(0.3)
-        go('people'); pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.5); shot('16_people')
-        go('accounts'); shot('17_accounts')
-        pg.get_by_role('button', name='Pay bill').click(); pg.get_by_role('button', name='Partial').click()
-        pg.locator('.a-panel input[type=number]').fill('5000'); pg.locator('.a-panel').scroll_into_view_if_needed(); time.sleep(0.4); shot('18_pay_card')
-        pg.get_by_role('button', name='Cancel').click()
-        go('more'); shot('19_account')
-        pg.locator('.card', has_text='Notifications').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('n_account')
-        pg.evaluate('window.scrollTo(0, 0)')
-        pg.get_by_role('button', name='Dark', exact=True).click(); go('home'); shot('20_dark')
-        go('more'); pg.get_by_role('button', name='Light', exact=True).click()
-        pg.locator('[data-currency]').select_option('USD'); time.sleep(4); shot('21_currency')
-        pg.get_by_role('button', name='Cancel').click(); time.sleep(0.3)
-        pg.get_by_role('button', name='System', exact=True).click()
-        # monthly bills, someone paid, receipts
-        go('pay'); pg.locator('[data-action="billNew"]').click()
-        pg.locator('[data-model="bills.form.description"]').fill('Society maintenance'); pg.locator('[data-model="bills.form.amount"]').fill('2500')
-        pg.locator('[data-model="bills.form.categoryId"]').select_option(label='Housing & Society'); pg.locator('[data-model="bills.form.day"]').select_option(str(min(28, datetime.date.today().day)))
-        pg.locator('[data-action="billSave"]').click(); time.sleep(0.6)
-        if pg.locator('.toast-close').count():
-            pg.locator('.toast-close').click()
-        pg.locator('.bill-row').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -260); time.sleep(0.5); shot('27_bills')
-        pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8); pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
-        pg.get_by_label('Amount').fill(''); pg.get_by_label('Description').fill(''); time.sleep(0.3)
-        pg.locator('.due-card').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('28_due')
-        pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8)
-        pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
-        if pg.get_by_label('Bought on EMI / finance').count() and pg.get_by_label('Bought on EMI / finance').is_checked():
-            pg.get_by_label('Bought on EMI / finance').uncheck(); time.sleep(0.3)
-        pg.get_by_label('Amount').fill('1800'); pg.get_by_label('Description').fill('Dinner, Alex paid')
-        pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
-        pg.locator('[data-model="add.paidBy"]').scroll_into_view_if_needed(); time.sleep(0.4); shot('29_paid_by')
-        pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
-        pg.locator('.receipts').scroll_into_view_if_needed(); pg.mouse.wheel(0, 120); time.sleep(0.4); shot('30_receipts')
-        # follow-up and WhatsApp
-        go('people'); time.sleep(0.4)
-        if not pg.locator('input[data-person-field="phone"]').count():
-            pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.4)
-        ph = pg.locator('input[data-person-field="phone"]').first; ph.fill('9876543210'); ph.blur(); time.sleep(0.4)
-        fu = pg.locator('input[data-person-field="followUp"]').first; fu.fill(datetime.date.today().isoformat()); fu.blur(); time.sleep(0.6)
-        pg.locator('input[data-person-field="followNote"]').first.fill('Said he will pay after salary'); pg.locator('input[data-person-field="followNote"]').first.blur(); time.sleep(0.5)
-        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.3); shot('26_people_follow')
-        # investments with the sample portfolio
-        go('invest', 1.2); pg.locator('[data-action="invSamples"]').click(); time.sleep(1)
-        if pg.locator('.toast-close').count():
-            pg.locator('.toast-close').click()
-        pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.4); shot('31_invest')
-        pg.locator('[data-action="invOpen"]', has_text='Flexi Cap').click(); time.sleep(0.5)
-        pg.locator('.inv-row.open').scroll_into_view_if_needed(); pg.mouse.wheel(0, -200); time.sleep(0.4); shot('32_invest_open')
-        pg.evaluate('window.scrollTo(0, 0)')
-        for tab, name in (('sips', '33_sips'), ('goals', '34_goals'), ('insights', '35_invest_insights')):
-            pg.locator(f'[data-action="invTab"][data-tab="{tab}"]').click(); time.sleep(0.6); shot(name)
-        pg.locator('[data-action="invTab"][data-tab="holdings"]').click(); time.sleep(0.3)
-        state = ctx.storage_state()
-        ctx.close()
+        pg.goto(DEMO)
+        rest(b, ctx, pg, shot, go)
 
-        m = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=3, storage_state=state, color_scheme='light')
-        mp = m.new_page()
-        for route, name in (('home', 'm_home'), ('add', 'm_add'), ('insights', 'm_dash')):
-            mp.goto(DEMO + '#' + route); time.sleep(0.9); shot(name, mp)
-        # without a connection
-        mp.goto(DEMO + '#home'); time.sleep(0.9); m.set_offline(True); mp.wait_for_selector('.offline'); time.sleep(0.8); shot('m_offline', mp)
-        mp.get_by_role('button', name='Continue offline').click(); time.sleep(0.6); shot('m_offline_chip', mp)
-        m.set_offline(False); time.sleep(1.5); m.close()
 
-        # voice entry: the browser's listening and speaking are replaced by stand-ins that "hear" the lines given here
-        v = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=3, storage_state=state, color_scheme='light')
-        v.add_init_script(VOICE_STAND)
-        vp = v.new_page(); vp.goto(DEMO + '#home'); vp.wait_for_selector('.tabbar'); time.sleep(4.5)
-        vp.locator('.tabbar a.add').click(); time.sleep(0.6); shot('m_voice_menu', vp)
-        account = vp.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).accounts.filter(a => a.kind === 'bank' && !a.closed)[0].name")
-        vp.evaluate('(l) => { window.__say = l; }', [f'Spent 450 on groceries from {account} and 200 on petrol from cash'])
-        vp.get_by_role('menuitem', name='Speak an entry').click(); vp.wait_for_selector('.voice-review'); time.sleep(0.8); shot('m_voice', vp)
-        vp.locator('.voice-review .row .icon-btn').first.click(); time.sleep(0.6); shot('m_voice_edit', vp)
-        b.close()
+def signin(ctx, pg, shot):
+    """The real sign-up screens with a throw-away live account, deleted again at the end."""
+    ctx.add_init_script(live.FLAGS)
+    live.answer_codes(ctx)
+    pg.goto(URL); pg.wait_for_selector('.login-form', timeout=30000); time.sleep(0.5); shot('01_login')
+    pg.get_by_role('button', name='Create an account').click()
+    pg.get_by_label('Your name').fill('Aarav Mehta'); pg.get_by_label('Email').fill(live.EMAIL)
+    pg.locator('[data-model="login.password"]').fill(live.PASSWORD); pg.get_by_role('button', name='Send verification code').click()
+    pg.wait_for_selector('input.code'); pg.locator('input.code').fill('482913'); time.sleep(3.5); shot('02_signup_code')
+    pg.get_by_role('button', name='Verify and create account').click(); pg.wait_for_selector('h2:has-text("Protect your data")', timeout=40000)
+    pg.locator('[data-model="vault.pass"]').fill('river-stone-lantern'); pg.locator('[data-model="vault.pass2"]').fill('river-stone-lantern'); time.sleep(0.4); shot('02b_passphrase')
+    pg.get_by_role('button', name='Set passphrase').click(); pg.wait_for_selector('#recovery-code', timeout=40000); time.sleep(3.5); shot('02c_recovery')
+    print('throw-away account deleted:', live.cleanup())
+
+
+def rest(b, ctx, pg, shot, go):
+    """Demo mode with rupees and the sample data, then every screen on a desktop and a phone."""
+    pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR')
+    pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
+    go('more'); pg.get_by_role('button', name='Load sample data').click(); pg.wait_for_selector('button:has-text("Remove sample data")'); time.sleep(4)
+    go('hub'); shot('03_hub')
+    go('home'); shot('04_home')
+    go('add'); pg.get_by_label('Amount').fill('450'); pg.get_by_label('Description').fill('Coffee with team'); time.sleep(0.4); shot('05_add')
+    # the newest entry that is not part of a shared trip expense (those open the trip instead)
+    plain = pg.evaluate("[...JSON.parse(localStorage.getItem('lifedesk-demo')).entries].filter(e => !e.splitKey && !e.tripId).sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1))[0].id")
+    pg.locator(f'[data-action="editEntry"][data-id="{plain}"]').first.click(); time.sleep(0.6); shot('06_edit')
+    pg.get_by_role('button', name='Cancel').first.click()
+    go('daily'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.5); shot('07_daily')
+    go('budget'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.5); shot('08_budget')
+    pg.locator('.budget-row', has_text='Food & Dining').get_by_role('button', name='See entries').click(); time.sleep(0.4)
+    pg.locator('.budget-row.open').scroll_into_view_if_needed(); pg.mouse.wheel(0, -160); time.sleep(0.4); shot('09_budget_entries')
+    go('insights'); pg.get_by_role('button', name='Previous month').click(); time.sleep(0.6); shot('10_dash_monthly')
+    pg.locator('.chart-card', has_text='Daily spend').scroll_into_view_if_needed(); pg.mouse.wheel(0, 120); time.sleep(0.4)
+    pg.locator('.chart-card', has_text='Daily spend').locator('.hit').nth(1).hover(force=True); time.sleep(0.4); shot('11_dash_monthly_charts')
+    pg.mouse.move(5, 5); pg.evaluate('window.scrollTo(0, 0)')
+    pg.get_by_role('button', name='Yearly', exact=True).click(); time.sleep(0.6); shot('12_dash_yearly')
+    pg.get_by_role('button', name='Balances', exact=True).click(); time.sleep(0.6); shot('13_dash_balances')
+    go('reports'); pg.locator('[data-model="reports.id"]').select_option('spend-by-category'); pg.locator('[data-model="reports.preset"]').select_option('last-month'); time.sleep(0.5); shot('14_report_category')
+    pg.locator('[data-model="reports.id"]').select_option('category-by-month'); time.sleep(0.5); shot('15_report_pivot')
+    go('pay'); shot('24_payments')
+    go('assets'); shot('23_assets')
+    go('insights'); pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.6); shot('25_dash_loans')
+    go('add'); pg.locator('.tile-btn[data-type=asset]').click(); pg.get_by_label('Amount').fill('120000'); pg.get_by_label('Description').fill('Motorbike')
+    pg.get_by_label('Kind of asset').select_option('Vehicle'); pg.get_by_label('Bought on EMI / finance').check(); time.sleep(0.2)
+    pg.get_by_label('EMI per month').fill('5500'); pg.get_by_label('Number of EMIs').fill('24'); time.sleep(0.3)
+    pg.locator('.pane-head').scroll_into_view_if_needed(); pg.mouse.wheel(0, 330); time.sleep(0.5); shot('22_emi_form')
+    go('renewals'); time.sleep(0.4)
+    if pg.get_by_role('button', name='Add sample reminders').count():
+        pg.get_by_role('button', name='Add sample reminders').click(); time.sleep(1)
+    pg.evaluate('window.scrollTo(0, 0)'); time.sleep(4); shot('r_renewals')
+    pg.get_by_role('button', name='Add reminder').first.click(); time.sleep(0.8); shot('r_form')
+    pg.get_by_role('button', name='Cancel').first.click(); time.sleep(0.3)
+    go('people'); pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.5); shot('16_people')
+    go('accounts'); shot('17_accounts')
+    pg.get_by_role('button', name='Pay bill').click(); pg.get_by_role('button', name='Partial').click()
+    pg.locator('.a-panel input[type=number]').fill('5000'); pg.locator('.a-panel').scroll_into_view_if_needed(); time.sleep(0.4); shot('18_pay_card')
+    pg.get_by_role('button', name='Cancel').click()
+    go('more'); shot('19_account')
+    pg.locator('.card', has_text='Notifications').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('n_account')
+    pg.evaluate('window.scrollTo(0, 0)')
+    pg.get_by_role('button', name='Dark', exact=True).click(); go('home'); shot('20_dark')
+    go('more'); pg.get_by_role('button', name='Light', exact=True).click()
+    pg.locator('[data-currency]').select_option('USD'); time.sleep(4); shot('21_currency')
+    pg.get_by_role('button', name='Cancel').click(); time.sleep(0.3)
+    pg.get_by_role('button', name='System', exact=True).click()
+    # monthly bills, someone paid, receipts
+    go('pay'); pg.locator('[data-action="billNew"]').click()
+    pg.locator('[data-model="bills.form.description"]').fill('Society maintenance'); pg.locator('[data-model="bills.form.amount"]').fill('2500')
+    pg.locator('[data-model="bills.form.categoryId"]').select_option(label='Housing & Society'); pg.locator('[data-model="bills.form.day"]').select_option(str(min(28, datetime.date.today().day)))
+    pg.locator('[data-action="billSave"]').click(); time.sleep(0.6)
+    if pg.locator('.toast-close').count():
+        pg.locator('.toast-close').click()
+    pg.locator('.bill-row').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -260); time.sleep(0.5); shot('27_bills')
+    pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8); pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
+    pg.get_by_label('Amount').fill(''); pg.get_by_label('Description').fill(''); time.sleep(0.3)
+    pg.locator('.due-card').first.scroll_into_view_if_needed(); pg.mouse.wheel(0, -120); time.sleep(0.5); shot('28_due')
+    pg.goto(DEMO + '#add'); pg.wait_for_selector('.tile-btn'); time.sleep(0.8)
+    pg.locator('.tile-btn[data-type=expense]').click(); time.sleep(0.3)
+    if pg.get_by_label('Bought on EMI / finance').count() and pg.get_by_label('Bought on EMI / finance').is_checked():
+        pg.get_by_label('Bought on EMI / finance').uncheck(); time.sleep(0.3)
+    pg.get_by_label('Amount').fill('1800'); pg.get_by_label('Description').fill('Dinner, Alex paid')
+    pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
+    pg.locator('[data-model="add.paidBy"]').scroll_into_view_if_needed(); time.sleep(0.4); shot('29_paid_by')
+    pg.locator('[data-action="setPaidBy"]').click(); time.sleep(0.3)
+    pg.locator('.receipts').scroll_into_view_if_needed(); pg.mouse.wheel(0, 120); time.sleep(0.4); shot('30_receipts')
+    # follow-up and WhatsApp
+    go('people'); time.sleep(0.4)
+    if not pg.locator('input[data-person-field="phone"]').count():
+        pg.locator('.p-head', has_text='Alex').click(); time.sleep(0.4)
+    ph = pg.locator('input[data-person-field="phone"]').first; ph.fill('9876543210'); ph.blur(); time.sleep(0.4)
+    fu = pg.locator('input[data-person-field="followUp"]').first; fu.fill(datetime.date.today().isoformat()); fu.blur(); time.sleep(0.6)
+    pg.locator('input[data-person-field="followNote"]').first.fill('Said he will pay after salary'); pg.locator('input[data-person-field="followNote"]').first.blur(); time.sleep(0.5)
+    pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.3); shot('26_people_follow')
+    # investments with the sample portfolio
+    go('invest', 1.2); pg.locator('[data-action="invSamples"]').click(); time.sleep(1)
+    if pg.locator('.toast-close').count():
+        pg.locator('.toast-close').click()
+    pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.4); shot('31_invest')
+    pg.locator('[data-action="invOpen"]', has_text='Flexi Cap').click(); time.sleep(0.5)
+    pg.locator('.inv-row.open').scroll_into_view_if_needed(); pg.mouse.wheel(0, -200); time.sleep(0.4); shot('32_invest_open')
+    pg.evaluate('window.scrollTo(0, 0)')
+    for tab, name in (('sips', '33_sips'), ('goals', '34_goals'), ('insights', '35_invest_insights')):
+        pg.locator(f'[data-action="invTab"][data-tab="{tab}"]').click(); time.sleep(0.6); shot(name)
+    pg.locator('[data-action="invTab"][data-tab="holdings"]').click(); time.sleep(0.3)
+    # Home: quick add, averages, money health and the trip tile
+    go('home', 1.2)
+    glide = lambda sel, off=110: (pg.evaluate("([s, o]) => window.scrollTo(0, document.querySelector(s).getBoundingClientRect().top + window.scrollY - o)", [sel, off]), time.sleep(0.6))
+    glide('.quick', 90); shot('36_home_quick')
+    glide('.as-home', 90); shot('37_home_health')
+    # Assistant
+    go('assistant', 1.2); pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.4); shot('40_assistant')
+    pg.locator('.as-chat .pill-btn', has_text='Give me a complete summary').click(); time.sleep(0.4)
+    pg.locator('[data-model="assistant.text"]').fill('Who owes me money?'); pg.locator('[data-model="assistant.text"]').press('Enter'); time.sleep(0.5)
+    glide('.as-chat', 90); shot('41_assistant_chat')
+    # Trips
+    go('trips', 1); pg.locator('.trip-card').first.click(); time.sleep(0.8); pg.evaluate('window.scrollTo(0, 0)'); time.sleep(0.3); shot('38_trip')
+    pg.get_by_role('button', name='Add trip expense').first.click(); time.sleep(0.8)
+    pg.get_by_label('Amount').fill('1200'); pg.get_by_label('Description').fill('Boat ride')
+    pg.locator('#add-category').select_option(label='Travel & Transport'); pg.locator('.chip').first.click(); time.sleep(0.4)
+    glide('.trip-box', 260); shot('39_trip_add')
+    go('home', 0.6)
+    state = ctx.storage_state()
+    ctx.close()
+
+    m = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=3, storage_state=state, color_scheme='light')
+    mp = m.new_page()
+    for route, name in (('home', 'm_home'), ('add', 'm_add'), ('insights', 'm_dash'), ('assistant', 'm_assistant')):
+        mp.goto(DEMO + '#' + route); time.sleep(0.9); shot(name, mp)
+    mp.goto(DEMO + '#home'); time.sleep(1.2); mp.locator('.tabbar a.add').click(); time.sleep(0.9); shot('m_plus_sheet', mp)
+    mp.keyboard.press('Escape'); time.sleep(0.6)
+    mp.goto(DEMO + '#trips'); time.sleep(1); mp.locator('.trip-card').first.click(); time.sleep(1.2); shot('m_trip', mp)
+    # without a connection
+    mp.goto(DEMO + '#home'); time.sleep(0.9); m.set_offline(True); mp.wait_for_selector('.offline'); time.sleep(0.8); shot('m_offline', mp)
+    mp.get_by_role('button', name='Continue offline').click(); time.sleep(0.6); shot('m_offline_chip', mp)
+    m.set_offline(False); time.sleep(1.5); m.close()
+
+    # voice entry: the browser's listening and speaking are replaced by stand-ins that "hear" the lines given here
+    v = b.new_context(viewport={'width': 390, 'height': 844}, device_scale_factor=3, storage_state=state, color_scheme='light')
+    v.add_init_script(VOICE_STAND)
+    vp = v.new_page(); vp.goto(DEMO + '#home'); vp.wait_for_selector('.tabbar'); time.sleep(4.5)
+    vp.locator('.tabbar a.add').click(); time.sleep(0.6); shot('m_voice_menu', vp)
+    account = vp.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo')).accounts.filter(a => a.kind === 'bank' && !a.closed)[0].name")
+    vp.evaluate('(l) => { window.__say = l; }', [f'Spent 450 on groceries from {account} and 200 on petrol from cash'])
+    vp.get_by_role('menuitem', name='Speak an entry').click(); vp.wait_for_selector('.voice-review'); time.sleep(0.8); shot('m_voice', vp)
+    vp.locator('.voice-review .row .icon-btn').first.click(); time.sleep(0.6); shot('m_voice_edit', vp)
+    b.close()
 
 
 def build_docx(path):

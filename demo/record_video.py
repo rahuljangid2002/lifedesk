@@ -100,6 +100,25 @@ def scroll(page, total, steps=30, pause=0.05):
         time.sleep(pause)
 
 
+def glide(page, selector, offset=96, steps=26):
+    """Scrolls smoothly until the element is about `offset` pixels from the top."""
+    el = page.locator(selector).first
+    el.wait_for(timeout=15000)
+    y = el.evaluate('e => e.getBoundingClientRect().top') - offset
+    if abs(y) > 8:
+        scroll(page, y, steps)
+    time.sleep(0.4)
+
+
+def sheet_scroll(page, total, steps=24):
+    """Scrolls inside the quick actions sheet with the mouse wheel."""
+    box = page.locator('.sheet-body').bounding_box()
+    page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] * 0.6)
+    for _ in range(steps):
+        page.mouse.wheel(0, total / steps)
+        time.sleep(0.05)
+
+
 def card(name, title, sub, points):
     path = os.path.join(WORK, f'card_{name}.html')
     with open(path, 'w') as f:
@@ -156,12 +175,99 @@ def s_hub(page):
     tap(page, page.locator('a.tool').first, 1.2)
     caption(page, 'Home: income, expense, invested, total money out and card owed')
     time.sleep(4.5)
-    scroll(page, 330)
+    glide(page, '.shortcuts')
+    caption(page, 'Shortcuts to every screen')
+    time.sleep(2.5)
+    glide(page, '.worth')
     caption(page, 'Net worth: balance, money owed to you and assets, less loans')
-    time.sleep(4)
-    scroll(page, 420)
-    caption(page, 'Accounts, budget, people and the latest entries')
     time.sleep(3.5)
+    glide(page, '.as-home')
+    caption(page, 'Money health and the current trip')
+    time.sleep(3.5)
+    glide(page, '.trip-home')
+    time.sleep(2)
+    caption(page, 'Accounts, budget, people and the latest entries')
+    scroll(page, 520)
+    time.sleep(3)
+
+
+def s_quick(page):
+    start(page, DEMO + '#home')
+    glide(page, '.quick', offset=140)
+    caption(page, 'Quick add on Home: one line for an expense or an income')
+    time.sleep(2.5)
+    page.locator('[data-model="quick.amount"]').click()
+    page.locator('[data-model="quick.amount"]').type('250', delay=120)
+    page.locator('[data-model="quick.description"]').click()
+    page.locator('[data-model="quick.description"]').type('Weekly groceries', delay=70)
+    caption(page, 'The category is suggested as you type')
+    time.sleep(2.5)
+    tap(page, page.locator('.quick-add'), 1)
+    caption(page, 'Saved, with Undo')
+    time.sleep(2.5)
+    glide(page, '.avg-card')
+    caption(page, 'The last six months on average, and this month so far')
+    time.sleep(5)
+
+
+def s_assistant(page):
+    start(page, DEMO + '#assistant')
+    caption(page, 'Assistant: a money check-up worked out from your own entries')
+    time.sleep(4)
+    glide(page, '.as-areas', offset=120)
+    caption(page, 'Five areas, each with a score')
+    time.sleep(2.5)
+    tap(page, page.locator('.as-area', has_text='Spending'), 1.5)
+    caption(page, 'Tap an area to see only its suggestions')
+    time.sleep(3)
+    tap(page, page.locator('.as-area', has_text='Spending'), 1)
+    glide(page, '.as-tips', offset=150)
+    caption(page, 'Top 3 for today: each opens the screen to act on it')
+    time.sleep(4)
+    tap(page, page.locator('.as-tip .btn.small').nth(3), 1)
+    caption(page, 'Mark a suggestion done for today')
+    time.sleep(2)
+    glide(page, '.as-chat', offset=110)
+    tap(page, page.locator('.as-chat .pill-btn', has_text='Give me a complete summary'), 1.2)
+    caption(page, 'Ask a question: the rules answer in your browser, nothing is sent anywhere')
+    time.sleep(4)
+    box = page.locator('[data-model="assistant.text"]')
+    box.click(); box.type('Who owes me money?', delay=60); box.press('Enter')
+    time.sleep(3.5)
+
+
+def s_trips(page):
+    start(page, DEMO + '#trips')
+    caption(page, 'Trips: share trip expenses fairly')
+    time.sleep(3)
+    tap(page, page.locator('.trip-card').first, 1.5)
+    caption(page, 'What the trip cost, your share, and who owes you')
+    time.sleep(3.5)
+    glide(page, '.trip-list', offset=140)
+    time.sleep(2.5)
+    page.evaluate('window.scrollTo({ top: 0, behavior: "smooth" })'); time.sleep(0.8)
+    tap(page, page.get_by_role('button', name='Add trip expense'), 1.5)
+    caption(page, 'Add Entry opens with the trip chosen and everyone ticked')
+    page.get_by_label('Amount').click(); page.get_by_label('Amount').type('1200', delay=120)
+    page.get_by_label('Description').click(); page.get_by_label('Description').type('Boat ride', delay=70)
+    page.locator('#add-category').select_option(label='Travel & Transport')
+    tap(page, page.locator('.chip').first, 0.6)
+    glide(page, '.trip-box', offset=140)
+    caption(page, 'Split equally: your share is your spending, theirs is money owed to you')
+    time.sleep(4)
+    tap(page, page.locator('.trip-box .pill-btn').nth(2), 1)
+    caption(page, 'Leave out anyone who did not share it')
+    time.sleep(2.5)
+    tap(page, page.locator('.trip-box .pill-btn').nth(2), 0.8)
+    tap(page, page.get_by_role('button', name='Save trip expense'), 1.8)
+    if page.locator('.trip-card').count():  # saving goes back to the Trips list: open the trip again
+        tap(page, page.locator('.trip-card').first, 1.2)
+    caption(page, 'Back on the trip: Settle up records money paid back')
+    glide(page, '.trip-list', offset=140)
+    tap(page, page.locator('.trip-member').get_by_role('button', name='Settle up').first, 1.2)
+    time.sleep(1.5)
+    tap(page, page.get_by_role('button', name='Record'), 1.5)
+    time.sleep(2)
 
 
 def s_add(page):
@@ -373,11 +479,12 @@ def s_mobile(page):
     scroll(page, 500, steps=25)
     time.sleep(1.5)
     tap(page, page.locator('.tabbar a.add'), 1.8)
-    caption(page, 'The plus button: type an entry, or speak it')
-    time.sleep(2.2)
-    tap(page, page.get_by_role('menuitem', name='Type an entry'), 2.5)
+    caption(page, 'The plus button: speak, type, a trip expense, or any screen')
+    time.sleep(3)
+    sheet_scroll(page, 420)
+    time.sleep(2.5)
+    tap(page, page.locator('.qa', has_text='Daily'), 2.5)
     caption(page, '')
-    tap(page, page.locator('.tabbar a', has_text='Daily'), 2.5)
     nav(page, 'insights', 1.5)
     caption(page, 'Dashboards on the phone')
     scroll(page, 700, steps=35)
@@ -510,6 +617,27 @@ def s_bills(page):
     time.sleep(3.5)
 
 
+def s_sheet(page):
+    start(page, DEMO + '#home')
+    caption(page, 'The plus button opens quick actions')
+    time.sleep(2.5)
+    tap(page, page.locator('.tabbar a.add'), 1.2)
+    caption(page, 'The sheet slides up and the page behind steps back')
+    time.sleep(3)
+    sheet_scroll(page, 360)
+    caption(page, 'Every kind of entry and every screen, in one place')
+    time.sleep(3)
+    sheet_scroll(page, -360)
+    time.sleep(1.5)
+    caption(page, 'Tap outside and it slides away')
+    page.mouse.click(30, 60)
+    time.sleep(2.5)
+    tap(page, page.locator('.tabbar a.add'), 1.2)
+    tap(page, page.locator('[data-action="addMenuTrip"]'), 2)
+    caption(page, 'Trip expense: straight to the form, ready to split')
+    time.sleep(3)
+
+
 def s_outro(page):
     start(page, card('outro', 'LifeDesk', 'All your money, in one place. More tools on the way.',
                      ['rahuljangid2002.github.io/lifedesk', 'Add to Home screen on your phone', 'Encrypted: only you can read your data']), 0.6)
@@ -519,9 +647,12 @@ def s_outro(page):
 SCENES = [
     ('title', s_title, 'card', "This is LifeDesk: one login for your everyday tools. The first tool is Account Management, a personal finance app that runs in any browser, on a phone or a desktop, in any currency. Everything in this demo is made-up sample data."),
     ('login', s_login, 'login', "You sign in with an email and password, or with Google. A new account confirms its email with a six digit code. Then you choose a data passphrase. Your data is encrypted on your own device before it is saved, so nobody else can read it, not even the people who run LifeDesk. You also get a recovery code, shown once, in case you forget the passphrase."),
-    ('hub', s_hub, 'app', "After signing in, you land on All tools. There are two tools: Account Management, and Renewal reminders. The home screen shows this month's income, expense and net balance, what you invested, your spending plus investing, the total money out, and what your cards owe. Below that is your net worth: your balance, plus money owed to you and your assets, less your loans. Then your accounts, the budget, people, and the latest entries."),
+    ('hub', s_hub, 'app', "After signing in, you land on All tools. There are two tools: Account Management, and Renewal reminders. The home screen shows this month's income, expense and net balance, what you invested, the total money out, and what your cards owe. Shortcuts open every screen. Further down: your net worth, your money health, the current trip, then your accounts, the budget and the latest entries."),
+    ('quick', s_quick, 'app', "Home also has quick add: one line for an expense or an income. Type the amount and what it was for, and the category is suggested. Press Add, and it is saved, with undo. Below it are the last six months on average: income, expense and what you saved, and how far this month has already gone against a usual month."),
+    ('assistant', s_assistant, 'app', "The Assistant gives your money a check-up. It works out a score from your own entries, with fixed rules, right in your browser, so nothing is sent anywhere. There are five areas: spending, saving, debt and cards, investments, and bills and people. Tap one to see only its suggestions. The top three are the most important for today, and each one opens the screen to act on it. Mark one done, or ask a question, like a complete summary, or who owes you money. Home shows the same score as Money health."),
     ('add', s_add, 'app', "Add Entry handles eight kinds of entry in one form. Type the amount and a description, and the category is filled in for you, from keywords and from what you chose before. Pick the account, and save. Every recent entry has a pencil, so a mistake can be corrected, or deleted, and all balances follow."),
     ('voice', s_voice, 'voice', "You can also speak an entry, in English or Hindi. Say several entries in one sentence. LifeDesk shows what it understood, asks for anything that is missing, and saves nothing until you confirm. You can change an entry first, and undo it after saving. Voice entry works in Chrome, Edge and Safari."),
+    ('trips', s_trips, 'app', "Trips makes shared expenses fair. Create a trip with its dates and who is going. The trip shows the total spent, your share, and who owes you what. Add a trip expense, and it is split equally between the people who shared it; leave out anyone who did not. Your share counts as your spending, and the others' shares show in People and Loans as money they owe you. When a friend pays you back, Settle up records it."),
     ('bills', s_bills, 'app', "Monthly bills, like rent, society or a recharge, are added once with their day of the month. Each month they come up in Due this month, on Add Entry, Daily and Payments, and Home shows a notice. Press Paid, and it becomes an expense. When someone else pays for you, choose Someone paid: no account is used, and it adds to what you owe them. And any entry can carry receipts, photos or P D Fs, encrypted like everything else."),
     ('invest', s_invest, 'app', "Investments tracks mutual funds, shares, E T Fs, fixed deposits, gold, provident fund and crypto. At the top: current value, what you invested, your gain, today's change and your X I R R. Open a holding to buy more, sell, record a dividend or start a S I P. S I Ps are recorded on their day, with a yearly step-up. Goals show how far along you are, and what to put in each month. Insights split it by type, show the value month by month, and the gains of each year. To add one, search for the share or fund, and today's price is filled in. Buying now takes the money from your bank account."),
     ('emi', s_emi, 'app', "When you buy something valuable, choose Asset. If you bought it on E M I, tick the box and enter the E M I and the number of months. The interest rate is worked out as you type. Saving creates the asset and its loan. My assets then shows what each thing cost, what it is worth, the loan left, and the interest paid and still to pay."),
@@ -534,7 +665,8 @@ SCENES = [
     ('accounts', s_accounts, 'app', "My Accounts lists cash and bank accounts, wallets and credit cards, each with its balance."),
     ('renew', s_renew, 'app', "Renewal reminders keeps insurance, subscriptions, documents and bills in one list, grouped into overdue, due soon and later. Press Renewed and it moves to its next date. With notifications turned on, you get a reminder on your phone, and by email if you like, every morning until it is renewed."),
     ('settings', s_settings, 'app', "Under Account, you choose light or dark, or let the app follow your device. You can change your currency, and either convert every amount at today's exchange rate, or keep the numbers as they are. You can also add categories, download a backup, and load or remove the sample data."),
-    ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a floating bar at the bottom, and screens that slide like a phone's own apps. The plus button adds an entry by typing or by voice. Add it to the home screen, and it opens like any other app."),
+    ('mobile', s_mobile, 'phone', "On a phone, it is the same app with a floating bar at the bottom, and screens that slide like a phone's own apps. The plus button opens a sheet of quick actions: speak an entry, type one, add a trip expense, or jump to any screen. Add it to the home screen, and it opens like any other app."),
+    ('sheet', s_sheet, 'app', "On a phone, the plus button opens a sheet of quick actions. It slides up from the bottom, and the page behind steps back. Speak an entry, type one, add a trip expense, choose any kind of entry, or jump to any screen. Tap outside, and it slides away."),
     ('outro', s_outro, 'card', "That is LifeDesk. Your data is encrypted and private to you, and it is free to host. Thank you for watching."),
 ]
 
@@ -610,7 +742,8 @@ def build(name, webm, begin, end, apath, alen, kind):
 def main():
     os.makedirs(WORK, exist_ok=True); os.makedirs(OUT, exist_ok=True)
     only = set(a for a in sys.argv[1:] if not a.startswith('--'))
-    scenes = [x for x in SCENES if not (MOBILE and x[0] == 'mobile')]  # the phone scene is the whole video here
+    # the phone scene is the whole video in the mobile cut; the sheet scene needs the phone layout, so only the mobile cut has it
+    scenes = [x for x in SCENES if not (MOBILE and x[0] == 'mobile') and not (not MOBILE and x[0] == 'sheet')]
     total = 0
     with sync_playwright() as pw:
         prepare(pw)
