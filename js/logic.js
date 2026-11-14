@@ -238,12 +238,11 @@ export function personOutstanding(person, entries, upTo) {
             out += e.type === 'borrowed' ? amt : e.type === 'repaid' ? -amt : 0;
         }
     }
-    // "paid by someone": a purchase this person paid for you, so you owe them
-    if (person.direction === 'iOwe') {
-        for (const e of entries) {
-            if (e.paidBy === person.id && (!upTo || e.date <= upTo)) {
-                out += num(e.amount);
-            }
+    // "paid by someone": a purchase this person paid for you. You owe them more, or (a friend who owes you, such as
+    // someone on a trip) they owe you less.
+    for (const e of entries) {
+        if (e.paidBy === person.id && (!upTo || e.date <= upTo)) {
+            out += person.direction === 'iOwe' ? num(e.amount) : -num(e.amount);
         }
     }
     return out;
@@ -415,7 +414,7 @@ export function validateEntry(e, data) {
             return 'Only an expense or an asset can be paid by someone else.';
         }
         const p = data.people.find((x) => x.id === e.paidBy);
-        if (!p || p.direction !== 'iOwe') {
+        if (!p || (p.direction !== 'iOwe' && !e.tripId)) {
             return 'Choose who paid (a person you owe).';
         }
     } else if (!e.accountId) {

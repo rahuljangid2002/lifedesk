@@ -51,7 +51,16 @@ export function splitShares(amount, personIds, includeMe) {
  * The entries for one shared trip expense. base: the fields every entry shares (date, accountId, notes, createdAt...).
  * ids: a function giving a new id. Returns [] when nobody shares it.
  */
-export function tripEntries({ base, amount, description, categoryId, tripId, personIds, includeMe, names, ids, splitKey }) {
+export function tripEntries({ base, amount, description, categoryId, tripId, personIds, includeMe, names, ids, splitKey, paidBy }) {
+    if (paidBy) {
+        // a member paid: only your share is yours to record, as an expense they paid for you (no account)
+        // shared by you and the people ticked (the payer too, when ticked); nobody ticked = it was for you only
+        const n = 1 + new Set((personIds || []).filter(Boolean)).size;
+        const share = Math.round((Number(amount) / n) * 100) / 100;
+        const what = String(description || '').trim() || 'Trip expense';
+        return [{ ...base, id: ids(), type: 'expense', amount: share, description: what, categoryId, personId: null, accountId: null, paidBy,
+            tripId, splitKey, billAmount: Number(amount) || 0, shareCount: n }];
+    }
     const s = splitShares(amount, personIds, includeMe);
     if (!s.count) {
         return [];
@@ -71,19 +80,26 @@ export function tripEntries({ base, amount, description, categoryId, tripId, per
 /** A trip's figures: totals, each member's balance and its shared expenses (newest first). */
 export function tripSummary(trip, entries, people, today) {
     const nameOf = (id) => (people.find((p) => p.id === id) || {}).name || 'Someone';
-    const members = new Map((trip.members || []).map((id) => [id, { personId: id, name: nameOf(id), shared: 0, settled: 0, owes: 0 }]));
+    const members = new Map((trip.members || []).map((id) => [id, { personId: id, name: nameOf(id), shared: 0, settled: 0, paidForMe: 0, owes: 0 }]));
     const bills = new Map();
     let myShare = 0;
+    let paidForMe = 0;
     let lent = 0;
     let received = 0;
     const mine = entries.filter((e) => e.tripId === trip.id).sort((a, b) => (a.date === b.date ? num(b.createdAt) - num(a.createdAt) : a.date < b.date ? 1 : -1));
     for (const e of mine) {
         const amt = num(e.amount);
-        if (e.personId && !members.has(e.personId)) {
-            members.set(e.personId, { personId: e.personId, name: nameOf(e.personId), shared: 0, settled: 0, owes: 0 });
+        for (const pid of [e.personId, e.paidBy]) {
+            if (pid && !members.has(pid)) {
+                members.set(pid, { personId: pid, name: nameOf(pid), shared: 0, settled: 0, paidForMe: 0, owes: 0 });
+            }
         }
         if (e.type === 'expense') {
             myShare += amt;
+            if (e.paidBy) {
+                members.get(e.paidBy).paidForMe += amt;
+                paidForMe += amt;
+            }
         } else if (e.type === 'lent') {
             lent += amt;
             members.get(e.personId).shared += amt;
@@ -96,7 +112,7 @@ export function tripSummary(trip, entries, people, today) {
         }
         let b = bills.get(e.splitKey);
         if (!b) {
-            b = { key: e.splitKey, date: e.date, bill: num(e.billAmount), shareCount: num(e.shareCount), accountId: e.accountId, description: null, categoryId: null, includesMe: false, myShare: 0, sharedWith: [], entryIds: [] };
+            b = { key: e.splitKey, date: e.date, bill: num(e.billAmount), shareCount: num(e.shareCount), accountId: e.accountId, paidBy: e.paidBy || null, paidByName: e.paidBy ? nameOf(e.paidBy) : null, description: null, categoryId: null, includesMe: false, myShare: 0, sharedWith: [], entryIds: [] };
             bills.set(e.splitKey, b);
         }
         b.entryIds.push(e.id);
@@ -112,13 +128,15 @@ export function tripSummary(trip, entries, people, today) {
             }
         }
     }
-    const list = [...members.values()].map((m) => ({ ...m, owes: Math.round((m.shared - m.settled) * 100) / 100 }));
+    const list = [...members.values()].map((m) => ({ ...m, owes: Math.round((m.shared - m.settled - m.paidForMe) * 100) / 100 }));
+    const billsTotal = [...bills.values()].reduce((x, b) => x + b.bill, 0);
     return {
         status: tripStatus(trip, today),
         days: tripDays(trip),
-        totalSpent: myShare + lent,
+        totalSpent: billsTotal || myShare + lent,
         myShare,
-        owedToMe: Math.round((lent - received) * 100) / 100,
+        paidForMe,
+        owedToMe: Math.round((lent - received - paidForMe) * 100) / 100,
         expenseCount: bills.size,
         members: list,
         expenses: [...bills.values()]

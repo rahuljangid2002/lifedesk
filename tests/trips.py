@@ -74,7 +74,7 @@ with sync_playwright() as p:
 
     # ---------- a shared expense from Add Entry ----------
     pg.get_by_role('button', name='Add trip expense').first.click(); time.sleep(0.4)
-    check('Add trip expense opens Add Entry with the trip chosen and everyone ticked', pg.locator('.trip-box select').input_value() == trip and pg.locator('.trip-box .pill-btn.on').count() == 3)
+    check('Add trip expense opens Add Entry with the trip chosen and everyone ticked', pg.locator('.trip-box select[data-action-change="addTripPick"]').input_value() == trip and pg.locator('.trip-box .pill-btn.on').count() == 3)
     pg.get_by_label('Amount').fill('3000'); pg.get_by_label('Description').fill('Hotel'); pg.locator('#add-category').select_option(food)
     pg.locator(f'.chip[data-id="{bank}"]').click(); time.sleep(0.2)
     check('the split is explained as you type', '1,000.00 each' in pg.locator('#trip-split').inner_text() or '1,000 each' in pg.locator('#trip-split').inner_text(), pg.locator('#trip-split').inner_text())
@@ -90,7 +90,7 @@ with sync_playwright() as p:
 
     # a second one only for Alex: no category needed
     pg.goto(URL + '#add'); time.sleep(0.2)
-    check('"For a trip" is remembered for the next entry', pg.locator('.trip-box select').count() == 1)
+    check('"For a trip" is remembered for the next entry', pg.locator('.trip-box select[data-action-change="addTripPick"]').count() == 1)
     pg.get_by_label('Amount').fill('600'); pg.get_by_label('Description').fill('His ticket')
     pg.locator('.trip-box .pill-btn', has_text='You').click(); pg.locator('.trip-box .pill-btn', has_text='Sam').click(); time.sleep(0.2)
     check('paid only for others: the category is not asked', pg.locator('#add-category').count() == 0)
@@ -98,19 +98,38 @@ with sync_playwright() as p:
     pg.get_by_role('button', name='Save trip expense').click(); time.sleep(0.5)
     check('one lent entry of 600 to Alex', demo("s.entries.filter(e => e.tripId && e.description.startsWith('His ticket')).length === 1 && s.entries.some(e => e.type === 'lent' && e.amount === 600)"))
 
+    # ---------- a member paid ----------
+    pg.goto(URL + '#add'); time.sleep(0.3)
+    sam = demo("s.people.find(p => p.name === 'Sam').id")
+    pg.get_by_label('Amount').fill('900'); pg.get_by_label('Description').fill('Taxi')
+    pg.locator('.trip-box select[data-action-change="addTripPayer"]').select_option(sam); time.sleep(0.3)
+    check('a member paid: the account choice goes away', pg.locator('.chips .chip').first.is_hidden())
+    check('…and the split explains your share and what is taken off', 'Sam paid' in pg.locator('#trip-split').inner_text() and '300' in pg.locator('#trip-split').inner_text(), pg.locator('#trip-split').inner_text())
+    pg.locator('#add-category').select_option(food)
+    pg.get_by_role('button', name='Save trip expense').click(); time.sleep(0.6)
+    taxi = demo("s.entries.filter(e => e.description === 'Taxi').map(e => [e.type, e.amount, e.paidBy, e.accountId, e.billAmount, e.shareCount])")
+    check('Sam paid 900 for 3: one expense of 300 for you, paid by Sam, no account', taxi == [['expense', 300, sam, None, 900, 3]], str(taxi))
+    pg.goto(URL + '#add'); time.sleep(0.3)
+    pg.get_by_label('Amount').fill('200'); pg.get_by_label('Description').fill('Sam bought my coffee')
+    pg.locator('.trip-box select[data-action-change="addTripPayer"]').select_option(sam); time.sleep(0.2)
+    pg.locator('.trip-for button', has_text='Just for me').click(); time.sleep(0.2)
+    pg.locator('#add-category').select_option(food)
+    pg.get_by_role('button', name='Save trip expense').click(); time.sleep(0.6)
+    check('"Just for me": the whole 200 is your expense', demo("s.entries.filter(e => e.description === 'Sam bought my coffee').map(e => [e.amount, e.shareCount])") == [[200, 1]])
+
     # ---------- the trip, People & Loans, Home ----------
     pg.goto(URL + '#trips'); time.sleep(0.3)
     pg.locator('.trip-card').first.click(); time.sleep(0.3)
     nums = pg.locator('.trip-hero .trip-nums b').all_inner_texts()
-    check('trip totals: spent 3,600 · your share 1,000 · owed to you 2,600', nums[:3] == ['₹3,600', '₹1,000', '₹2,600'], str(nums))
-    check('Alex owes 1,600 and Sam 1,000', pg.locator('.trip-member', has_text='Alex').locator('b.in').inner_text().endswith('1,600') and pg.locator('.trip-member', has_text='Sam').locator('b.in').inner_text().endswith('1,000'))
-    check('2 expenses listed, newest first', pg.locator('.trip-exp').count() == 2)
+    check('trip totals: spent 3,600 + 900 + 200 · your share 1,000 + 300 + 200 · owed to you 2,600 - 500', nums[:3] == ['₹4,700', '₹1,500', '₹2,100'], str(nums))
+    check('Alex owes 1,600, and Sam 1,000 - 500 he paid for you', pg.locator('.trip-member', has_text='Alex').locator('b.in').inner_text().endswith('1,600') and pg.locator('.trip-member', has_text='Sam').locator('b.in').inner_text().endswith('500') and 'paid ₹500 for you' in pg.locator('.trip-member', has_text='Sam').inner_text())
+    check('4 expenses listed; the taxi says Sam paid', pg.locator('.trip-exp').count() == 4 and 'Sam paid' in pg.locator('.trip-exp', has_text='Taxi').inner_text())
     check('avatars use the first letters of words only', pg.locator('.trip-member .avatar').first.inner_text() in ('A', 'S'))
     shot('t3_trip_detail')
     pg.goto(URL + '#people'); time.sleep(0.3)
-    check('People & Loans: Alex owes 1,600', '1,600' in pg.locator('.person', has_text='Alex').locator('b.big').inner_text())
+    check('People & Loans: Alex owes 1,600, Sam 500', '1,600' in pg.locator('.person', has_text='Alex').locator('b.big').inner_text() and '500' in pg.locator('.person', has_text='Sam').locator('b.big').inner_text())
     pg.goto(URL + '#home'); time.sleep(0.3)
-    check('Home tile shows the trip and what is owed', pg.locator('.trip-home', has_text='Weekend trip').count() == 1 and '2,600' in pg.locator('.trip-home').inner_text())
+    check('Home tile shows the trip and what is owed', pg.locator('.trip-home', has_text='Weekend trip').count() == 1 and '2,100' in pg.locator('.trip-home').inner_text())
     shot('t4_home')
 
     # ---------- editing and settling ----------

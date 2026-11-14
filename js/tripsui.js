@@ -76,7 +76,7 @@ export function tripTool(c) {
                 const settling = s.settle && s.settle.personId === m.personId;
                 return `<div class="trip-member">
                     <span class="avatar">${esc(initials(m.name))}</span>
-                    <span class="trip-name"><b>${esc(m.name)}</b><small>shares ${L.money(m.shared)}${m.settled ? ` · paid back ${L.money(m.settled)}` : ''}</small></span>
+                    <span class="trip-name"><b>${esc(m.name)}</b><small>shares ${L.money(m.shared)}${m.settled ? ` · paid back ${L.money(m.settled)}` : ''}${m.paidForMe ? ` · paid ${L.money(m.paidForMe)} for you` : ''}</small></span>
                     <b class="${m.owes > 0 ? 'in' : m.owes < 0 ? 'out' : 'muted'}">${m.owes > 0 ? `owes you ${L.money(m.owes)}` : m.owes < 0 ? `you owe ${L.money(-m.owes)}` : 'all settled'}</b>
                     ${m.owes > 0 && !settling ? `<button class="btn" data-action="tripSettle" data-id="${m.personId}">Settle up</button>` : ''}
                     ${settling ? `<div class="form trip-settle">
@@ -91,7 +91,7 @@ export function tripTool(c) {
         const expenses = sum.expenses
             .map((x) => `<div class="trip-exp">
                 <span class="trip-date">${esc(c.shortDate(x.date))}</span>
-                <span class="trip-name"><b>${esc(x.description || 'Trip expense')}</b><small>${esc([x.includesMe ? 'You' : '', ...x.sharedWith].filter(Boolean).join(', '))} · ${x.shareCount > 1 ? `split ${x.shareCount} ways` : 'not shared'}</small><small>${esc([x.categoryId ? c.categoryName(x.categoryId) : '', c.accountName(x.accountId)].filter(Boolean).join(' · '))}</small></span>
+                <span class="trip-name"><b>${esc(x.description || 'Trip expense')}</b><small>${x.paidBy ? `${esc(x.paidByName)} paid · ${x.shareCount > 1 ? `split ${x.shareCount} ways` : 'just for you'}` : `${esc([x.includesMe ? 'You' : '', ...x.sharedWith].filter(Boolean).join(', '))} · ${x.shareCount > 1 ? `split ${x.shareCount} ways` : 'not shared'}`}</small><small>${esc([x.categoryId ? c.categoryName(x.categoryId) : '', x.paidBy ? 'no account used' : c.accountName(x.accountId)].filter(Boolean).join(' · '))}</small></span>
                 <span class="trip-amt"><b>${L.money(x.bill)}</b><small>${x.includesMe ? `your share ${L.money(x.myShare)}` : 'you paid for others'}</small></span>
                 <button class="icon-btn" data-action="tripExpDelete" data-key="${esc(x.key)}" title="Delete expense" aria-label="Delete expense">${icon('trash')}</button>
             </div>`)
@@ -178,13 +178,18 @@ export function tripTool(c) {
         }
         const t = tripById(f.tripId);
         const on = new Set(f.tripShare || []);
-        const pills = t ? [`<button class="pill-btn ${f.tripMe ? 'on' : ''}" data-action="addTripPerson" data-id="me" aria-pressed="${f.tripMe}">You</button>`,
-            ...(t.members || []).map((id) => `<button class="pill-btn ${on.has(id) ? 'on' : ''}" data-action="addTripPerson" data-id="${id}" aria-pressed="${on.has(id)}">${esc(nameOf(id))}</button>`)].join('') : '';
+        const payer = t && f.tripPayer && (t.members || []).includes(f.tripPayer) ? f.tripPayer : '';
+        const pills = t ? [payer ? '' : `<button class="pill-btn ${f.tripMe ? 'on' : ''}" data-action="addTripPerson" data-id="me" aria-pressed="${f.tripMe}">You</button>`,
+            ...(t.members || []).map((id) => `<button class="pill-btn ${on.has(id) ? 'on' : ''}" data-action="addTripPerson" data-id="${id}" aria-pressed="${on.has(id)}">${esc(nameOf(id))}${id === payer ? ' (paid)' : ''}</button>`)].join('') : '';
+        const whoPaid = t && (t.members || []).length ? `<label>Who paid?<select data-action-change="addTripPayer"><option value="">You</option>${(t.members || []).map((id) => `<option value="${id}" ${id === payer ? 'selected' : ''}>${esc(nameOf(id))}</option>`).join('')}</select></label>` : '';
+        const forWhom = payer ? `<div class="seg fit trip-for"><button class="${on.size ? 'on' : ''}" data-action="addTripFor" data-for="all">Split with everyone</button><button class="${on.size ? '' : 'on'}" data-action="addTripFor" data-for="me">Just for me</button></div>` : '';
         const outside = t && f.date && (f.date < t.start || f.date > t.end);
         return `<div class="trip-box">${head}
             <label>Trip<select data-action-change="addTripPick">${rows.map((r) => `<option value="${r.t.id}" ${r.t.id === f.tripId ? 'selected' : ''}>${esc(r.t.name)} · ${esc(range(r.t))}</option>`).join('')}</select></label>
             ${outside ? `<small class="warn-text">The date is outside the trip (${esc(range(t))}).</small>` : ''}
-            <small><b>Who shared it?</b> Tap to include or leave out.</small>
+            ${whoPaid}
+            ${forWhom}
+            <small><b>${payer ? 'Who shared it with you?' : 'Who shared it?'}</b> ${payer ? 'Your share is always counted. Tap the others who shared it.' : 'Tap to include or leave out.'}</small>
             <div class="pills">${pills}</div>
             ${t && !(t.members || []).length ? '<small>No one else is on this trip yet. Add members on the Trips screen to split expenses.</small>' : ''}
             <p class="trip-split" id="trip-split">${splitText(f)}</p>
@@ -193,8 +198,15 @@ export function tripTool(c) {
     }
 
     function splitText(f) {
-        const s = T.splitShares(Number(f.amount) || 0, f.tripShare || [], !!f.tripMe);
         const amt = Number(f.amount) || 0;
+        const t = tripById(f.tripId);
+        const payer = t && f.tripPayer && (t.members || []).includes(f.tripPayer) ? f.tripPayer : '';
+        if (payer) {
+            const n = 1 + new Set(f.tripShare || []).size;
+            const mine = amt / n;
+            return `${nameOf(payer)} paid ${L.money(amt)}. ${n === 1 ? 'It was just for you, so' : `Split ${n} ways,`} your share ${L.money(mine)} is your expense (no account used) and is taken off what ${nameOf(payer)} owes you.`;
+        }
+        const s = T.splitShares(amt, f.tripShare || [], !!f.tripMe);
         if (!s.count) {
             return 'Choose who shared this expense.';
         }
@@ -212,6 +224,7 @@ export function tripTool(c) {
         f.tripId = t ? t.id : null;
         f.tripShare = t ? [...(t.members || [])] : [];
         f.tripMe = true;
+        f.tripPayer = '';
     }
 
     /** Opens Add Entry ready for a trip expense. */
@@ -234,17 +247,28 @@ export function tripTool(c) {
         st().opening = true;
     }
 
+    /** The trip member who paid, or '' when you paid. */
+    function payerOf(f) {
+        const t = tripById(f.tripId);
+        return t && f.tripPayer && (t.members || []).includes(f.tripPayer) ? f.tripPayer : '';
+    }
+
     /** The entries to save for a trip expense on the form, or a message when something is missing. */
     function entriesFor(f, base) {
         if (!f.tripId || !tripById(f.tripId)) {
             return { problem: 'Choose the trip, or turn off "For a trip".' };
         }
-        const count = (f.tripShare || []).length + (f.tripMe ? 1 : 0);
+        const count = (f.tripShare || []).length + (f.tripMe || payerOf(f) ? 1 : 0);
         if (!count) {
             return { problem: 'Tap the people who shared this expense.' };
         }
-        if (f.tripMe && !f.categoryId) {
+        const payer = payerOf(f);
+        if ((f.tripMe || payer) && !f.categoryId) {
             return { problem: 'Choose a category for your share.' };
+        }
+        if (payer) {
+            const list = T.tripEntries({ base, amount: Number(f.amount), description: f.description, categoryId: f.categoryId, tripId: f.tripId, personIds: f.tripShare, ids: S.newId, splitKey: S.newId(), paidBy: payer });
+            return { entries: list, count: list[0].shareCount, payer };
         }
         const names = Object.fromEntries((f.tripShare || []).map((id) => [id, nameOf(id)]));
         const list = T.tripEntries({ base, amount: Number(f.amount), description: f.description, categoryId: f.tripMe ? f.categoryId : null, tripId: f.tripId, personIds: f.tripShare, includeMe: !!f.tripMe, names, ids: S.newId, splitKey: S.newId() });
@@ -413,6 +437,20 @@ export function tripTool(c) {
             pick(c.state.add, el.value);
             c.render();
         },
+        addTripPayer(el) {
+            const f = c.state.add;
+            const t = tripById(f.tripId);
+            f.tripPayer = el.value;
+            f.tripMe = true; // your share is what you record
+            f.tripShare = t ? [...(t.members || [])] : [];
+            c.render();
+        },
+        addTripFor(el) {
+            const f = c.state.add;
+            const t = tripById(f.tripId);
+            f.tripShare = el.dataset.for === 'all' && t ? [...(t.members || [])] : [];
+            c.render();
+        },
         addTripPerson(el) {
             const f = c.state.add;
             const id = el.dataset.id;
@@ -444,5 +482,5 @@ export function tripTool(c) {
         return rows.length ? rows[0].t : null;
     }
 
-    return { screen, homeCard, arrive, current, returnTo, addBlock, splitText, entriesFor, startExpense, actions, summary };
+    return { screen, homeCard, arrive, current, returnTo, payerOf, addBlock, splitText, entriesFor, startExpense, actions, summary };
 }

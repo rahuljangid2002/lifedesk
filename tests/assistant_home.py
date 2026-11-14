@@ -133,7 +133,7 @@ with sync_playwright() as p:
     pg.locator('.tabbar a.add').click(); time.sleep(0.6); pg.locator('.qa', has_text='Transfer').click(); time.sleep(0.8)
     check('+: a kind opens Add Entry with that kind chosen', pg.url.endswith('#add') and pg.locator('.tile-btn.t-transfer.on').count() == 1)
     pg.locator('.tabbar a.add').click(); time.sleep(0.6); pg.locator('[data-action="addMenuTrip"]').click(); time.sleep(0.8)
-    check('+: Trip expense opens the form ready to split', pg.locator('.trip-box select').count() == 1)
+    check('+: Trip expense opens the form ready to split', pg.locator('.trip-box select[data-action-change="addTripPick"]').count() == 1)
     pg.locator('.tabbar a.add').click(); time.sleep(0.5); pg.keyboard.press('Escape'); time.sleep(0.6)
     check('+: Escape closes it', pg.locator('.add-menu').count() == 0)
     check('no script errors', not errors, '; '.join(errors[:3]))

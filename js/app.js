@@ -155,6 +155,7 @@ function blankEntry(keep) {
         tripId: keep ? keep.tripId || null : null,
         tripShare: keep ? [...(keep.tripShare || [])] : [],
         tripMe: keep ? keep.tripMe !== false : true,
+        tripPayer: '', // a trip member who paid (empty: you paid)
         receipts: [], // saved files: [{ id, name, type }]
         files: [], // chosen, not uploaded yet: [{ name, type, data }]
         removed: [] // saved files to delete on save
@@ -612,8 +613,8 @@ function addEntry() {
                 <label>Date<input type="date" max="${today()}" value="${esc(f.date)}" data-model="add.date"></label>
                 <label>Description<input type="text" placeholder="e.g. Fuel, Salary, Groceries" value="${esc(f.description)}" data-model="add.description" data-then="suggest" maxlength="255"></label>
             </div>
-            <h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>
-            <div class="chips">${chips(f.paidByMode ? null : f.accountId, 'setAccount')}${(f.type === 'expense' || f.type === 'asset') && !f.onEmi && !tripEntry ? `<button class="chip ${f.paidByMode ? 'on' : ''}" data-action="setPaidBy">${icon('users')}<span><b>Someone paid</b><small>You owe them</small></span></button>` : ''}</div>
+            ${tripEntry && trips.payerOf(f) ? '' : `<h3>${f.type === 'transfer' ? 'From account' : L.TYPES[f.type].sign > 0 ? 'Received into' : 'Paid from'}</h3>`}
+            <div class="chips" ${tripEntry && trips.payerOf(f) ? 'style="display:none"' : ''}>${chips(f.paidByMode ? null : f.accountId, 'setAccount')}${(f.type === 'expense' || f.type === 'asset') && !f.onEmi && !tripEntry ? `<button class="chip ${f.paidByMode ? 'on' : ''}" data-action="setPaidBy">${icon('users')}<span><b>Someone paid</b><small>You owe them</small></span></button>` : ''}</div>
             ${f.paidByMode && (f.type === 'expense' || f.type === 'asset') ? `<label>Who paid for you<select data-model="add.paidBy" data-rerender><option value="">Choose a person</option>${S.data.people.filter((p) => p.direction === 'iOwe').map((p) => `<option value="${p.id}" ${p.id === f.paidBy ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}<option value="__new" ${f.paidBy === '__new' ? 'selected' : ''}>＋ New person</option></select></label>
                 ${f.paidBy === '__new' ? `<label>New person's name<input type="text" value="${esc(f.newPayer)}" data-model="add.newPayer"></label>` : ''}
                 <small>It counts as your spending, no account changes, and you owe them the amount (People &amp; Loans → I owe).</small>` : ''}
@@ -3091,7 +3092,9 @@ const actions = {
         }
         const tripEntry = f.forTrip && f.type === 'expense' && !f.id && !f.onEmi && !paidBy;
         // a trip expense you paid only for the others has no share of yours, so no category
-        const problem = L.validateEntry(tripEntry && !f.tripMe ? { ...entry, categoryId: 'none' } : entry, { people: [...S.data.people, ...pairs.map((p) => p[1])] });
+        const tripPayer = tripEntry ? trips.payerOf(f) : '';
+        const check = tripPayer ? { ...entry, accountId: null, paidBy: tripPayer, tripId: f.tripId } : tripEntry && !f.tripMe ? { ...entry, categoryId: 'none' } : entry;
+        const problem = L.validateEntry(check, { people: [...S.data.people, ...pairs.map((p) => p[1])] });
         if (problem) {
             return toast(problem, 'warn');
         }
@@ -3126,7 +3129,7 @@ const actions = {
         const back = f.back;
         state.add = blankEntry(f.id ? null : f);
         await S.saveMany(pairs);
-        toast(f.id ? 'Changes saved.' : shared ? `${entry.description} · ${L.money(entry.amount)} saved${shared.count > 1 ? `, split ${shared.count} ways` : ''}.` : `${entry.description} · ${L.money(entry.amount)} saved.`);
+        toast(f.id ? 'Changes saved.' : shared ? (shared.payer ? `${entry.description}: your share ${L.money(shared.entries[0].amount)} saved, paid by ${personName(shared.payer)}.` : `${entry.description} · ${L.money(entry.amount)} saved${shared.count > 1 ? `, split ${shared.count} ways` : ''}.`) : `${entry.description} · ${L.money(entry.amount)} saved.`);
         if (!f.id) {
             budgetAlert(shared ? { ...entry, amount: shared.entries[0].type === 'expense' ? shared.entries[0].amount : 0 } : entry);
         }
@@ -3162,7 +3165,7 @@ const actions = {
         if (!e) {
             return;
         }
-        if (e.splitKey && Number(e.shareCount) > 1) {
+        if (e.splitKey && (Number(e.shareCount) > 1 || e.paidBy)) {
             toast('This is a shared trip expense. Delete it on the Trips screen and add it again.', 'warn');
             return actions.tripOpen({ dataset: { id: e.tripId } });
         }
