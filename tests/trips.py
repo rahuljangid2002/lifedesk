@@ -163,9 +163,17 @@ with sync_playwright() as p:
     pg.goto(URL + '#home'); time.sleep(0.8); pg.goto(URL + '#trips'); time.sleep(1.2); pg.get_by_role('button', name='New trip').click(); time.sleep(1.2)
     r = pg.evaluate("(() => { const b = document.querySelector('section.card.form').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth]; })()")
     check('phone: the New trip sheet sits fully on the screen', r[0] >= 0 and r[1] <= r[2], str(r))
+    sheet_open = "!!document.querySelector('section.card.form')"
+    pg.locator('section.card.form h3').first.click(); time.sleep(0.4)
+    check('phone: a tap inside the sheet keeps it open', pg.evaluate(sheet_open))
+    pg.mouse.click(195, 40); time.sleep(0.8)
+    check('phone: a tap outside the New trip sheet closes it', not pg.evaluate(sheet_open))
+    check('phone: the tap outside pressed nothing underneath', '#trips' in pg.url and not pg.locator('.trip-detail').count(), pg.url)
     pg.goto(URL + '#people'); time.sleep(1.2); pg.get_by_role('button', name='Add person').click(); time.sleep(1.2)
     r = pg.evaluate("(() => { const b = document.querySelector('section.card.form').getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth]; })()")
     check('phone: the Add person sheet sits fully on the screen', r[0] >= 0 and r[1] <= r[2], str(r))
+    pg.mouse.click(195, 40); time.sleep(0.8)
+    check('phone: a tap outside the Add person sheet closes it', not pg.evaluate(sheet_open))
 
     check('no script errors', not errors, '; '.join(errors[:3]))
     b.close()

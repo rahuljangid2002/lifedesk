@@ -3645,6 +3645,22 @@ app.addEventListener('click', async (event) => {
     }
 });
 
+// A form open as a sheet (phone) or dialog (wide screen): a tap on the dimmed screen around it closes it, as its own
+// Cancel / Close button would. The tap does nothing else, so nothing underneath is pressed by mistake.
+document.addEventListener('click', (event) => {
+    const form = [...document.querySelectorAll('section.card.form')].find((f) => getComputedStyle(f).position === 'fixed');
+    if (!form || form.contains(event.target) || event.target.closest('.toast')) {
+        return;
+    }
+    const close = [...form.querySelectorAll('button[data-action]')].find((b) => /^(Cancel|Close)$/.test(b.textContent.trim()));
+    if (!close) {
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    close.click();
+}, true);
+
 app.addEventListener('input', (event) => {
     const el = event.target;
     if (el.dataset.vfield && voiceSession) {
