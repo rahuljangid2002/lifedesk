@@ -5,6 +5,8 @@
     voice       speaking an entry (opens with a punch line)
     reminders   Renewal reminders, a complete walkthrough (opens with a punch line)
     invest      Investments: funds, shares, SIPs, goals and insights (opens with a punch line)
+    new         Trips, the Assistant, the new Home and the new bottom bar (opens with a punch line)
+    trips / assistant / home / look   one short video per new feature
 Each goes to its own folder under docs/LinkedIn/.
 
     tools/serve_dev.py                                              (serves 4-Web-App on 127.0.0.1:8765)
@@ -547,10 +549,236 @@ INVEST = [
     ('i_outro', i_outro, 'card', "All your money, in one place. LifeDesk is free, and the link is in the comments."),
 ]
 
+# ================= video: Trips, the Assistant and the new design =================
+def n_hook(page):
+    R.start(page, punch('n_hook', [('Split the trip.', 'big', 0.3), ('Check your money.', 'mid', 1.0), ('In seconds.', 'accent', 1.8), ('New in LifeDesk: Trips, an Assistant and a fresh new design.', 'small', 3.4)]), 0.3)
+    time.sleep(7.0)
+
+
+def n_dock(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'A new bottom bar, with a round plus beside it')
+    w(1.8)
+    tap(page, page.locator('.tabbar a.add'), 2.2)
+    R.caption(page, 'Quick actions grow out of the plus')
+    w(1.4)
+    R.sheet_scroll(page, 360); w(1.2)
+    R.caption(page, 'Every kind of entry, and every screen, one tap away')
+    w(1.4)
+    R.sheet_scroll(page, -360); w(0.6)
+    tap(page, page.locator('.tabbar a.add'), 1.6)
+
+
+def n_trip(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'On a trip? Add a shared expense')
+    w(1.0)
+    tap(page, page.locator('.tabbar a.add'), 1.8)
+    tap(page, page.locator('[data-action="addMenuTrip"]'), 1.8)
+    R.caption(page, 'Everyone on the trip is ticked. Tap to leave someone out')
+    page.get_by_label('Amount').type('3000', delay=120 * SLOW)
+    page.get_by_label('Description').type('Dinner by the lake', delay=50 * SLOW); w(0.6)
+    if not page.locator('#add-category').input_value():
+        page.locator('#add-category').select_option(index=1)
+    page.locator('.trip-box').scroll_into_view_if_needed(); w(0.4)
+    R.caption(page, 'Split equally: your share, and what each person owes you')
+    page.locator('#trip-split').hover(); w(2.4)
+    tap(page, page.locator('.chips .chip').first, 0.8)
+    tap(page, page.get_by_role('button', name='Save trip expense'), 2.0)
+
+
+def n_settle(page):
+    R.start(page, R.DEMO + '#trips'); slow(page)
+    R.caption(page, 'Each trip: what it cost, and who owes what')
+    tap(page, page.locator('.trip-card').first, 2.0)
+    glide(page, 380, 1.6); w(0.6)
+    R.caption(page, 'Friend paid you back? Settle up in one tap')
+    tap(page, page.locator('.trip-member').first.get_by_role('button', name='Settle up'), 1.6)
+    tap(page, page.get_by_role('button', name='Record'), 2.0)
+    R.caption(page, 'Their share also shows in People & Loans')
+    w(1.6)
+
+
+def n_assist(page):
+    R.start(page, R.DEMO + '#assistant'); slow(page)
+    R.caption(page, 'The Assistant checks your money')
+    w(2.0)
+    R.caption(page, 'A score for spending, saving, debt, investments and bills')
+    glide(page, 300, 1.4); w(0.8)
+    tap(page, page.locator('.as-area', has_text='Spending'), 1.8)
+    R.caption(page, 'And tells you what to do first')
+    w(1.4)
+    tap(page, page.locator('.as-area', has_text='Spending'), 1.0)
+    R.caption(page, 'Ask a question. The answer comes from your own entries')
+    page.locator('.as-chat').scroll_into_view_if_needed(); w(0.8)
+    tap(page, page.locator('.pill-btn', has_text='Give me a complete summary'), 2.6)
+
+
+def n_home(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'Add an expense right from Home')
+    page.locator('.quick').scroll_into_view_if_needed(); w(0.6)
+    page.locator('[data-model="quick.amount"]').click()
+    page.locator('[data-model="quick.amount"]').type('250', delay=120 * SLOW)
+    page.locator('[data-model="quick.description"]').click()
+    page.locator('[data-model="quick.description"]').type('Weekly groceries', delay=50 * SLOW); w(0.8)
+    R.caption(page, 'The category is filled in for you')
+    w(1.2)
+    tap(page, page.locator('.quick-add'), 1.8)
+    R.caption(page, 'Your usual month, and how this month compares')
+    page.locator('.avg-card').scroll_into_view_if_needed(); page.locator('.avg-card').hover(); w(2.4)
+    R.caption(page, 'Money health, at a glance')
+    page.locator('.as-home').scroll_into_view_if_needed(); page.locator('.as-home').hover(); w(2.4)
+
+
+def n_trust(page):
+    R.start(page, punch('n_trust', [('Your money.', 'big', 0.3), ('Your device.', 'accent', 1.1), ('The Assistant runs fixed rules in your browser. Nothing is sent anywhere.', 'small', 2.6), ('Everything is encrypted. No ads.', 'small', 3.4)]), 0.3)
+    time.sleep(8.6)
+
+
+def n_outro(page):
+    R.start(page, punch('n_outro', [('Trips. Assistant.', 'big', 0.3), ('A new look.', 'accent', 1.1), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+NEW = [
+    ('n_hook', n_hook, 'card', "Split a trip with friends. Check how your money is doing. All in seconds. Here is what is new in LifeDesk."),
+    ('n_dock', n_dock, 'app', "First, a fresh new design. The tabs sit in a floating bar, with a round plus button beside it. Tap the plus, and quick actions grow out of it: speak an entry, type one, or jump to any screen."),
+    ('n_trip', n_trip, 'app', "Going on a trip? Add a shared expense straight from the plus. Everyone on the trip is ticked, and you can leave anyone out. LifeDesk splits it equally: your share counts as your expense, and the others' shares become money they owe you."),
+    ('n_settle', n_settle, 'app', "Each trip shows what it cost, your share, and who owes you what. When a friend pays you back, settle up in one tap. Their balance also shows in People and Loans."),
+    ('n_assist', n_assist, 'app', "The new Assistant checks your money. It scores your spending, saving, debt, investments and bills, and tells you what to do first. Ask it a question, and the answer comes from your own entries."),
+    ('n_home', n_home, 'app', "Home is smarter too. Add an expense in one line, and the category is filled in for you. See your usual month, the six month average, and how this month compares. And your money health, at a glance."),
+    ('n_trust', n_trust, 'card', "The Assistant works with fixed rules, right in your browser. Nothing is sent anywhere. Everything is encrypted, and there are no ads."),
+    ('n_outro', n_outro, 'card', "Trips, an Assistant, and a new look. LifeDesk is free, and the link is in the comments."),
+]
+
+# ================= one video per new feature (each reuses the scenes above, with its own opening and close) =================
+def t_hook(page):
+    R.start(page, punch('t_hook', [('Who paid?', 'big', 0.3), ('Who owes whom?', 'mid', 1.0), ('Sorted.', 'accent', 1.8), ('Trips, new in LifeDesk.', 'small', 3.3)]), 0.3)
+    time.sleep(6.8)
+
+
+def t_new(page):
+    R.start(page, R.DEMO + '#trips'); slow(page)
+    R.caption(page, 'Create a trip: dates, budget, and who is going')
+    tap(page, page.get_by_role('button', name='New trip'), 1.6)
+    page.locator('[data-model="trips.form.name"]').type('Goa with friends', delay=60 * SLOW); w(0.5)
+    page.locator('[data-model="trips.form.budget"]').type('30000', delay=90 * SLOW); w(0.5)
+    R.caption(page, 'Tap the friends who are going, or type a new name')
+    box = page.locator('[data-model="trips.newName"]')
+    box.scroll_into_view_if_needed(); w(0.6)
+    box.click(force=True); box.type('Riya', delay=80 * SLOW); w(0.6)
+    page.locator('[data-action="tripAddName"]').first.click(force=True); w(1.4)
+    R.caption(page, 'New names are added to People & Loans')
+    w(1.4)
+    page.locator('[data-action="tripCancel"]').first.click(force=True); w(1.0)
+
+
+def t_how(page):
+    R.start(page, steps_card('t_how', 'Try it in 3 steps', ['Open <b style="all:unset;font-weight:800">Trips</b> and create a trip', 'Tap + → Trip expense, and save', 'Settle up when friends pay you back'],
+                             'Want to look first? Load the sample data and open "Weekend in the hills".'), 0.4)
+    time.sleep(9.5)
+
+
+def t_outro(page):
+    R.start(page, punch('t_outro', [('Split fairly.', 'big', 0.3), ('Settle simply.', 'accent', 1.1), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+def a_hook(page):
+    R.start(page, punch('a_hook', [('How is my', 'mid', 0.3), ('money doing?', 'big', 0.9), ('Just ask.', 'accent', 1.8), ('The Assistant, new in LifeDesk.', 'small', 3.3)]), 0.3)
+    time.sleep(6.8)
+
+
+def a_tile(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'Money health on Home, every day')
+    page.locator('.as-home').scroll_into_view_if_needed(); page.locator('.as-home').hover(); w(2.4)
+    tap(page, page.locator('.as-home'), 2.0)
+    R.caption(page, 'Tap it for every suggestion')
+    w(1.4)
+
+
+def a_outro(page):
+    R.start(page, punch('a_outro', [('Know where', 'mid', 0.3), ('you stand.', 'big', 0.9), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+def h_hook(page):
+    R.start(page, punch('h_hook', [('Overspending?', 'big', 0.3), ('See it early.', 'accent', 1.1), ('A smarter Home in LifeDesk.', 'small', 3.0)]), 0.3)
+    time.sleep(6.4)
+
+
+def h_outro(page):
+    R.start(page, punch('h_outro', [('One line.', 'big', 0.3), ('One glance.', 'accent', 1.1), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+def l_hook(page):
+    R.start(page, punch('l_hook', [('A fresh', 'mid', 0.3), ('new look.', 'big', 0.9), ('One tap away.', 'accent', 1.8), ('LifeDesk on your phone.', 'small', 3.3)]), 0.3)
+    time.sleep(6.8)
+
+
+def l_tabs(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'Tabs in a floating bar')
+    for name in ('Daily', 'Budget', 'More', 'Home'):
+        tap(page, page.locator('.dock-pill a', has_text=name), 1.3)
+    R.caption(page, 'Screens glide in, like the apps on your phone')
+    glide(page, 420, 1.6); w(0.4); glide(page, -420, 1.1)
+
+
+def l_voice(page):
+    R.start(page, R.DEMO + '#home'); slow(page)
+    R.caption(page, 'Press and hold + to speak an entry')
+    w(1.0)
+    page.locator('.tabbar a.add').hover(); w(1.6)
+    tap(page, page.locator('.tabbar a.add'), 1.6)
+    tap(page, page.locator('.qa', has_text='Assistant'), 2.0)
+    R.caption(page, 'Or jump to any screen in one tap')
+    w(1.4)
+
+
+def l_outro(page):
+    R.start(page, punch('l_outro', [('Calm.', 'big', 0.3), ('Quick.', 'big', 0.8), ('Yours.', 'accent', 1.4), ('Free · Link in the comments', 'small', 2.8)], 'LifeDesk · rahuljangid2002.github.io/lifedesk'), 0.3)
+    time.sleep(5.8)
+
+
+TRIPS = [
+    ('t_hook', t_hook, 'card', "Back from a trip with friends. Who paid for what, and who owes whom? Now it is sorted."),
+    ('t_new', t_new, 'app', "Trips, in LifeDesk. Create a trip with its dates, a budget, and who is going. Pick people you already have, or type a new name."),
+    ('t_trip', n_trip, 'app', "Add a shared expense straight from the plus. Everyone on the trip is ticked, and you can leave anyone out. It is split equally: your share counts as your expense, and the others' shares become money they owe you."),
+    ('t_settle', n_settle, 'app', "Each trip shows what it cost, your share, and who owes you what. When a friend pays you back, settle up in one tap."),
+    ('t_how', t_how, 'card', "To try it: open Trips and create a trip. Tap plus, then Trip expense. Settle up when friends pay you back."),
+    ('t_outro', t_outro, 'card', "Split fairly, and settle simply. LifeDesk is free, and the link is in the comments."),
+]
+ASSIST = [
+    ('a_hook', a_hook, 'card', "How is my money doing? Now you can just ask."),
+    ('a_check', n_assist, 'app', "Meet the Assistant in LifeDesk. It checks your money and scores your spending, saving, debt, investments and bills. It tells you what to do first, and answers your questions from your own entries."),
+    ('a_tile', a_tile, 'app', "Your money health also sits on Home, so you see it every day. Tap it for every suggestion."),
+    ('a_trust', n_trust, 'card', "The Assistant works with fixed rules, right in your browser. Nothing is sent anywhere. Everything is encrypted, and there are no ads."),
+    ('a_outro', a_outro, 'card', "Know where you stand. LifeDesk is free, and the link is in the comments."),
+]
+HOME = [
+    ('h_hook', h_hook, 'card', "Overspending this month? See it early, right on Home."),
+    ('h_home', n_home, 'app', "Add an expense in one line, and the category is filled in for you. See your usual month, the six month average of income and spending, and how this month compares so far. And your money health, at a glance."),
+    ('h_outro', h_outro, 'card', "One line to add, one glance to know. LifeDesk is free, and the link is in the comments."),
+]
+LOOK = [
+    ('l_hook', l_hook, 'card', "A fresh new look for LifeDesk on your phone. Everything, one tap away."),
+    ('l_tabs', l_tabs, 'app', "The tabs now sit in a floating bar, and screens glide in like the apps on your phone."),
+    ('l_dock', n_dock, 'app', "Beside the bar is a round plus button. Tap it, and quick actions grow out of it, while the page behind steps back. Speak an entry, type one, add a trip expense, or jump to any screen."),
+    ('l_voice', l_voice, 'app', "Press and hold the plus to speak an entry straight away. Or use it to jump to any screen in one tap."),
+    ('l_outro', l_outro, 'card', "Calm, quick, and yours. LifeDesk is free, and the link is in the comments."),
+]
+
 # name -> (scenes, file title, folder under docs/LinkedIn)
 VIDEOS = {'ui': (DESIGN, 'LifeDesk - New UI', '1 - New UI'), 'offline': (OFFLINE, 'LifeDesk - Offline Mode', '2 - Offline mode'),
           'voice': (VOICE, 'LifeDesk - Voice Entry', '3 - Voice entry'), 'reminders': (REMINDERS, 'LifeDesk - Renewal Reminders', '4 - Renewal Reminders'),
-          'invest': (INVEST, 'LifeDesk - Investments', '5 - Investments')}
+          'invest': (INVEST, 'LifeDesk - Investments', '5 - Investments'),
+          'new': (NEW, 'LifeDesk - Trips, Assistant and New Look', '6 - Trips, Assistant and New Look'),
+          'trips': (TRIPS, 'LifeDesk - Trips', '7 - Trips'), 'assistant': (ASSIST, 'LifeDesk - Assistant', '8 - Assistant'),
+          'home': (HOME, 'LifeDesk - Smarter Home', '9 - Smarter Home'), 'look': (LOOK, 'LifeDesk - New Look', '10 - New Look')}
 
 
 def main():
