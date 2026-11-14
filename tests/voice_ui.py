@@ -248,7 +248,7 @@ with sync_playwright() as p:
     items = [x.replace('\n', ' ') for x in pg.locator('.add-menu [role=menuitem]').all_inner_texts()]
     check('tap +: a menu with Speak an entry and Type an entry (still on Home)', len(items) == 2 and items[0].startswith('Speak an entry') and items[1].startswith('Type an entry') and pg.url.endswith('#home') and 'open' in plus.get_attribute('class'), str(items))
     shot('v5_plus_menu')
-    pg.locator('.add-menu-back').click(position={'x': 20, 'y': 60}); time.sleep(0.3)
+    pg.locator('.add-menu-back').click(position={'x': 20, 'y': 60}); time.sleep(0.6)
     check('tapping outside closes the menu', pg.locator('.add-menu').count() == 0)
     plus.click(); pg.get_by_role('menuitem', name='Type an entry').click(); time.sleep(0.5)
     check('Type an entry opens Add Entry', pg.url.endswith('#add') and pg.locator('.add-menu').count() == 0 and pg.locator('.type-grid').count() == 1)

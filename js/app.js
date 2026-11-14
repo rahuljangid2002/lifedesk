@@ -1435,6 +1435,7 @@ const SIDE = [
 
 let renderedRoute = null; // the screen the last drawing was for
 /** The sheet the + of the bottom bar opens: speak or type an entry, a kind of entry straight away, and every screen. */
+let sheetFresh = false; // true for the drawing that opens the sheet
 function addSheet() {
     const closing = state.addMenu === 'closing';
     const kinds = Object.entries(L.TYPES).filter(([, v]) => !v.auto)
@@ -1444,8 +1445,11 @@ function addSheet() {
         ['daily', 'calendar', 'Daily'], ['insights', 'chart', 'Dashboards'], ['reports', 'table', 'Reports'], ['invest', 'chart', 'Investments'], ['accounts', 'wallet', 'My accounts'],
         ['assets', 'asset', 'My assets'], ['renewals', 'bell', 'Renewals']]
         .map(([r, ic, label]) => `<button class="qa" data-action="addMenuGo" data-route="${r}"><span class="qa-ic">${icon(ic)}</span><span>${esc(label)}</span></button>`).join('');
-    return `<button class="add-menu-back ${closing ? 'closing' : ''}" data-action="addMenuClose" aria-label="Close quick actions"></button>
-        <div class="add-menu ${closing ? 'closing' : ''}" role="menu" aria-label="Quick actions">
+    const still = state.addMenu === true && !sheetFresh ? 'still' : ''; // redrawn while open: no second opening animation
+    sheetFresh = false;
+    return `<button class="add-menu-back ${closing ? 'closing' : ''} ${still}" data-action="addMenuClose" aria-label="Close quick actions"></button>
+        <div class="add-menu ${closing ? 'closing' : ''} ${still}" role="menu" aria-label="Quick actions">
+            <i class="sheet-bubble" aria-hidden="true"></i>
             <div class="sheet-grip" data-action="addMenuClose" aria-hidden="true"><i></i></div>
             <div class="sheet-head"><b>Quick actions</b><button class="icon-btn" data-action="addMenuClose" aria-label="Close">×</button></div>
             <div class="sheet-body">
@@ -1506,7 +1510,7 @@ function render() {
     const slid = renderedRoute === state.route ? [...app.querySelectorAll('.chips')].map((el) => el.scrollLeft) : [];
     renderedRoute = state.route;
     const side = SIDE.map(([title, links]) => `<small>${title}</small>${links.map(([r, ic, label]) => `<a href="#${r}" class="${state.route === r ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>${r === 'add' ? `<button class="side-voice" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>` : ''}`).join('')}`).join('');
-    app.innerHTML = `<div class="app ${state.addMenu === true ? 'sheet-open' : ''}">
+    app.innerHTML = `<div class="app ${state.addMenu === true ? 'sheet-open sheet-prep' : ''}">
         <aside class="side"><a class="brand" href="#hub"><span class="logo small">${icon('logo')}</span>LifeDesk</a><nav>${side}</nav><div class="side-user"><b>${esc(S.user.name)}</b><small>${esc(S.user.contact)}</small></div></aside>
         <div class="navbar" aria-hidden="true"></div>
         <div class="shell ${fresh}">${screen()}</div>
@@ -2485,23 +2489,40 @@ const actions = {
         if (state.addMenu === true) {
             return actions.addMenuClose();
         }
-        state.addMenu = true;
-        render();
+        openSheet();
     },
     addMenuClose() {
         if (state.addMenu !== true) {
             return;
         }
-        // the sheet slides down and the page comes back before it is removed (css/ios.css)
+        // the circle shrinks back into the + and the page comes back, then the sheet is removed (css/ios.css)
         state.addMenu = 'closing';
-        render();
+        const root = app.querySelector('.app');
+        const sheet = app.querySelector('.add-menu');
+        const back = app.querySelector('.add-menu-back');
+        const fab = app.querySelector('.tabbar a.add');
+        if (!root || !sheet) {
+            state.addMenu = false;
+            return render();
+        }
+        sheet.classList.remove('still');
+        sheet.classList.add('closing');
+        back.classList.remove('still');
+        back.classList.add('closing');
+        root.classList.remove('sheet-open');
+        if (fab) {
+            fab.classList.remove('open');
+            fab.setAttribute('aria-expanded', 'false');
+        }
         window.clearTimeout(actions.addMenuClose.timer);
         actions.addMenuClose.timer = window.setTimeout(() => {
             if (state.addMenu === 'closing') {
                 state.addMenu = false;
-                render();
+                sheet.remove();
+                back.remove();
+                root.classList.remove('sheet-prep');
             }
-        }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 280);
+        }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 360);
     },
     addMenuType() {
         state.addMenu = false;
@@ -3840,10 +3861,40 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- press and hold the + of the bottom bar: speak an entry at once ----------
+/** Opens Quick actions by adding the sheet to the page as it is (no redraw), then letting CSS animate it. */
+function openSheet() {
+    const root = app.querySelector('.app');
+    const bar = app.querySelector('.tabbar');
+    window.clearTimeout(actions.addMenuClose.timer);
+    app.querySelectorAll('.add-menu, .add-menu-back').forEach((el) => el.remove());
+    state.addMenu = true;
+    if (!root || !bar) {
+        return render();
+    }
+    sheetFresh = true;
+    root.classList.add('sheet-prep');
+    bar.insertAdjacentHTML('afterend', addSheet());
+    const fab = bar.querySelector('a.add');
+    if (fab) {
+        fab.classList.add('open');
+        fab.setAttribute('aria-expanded', 'true');
+    }
+    // the next frame, so the page starts from its normal size and shrinks smoothly
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (state.addMenu === true) {
+            root.classList.add('sheet-open');
+        }
+    }));
+}
+
 let plusHeld = false;
 let plusTimer = null;
 app.addEventListener('pointerdown', (event) => {
     if (event.target.closest && event.target.closest('.tabbar a.add')) {
+        const root = app.querySelector('.app');
+        if (root) {
+            root.classList.add('sheet-prep'); // the page gets its own layer now, so shrinking it later costs nothing
+        }
         plusHeld = false;
         window.clearTimeout(plusTimer);
         plusTimer = window.setTimeout(() => {

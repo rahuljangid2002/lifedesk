@@ -1653,36 +1653,98 @@ button.shortcut {
     .tabbar.dock:has(a.add.open) {
         z-index: 22;
     }
-    /* the page behind: tilts back, shrinks a little and blurs */
-    .app.sheet-open > .shell {
-        transform-origin: 50% 35%;
-        transform: perspective(1400px) rotateX(3deg) scale(0.94);
-        border-radius: 1.6rem;
-        filter: blur(1.5px) saturate(0.9);
+    /* the page behind: tilts back and shrinks a little. Only transform changes (drawn by the GPU), and the page gets its
+       own layer as soon as the finger touches + (.sheet-prep), so nothing is redrawn while it moves. */
+    .app > .shell {
+        transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+        transform-origin: 50% 30%;
     }
-    /* the page must not grow or scroll under the card (a phone would resize its visible area and move the dock) */
+    .app.sheet-prep > .shell {
+        will-change: transform;
+    }
+    .app.sheet-open > .shell {
+        transform: perspective(1400px) rotateX(2.5deg) scale(0.94);
+        border-radius: 0;
+        overflow: visible;
+        filter: none;
+    }
     html:has(.app.sheet-open),
     body:has(.app.sheet-open) {
         overflow: hidden;
     }
-    /* Quick actions: half the screen, growing out of the + in a circle */
+    /* the tint: a plain colour that fades in, with only a light blur */
+    .add-menu-back {
+        background: rgba(8, 12, 24, 0.36);
+        -webkit-backdrop-filter: blur(3px);
+        backdrop-filter: blur(3px);
+        will-change: opacity;
+        animation: sheet-fade-in 0.35s ease both;
+    }
+    .add-menu-back.closing {
+        animation: sheet-fade-out 0.3s ease both;
+    }
+    .add-menu-back.still,
+    .add-menu.still,
+    .add-menu.still .sheet-bubble,
+    .add-menu.still .sheet-head,
+    .add-menu.still .sheet-body {
+        animation: none;
+    }
+    /* Quick actions: half the screen. A circle grows out of the + behind the content (transform: scale, drawn by the
+       GPU), clipped by the card's rounded corners; the content fades in on top of it. */
     .add-menu {
-        --origin: calc(100% - 2rem) calc(100% + var(--dock-gap) + var(--fab) / 2);
+        --origin-x: 2rem; /* the + centre, from the card's right edge */
+        --origin-y: calc(var(--dock-gap) + var(--fab) / 2); /* and below its bottom edge */
+        --r: 48rem;
         left: 0.7rem;
         right: 0.7rem;
         width: auto;
         bottom: calc(0.6rem + var(--fab) + var(--dock-gap) + env(safe-area-inset-bottom));
         max-height: 50vh;
         transform: none;
+        overflow: hidden;
         border-radius: 1.8rem;
-        border-bottom: 1px solid var(--hair);
+        border: 0;
         padding-bottom: 0;
-        box-shadow: 0 20px 50px rgba(16, 24, 40, 0.3);
-        transform-origin: var(--origin);
-        animation: circle-out 0.6s cubic-bezier(0.32, 0.72, 0, 1) both;
+        background: transparent;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        box-shadow: none;
+        isolation: isolate;
+        /* once the circle has grown, the card itself turns solid, so no corner is ever left see-through */
+        animation: sheet-shadow-in 0.5s ease 0.25s both, sheet-solid 0s linear 0.5s both;
+    }
+    .add-menu.still {
+        background: var(--surface);
+        box-shadow: 0 20px 50px rgba(16, 24, 40, 0.28);
     }
     .add-menu.closing {
-        animation: circle-in 0.34s cubic-bezier(0.4, 0, 0.6, 1) both;
+        animation: none;
+    }
+    .sheet-bubble {
+        position: absolute;
+        z-index: -1;
+        width: calc(var(--r) * 2);
+        height: calc(var(--r) * 2);
+        left: calc(100% - var(--origin-x) - var(--r));
+        top: calc(100% + var(--origin-y) - var(--r));
+        border-radius: 50%;
+        background: var(--surface);
+        will-change: transform;
+        transform: scale(1);
+        animation: bubble-out 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+    }
+    .add-menu.closing .sheet-bubble {
+        animation: bubble-in 0.34s cubic-bezier(0.4, 0, 0.7, 1) both;
+    }
+    .add-menu .sheet-head,
+    .add-menu .sheet-body {
+        position: relative;
+        animation: sheet-content-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+    }
+    .add-menu.closing .sheet-head,
+    .add-menu.closing .sheet-body {
+        animation: sheet-content-out 0.18s ease both;
     }
     .add-menu .sheet-grip {
         display: none;
@@ -1694,32 +1756,52 @@ button.shortcut {
         display: none;
     }
 }
-@keyframes circle-out {
+@keyframes bubble-out {
     from {
-        clip-path: circle(1.8rem at var(--origin));
-        opacity: 0.4;
-    }
-    40% {
-        opacity: 1;
+        transform: scale(0.0375);
     }
     to {
-        clip-path: circle(150% at var(--origin));
-        opacity: 1;
+        transform: scale(1);
     }
 }
-@keyframes circle-in {
+@keyframes bubble-in {
     from {
-        clip-path: circle(150% at var(--origin));
-        opacity: 1;
+        transform: scale(1);
     }
     to {
-        clip-path: circle(1.8rem at var(--origin));
+        transform: scale(0.0375);
+    }
+}
+@keyframes sheet-content-in {
+    from {
         opacity: 0;
+        transform: translateY(0.8rem);
+    }
+}
+@keyframes sheet-content-out {
+    to {
+        opacity: 0;
+    }
+}
+@keyframes sheet-solid {
+    to {
+        background: var(--surface);
+    }
+}
+@keyframes sheet-shadow-in {
+    from {
+        box-shadow: 0 0 0 rgba(16, 24, 40, 0);
+    }
+    to {
+        box-shadow: 0 20px 50px rgba(16, 24, 40, 0.28);
     }
 }
 @media (max-width: 899px) and (prefers-reduced-motion: reduce) {
     .add-menu,
-    .add-menu.closing {
+    .add-menu.closing,
+    .sheet-bubble,
+    .add-menu .sheet-head,
+    .add-menu .sheet-body {
         animation: none;
     }
     .app.sheet-open > .shell {
