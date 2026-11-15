@@ -43,13 +43,13 @@ def run(p, width, height, label):
     route = lambda: pg.evaluate('location.hash')
     is_open = lambda: pg.locator('.voice').count() == 1
     def open_sheet():
-        pg.locator('.shortcut', has_text='Voice entry').click(); pg.wait_for_selector('.voice'); time.sleep(0.6)
+        pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice'); time.sleep(0.6)
 
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(URL + '#accounts'); pg.get_by_role('button', name='＋ Bank account').click(); pg.get_by_label('Name').fill('HDFC Bank'); pg.get_by_label('Opening balance').fill('10000')
     pg.get_by_label('Use as my default account').check(); pg.get_by_role('button', name='Save').click(); time.sleep(0.4)
     pg.goto(URL + '#daily'); pg.wait_for_selector('.hero')
-    pg.goto(URL + '#home'); pg.wait_for_selector('.shortcut'); n = len(db()['entries'])
+    pg.goto(URL + '#home'); pg.wait_for_selector('.wallet'); n = len(db()['entries'])
 
     # a tap outside the sheet
     open_sheet()
@@ -65,7 +65,7 @@ def run(p, width, height, label):
     check(f'{label}: Back closes the sheet and stays on the same screen', not is_open() and route() == '#home', route())
     pg.go_back(); time.sleep(0.6)
     check(f'{label}: the next Back goes to the screen before, as usual (nothing left behind in the history)', route() == '#daily', route())
-    pg.go_forward(); time.sleep(0.6); pg.wait_for_selector('.shortcut')
+    pg.go_forward(); time.sleep(0.6); pg.wait_for_selector('.wallet')
     # Escape
     open_sheet()
     pg.keyboard.press('Escape'); time.sleep(0.5)
@@ -75,7 +75,7 @@ def run(p, width, height, label):
     pg.get_by_role('button', name='Close').click(); time.sleep(0.5)
     pg.go_back(); time.sleep(0.6)
     check(f'{label}: Close, then Back: goes to the screen before', not is_open() and route() == '#daily', route())
-    pg.go_forward(); time.sleep(0.6); pg.wait_for_selector('.shortcut')
+    pg.go_forward(); time.sleep(0.6); pg.wait_for_selector('.wallet')
     # a tap outside while an entry waits to be confirmed: nothing is stored
     pg.evaluate("window.__say = ['Spent 450 on groceries from HDFC']")
     open_sheet(); pg.wait_for_selector('.voice-review'); time.sleep(0.3)
@@ -97,13 +97,13 @@ def run(p, width, height, label):
     ctx.add_init_script('delete window.SpeechRecognition; delete window.webkitSpeechRecognition; Object.defineProperty(window, "SpeechRecognition", {value: undefined}); Object.defineProperty(window, "webkitSpeechRecognition", {value: undefined});')
     pg = ctx.new_page()
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
-    pg.goto(URL + '#home'); pg.wait_for_selector('.shortcut')
-    pg.locator('.shortcut', has_text='Voice entry').click(); pg.wait_for_selector('.voice'); time.sleep(0.4)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.wallet')
+    pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice'); time.sleep(0.4)
     pg.get_by_role('link', name='Type the entry').click(); time.sleep(0.8)
     check(f'{label}: "Type the entry" closes the sheet and opens the form', pg.locator('.voice').count() == 0 and pg.evaluate('location.hash') == '#add', pg.evaluate('location.hash'))
     pg.go_back(); time.sleep(0.6)
     check(f'{label}: …and Back from the form returns to Home', pg.evaluate('location.hash') == '#home', pg.evaluate('location.hash'))
-    pg.locator('.shortcut', has_text='Voice entry').click(); pg.wait_for_selector('.voice'); time.sleep(0.5)
+    pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice'); time.sleep(0.5)
     pg.mouse.click(12, 12); time.sleep(0.5)
     check(f'{label}: the "not available" sheet also closes with a tap outside', pg.locator('.voice').count() == 0)
     b.close()

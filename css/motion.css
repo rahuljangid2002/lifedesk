@@ -1,0 +1,145 @@
+/* LifeDesk – things arriving. When a screen opens (.shell.entered: the first drawing after moving to it, or after
+   switching a dashboard), charts draw themselves and records settle in one after another. Redraws while working on
+   a screen (typing, a message, a toggle) leave everything still. Only transform, opacity and stroke offsets move.
+   Nothing moves when the device asks for less motion. */
+
+@property --p {
+    syntax: '<number>';
+    inherits: true;
+    initial-value: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    /* ---------- charts ---------- */
+    /* columns grow up from the axis, one after another */
+    .shell.entered .chart .bar {
+        transform-box: fill-box;
+        transform-origin: 50% 100%;
+        animation: mo-grow-y 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: calc(var(--i, 0) * 35ms + 0.1s);
+    }
+    /* a trend line draws from left to right, the area under it fades in, the last point pops */
+    .shell.entered .chart .line {
+        stroke-dasharray: 1;
+        animation: mo-draw 1.1s cubic-bezier(0.65, 0, 0.35, 1) 0.1s both;
+    }
+    .shell.entered .chart .area {
+        animation: mo-fade 0.8s ease 0.6s both;
+    }
+    .shell.entered .chart .dot:not(.hover),
+    .shell.entered .chart .end-label {
+        transform-box: fill-box;
+        transform-origin: 50% 50%;
+        animation: mo-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 1.1s both;
+    }
+    .shell.entered .chart .grid,
+    .shell.entered .chart .tick {
+        animation: mo-fade 0.5s ease both;
+    }
+    /* bars across: categories, budgets, the month on Home */
+    .shell.entered .hb-track i,
+    .shell.entered .m-track i,
+    .shell.entered .bar > i,
+    .shell.entered .mini-bar i,
+    .shell.entered .as-bar i,
+    .shell.entered .w-bar i {
+        transform-origin: 0 50%;
+        animation: mo-grow-x 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+    }
+    .shell.entered .hbar:nth-child(2) .hb-track i,
+    .shell.entered .meter:nth-child(2) .m-track i { animation-delay: 0.2s; }
+    .shell.entered .hbar:nth-child(3) .hb-track i,
+    .shell.entered .meter:nth-child(3) .m-track i { animation-delay: 0.25s; }
+    .shell.entered .hbar:nth-child(4) .hb-track i,
+    .shell.entered .meter:nth-child(4) .m-track i { animation-delay: 0.3s; }
+    .shell.entered .hbar:nth-child(5) .hb-track i,
+    .shell.entered .meter:nth-child(5) .m-track i { animation-delay: 0.35s; }
+    .shell.entered .hbar:nth-child(n + 6) .hb-track i,
+    .shell.entered .meter:nth-child(n + 6) .m-track i { animation-delay: 0.4s; }
+    /* score rings sweep round to their value */
+    .shell.entered .as-ring {
+        animation: mo-sweep 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both, as-pop 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    /* the six-month spark on the hero card */
+    .shell.entered .spark i {
+        transform-origin: 50% 100%;
+        animation: mo-grow-y 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .shell.entered .spark i:nth-child(2) { animation-delay: 0.05s; }
+    .shell.entered .spark i:nth-child(3) { animation-delay: 0.1s; }
+    .shell.entered .spark i:nth-child(4) { animation-delay: 0.15s; }
+    .shell.entered .spark i:nth-child(5) { animation-delay: 0.2s; }
+    .shell.entered .spark i:nth-child(6) { animation-delay: 0.25s; }
+
+    /* ---------- records: rows and cards settle in, one after another ---------- */
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *) {
+        animation: mo-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 0.42s;
+    }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(1) { animation-delay: 0.08s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(2) { animation-delay: 0.12s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(3) { animation-delay: 0.16s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(4) { animation-delay: 0.2s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(5) { animation-delay: 0.24s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(6) { animation-delay: 0.28s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(7) { animation-delay: 0.32s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(8) { animation-delay: 0.36s; }
+    .shell.entered :is(.list > .row, .glance > .hc, .trip-cards > *, .inv-row, .person, .as-tips > *, .kpis > *, .tiles > *):nth-child(9) { animation-delay: 0.4s; }
+    /* a record that has just been added */
+    .row.just-added {
+        animation: mo-added 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+}
+
+@keyframes mo-grow-y {
+    from {
+        transform: scaleY(0);
+    }
+}
+@keyframes mo-grow-x {
+    from {
+        transform: scaleX(0);
+    }
+}
+@keyframes mo-draw {
+    from {
+        stroke-dashoffset: 1;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+@keyframes mo-fade {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes mo-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+}
+@keyframes mo-sweep {
+    from {
+        --p: 0;
+    }
+}
+@keyframes mo-rise {
+    from {
+        opacity: 0;
+        transform: translateY(0.6rem);
+    }
+}
+@keyframes mo-added {
+    0% {
+        opacity: 0;
+        transform: translateY(-0.4rem) scale(0.98);
+        background-color: color-mix(in srgb, var(--brand) 16%, transparent);
+    }
+    60% {
+        opacity: 1;
+        transform: none;
+        background-color: color-mix(in srgb, var(--brand) 10%, transparent);
+    }
+}

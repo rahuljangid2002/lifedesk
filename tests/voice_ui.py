@@ -66,7 +66,7 @@ with sync_playwright() as p:
     pg = ctx.new_page(); errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.on('dialog', lambda d: d.accept())
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     db = lambda: pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'))
     def speak(*lines):
@@ -80,10 +80,10 @@ with sync_playwright() as p:
     start = len(db()['entries'])
 
     # a complete sentence from Home: shown for checking first, stored only after Save, with Undo
-    pg.goto(URL + '#home'); pg.wait_for_selector('.shortcut')
-    check('Home has a Voice entry shortcut', pg.locator('.shortcut', has_text='Voice entry').count() == 1)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.wallet')
+    check('Home has a Voice entry button in quick add', pg.locator('.quick-mic').count() == 1)
     speak('Spent 450 on groceries from HDFC')
-    pg.locator('.shortcut', has_text='Voice entry').click(); pg.wait_for_selector('.voice-review'); time.sleep(0.5)
+    pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice-review'); time.sleep(0.5)
     row = pg.locator('.voice-review .row').inner_text()
     check('complete sentence: NOT stored yet; the review shows Groceries, HDFC Bank and 450, and asks aloud', len(db()['entries']) == start and 'Groceries' in row and 'HDFC Bank' in row and '450' in row and 'Should I store this?' in pg.evaluate('window.__spoken')[0], row.replace('\n', ' | ') + ' // ' + str(pg.evaluate('window.__spoken')))
     shot('v0_review_one')
@@ -242,7 +242,7 @@ with sync_playwright() as p:
     shot('v3_sheet_english'); pg.get_by_role('button', name='Close').click(); time.sleep(0.2)
 
     # the + of the bottom bar: a tap offers typing or speaking; holding it starts speaking at once
-    pg.goto(URL + '#home'); pg.wait_for_selector('.shortcut'); time.sleep(0.3)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.wallet'); time.sleep(0.3)
     plus = pg.locator('.tabbar a.add')
     plus.click(); time.sleep(0.4)
     items = [x.replace('\n', ' ') for x in pg.locator('.add-menu [role=menuitem]').all_inner_texts()]
@@ -268,7 +268,7 @@ with sync_playwright() as p:
     # microphone opens as soon as the question has been spoken even though the phone never says speaking ended
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, user_agent='Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36')
     ctx.add_init_script(STAND_IN_PHONE); pg = ctx.new_page(); errors2 = []
-    pg.on('pageerror', lambda e: errors2.append(str(e))); pg.on('dialog', lambda d: d.accept())
+    pg.on('pageerror', lambda e: errors2.append(str(e))); pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     db = lambda: pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(URL + '#add'); pg.wait_for_selector('.voice-btn'); n = len(db()['entries'])
@@ -297,7 +297,7 @@ with sync_playwright() as p:
             speak(u) { window.__spoken.push(u.text); window.__used.push([u.voice ? u.voice.name : null, u.pitch, u.rate]); setTimeout(() => u.onend && u.onend(), 40); } } });
     """)
     pg = ctx.new_page(); errors3 = []
-    pg.on('pageerror', lambda e: errors3.append(str(e))); pg.on('dialog', lambda d: d.accept())
+    pg.on('pageerror', lambda e: errors3.append(str(e))); pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(URL + '#more'); pg.wait_for_selector('.card:has-text("Voice assistant")'); time.sleep(0.3)
     card = lambda: pg.locator('.card', has_text='Voice assistant'); used = lambda: pg.evaluate('window.__used')[-1]
@@ -323,7 +323,7 @@ with sync_playwright() as p:
     ctx = b.new_context(viewport={'width': 390, 'height': 844}); ctx.add_init_script("delete window.SpeechRecognition; delete window.webkitSpeechRecognition; Object.defineProperty(window, 'webkitSpeechRecognition', { value: undefined }); Object.defineProperty(window, 'SpeechRecognition', { value: undefined });")
     pg = ctx.new_page()
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
-    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar'); pg.locator('.shortcut', has_text='Voice entry').click(); pg.wait_for_selector('.voice')
+    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar'); pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice')
     text = pg.locator('.voice').inner_text()
     check('unsupported browser: says so and lists where it works (Chrome, Edge, Safari; not Firefox)', 'not available in this browser' in text and all(w in text for w in ['Chrome', 'Edge', 'Safari', 'Firefox']) and pg.locator('.voice-mic[data-action]').count() == 0, text[:200])
     pg.screenshot(path=os.path.join(OUT, 'v4_unsupported.png'))

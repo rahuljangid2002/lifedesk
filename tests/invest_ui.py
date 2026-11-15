@@ -28,7 +28,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.on('dialog', lambda d: d.accept())
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(URL); pg.evaluate('localStorage.clear()'); pg.goto(URL)
     pg.wait_for_selector('#welcome-currency')
     pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click()
@@ -117,8 +117,9 @@ with sync_playwright() as p:
 
     # the ledger: invested is not spending; the entry opens Investments when edited
     pg.goto(URL + '#home'); time.sleep(0.4)
-    check('investing is not counted as an expense', money(stat('Expense')) == 0, stat('Expense'))
-    check('Home has the Investments card', pg.locator('a.card[href="#invest"]').count() == 1)
+    spent = pg.locator('.wallet .w-big').inner_text().replace('spent', '')
+    check('investing is not counted as an expense', money(spent) == 0, spent)
+    check('Home has the Investments card', pg.locator('a.hc[href="#invest"]').count() == 1)
     check('net worth includes investments', pg.locator('.worth-parts small', has_text='investments').count() == 1)
     pg.goto(URL + '#daily'); pg.locator('.seg button', has_text='All').click(); time.sleep(0.3)
     pg.locator('.row', has_text='Bought · Test Share').locator('[data-action="editEntry"]').first.click(); time.sleep(0.4)

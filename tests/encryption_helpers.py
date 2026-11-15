@@ -46,7 +46,7 @@ def device(browser, notifications=False, profile=None):
     page.errors = []
     page.on('console', lambda m: page.errors.append(m.text) if m.type == 'error' else None)
     page.on('pageerror', lambda e: page.errors.append(str(e)))
-    page.on('dialog', lambda d: d.accept('DELETE') if d.type == 'prompt' else d.accept())
+    page.on('dialog', lambda d: d.accept('DELETE') if d.type == 'prompt' else d.accept()); page.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     return page
 
 

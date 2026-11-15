@@ -1,0 +1,485 @@
+/* LifeDesk – Money Home ("wallet" layout). Loaded after ios.css.
+   The month as one hero card, quick add under it, alerts only when something needs doing, the small cards of
+   "At a glance" (a row that swipes on the phone, a grid beside the hero on a wide screen) and the latest entries. */
+
+/* ---------- greeting ---------- */
+.home-hero .hello {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.home-hero .hello small {
+    display: block;
+    font-size: 0.9rem;
+}
+.home-hero .hello .avatar {
+    width: 2.6rem;
+    height: 2.6rem;
+    font-size: 1rem;
+    flex: none;
+}
+
+/* ---------- layout ---------- */
+main.wallet-home {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+.wallet-home .home-main {
+    display: contents; /* on the phone: hero, quick add, alerts, At a glance, then Recent */
+}
+.wallet-home .home-side {
+    order: 1;
+    min-width: 0;
+}
+.wallet-home .recent {
+    order: 2;
+}
+.wallet-home .recent > .list {
+    padding: 0.2rem 0.9rem;
+    border-radius: 1.4rem;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.wallet-home .sec-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0.5rem 0.15rem 0.6rem;
+}
+.wallet-home .sec-head h2 {
+    font-size: 1.3rem;
+    letter-spacing: -0.022em;
+}
+.wallet-home .sec-head a {
+    font-weight: 600;
+}
+
+/* ---------- the hero card ---------- */
+.wallet {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.75rem;
+    padding: 1.15rem 1.15rem 1rem;
+    color: #fff;
+    background:
+        radial-gradient(120% 140% at 100% 0%, #7c3aed 0%, transparent 55%),
+        linear-gradient(135deg, #1e3a8a, #2563eb);
+    box-shadow: 0 18px 40px rgba(37, 99, 235, 0.32);
+}
+.wallet::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, rgba(255, 255, 255, 0.24), transparent 38%);
+    pointer-events: none;
+}
+.wallet small {
+    color: rgba(255, 255, 255, 0.8);
+}
+.w-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 1.7rem;
+}
+.w-pill {
+    position: relative;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.w-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+}
+.w-big {
+    font-size: 2.3rem;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    word-break: break-word;
+}
+.w-big span {
+    font-size: 0.95rem;
+    font-weight: 600;
+    opacity: 0.82;
+    margin-left: 0.3rem;
+    letter-spacing: 0;
+}
+.spark {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.3rem;
+    height: 2.8rem;
+    flex: none;
+}
+.spark i {
+    width: 0.55rem;
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.35);
+}
+.spark i.now {
+    background: #fff;
+}
+.w-bar {
+    height: 0.5rem;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.22);
+    margin: 0.9rem 0 0.5rem;
+    overflow: hidden;
+}
+.w-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #a7f3d0, #fff);
+    transition: width 0.6s var(--ease-out);
+}
+.w-bar i.over {
+    background: linear-gradient(90deg, #fecaca, #fff);
+}
+.w-line {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.75rem;
+    font-size: 0.84rem;
+}
+.wallet .home-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.7rem 0.5rem;
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+.wallet .home-stats .stat,
+.wallet .home-stats .stat.link {
+    grid-column: auto;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    border-radius: 0;
+    color: #fff;
+    min-width: 0;
+}
+.wallet .home-stats .stat small {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.72rem;
+}
+.wallet .home-stats .stat b {
+    font-size: 0.95rem;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.wallet .home-stats .stat.link.owed b {
+    color: #fecaca;
+}
+
+/* ---------- quick add: amount, what for, speak, add; then kind, category, account ---------- */
+.wallet-home .quick {
+    --qh: 2.75rem;
+    padding: 0.55rem;
+    border-radius: 1.4rem;
+    gap: 0.45rem;
+    grid-template-columns: 7rem repeat(3, minmax(0, 1fr)) var(--qh) 8.5rem;
+    grid-template-areas:
+        'amt desc desc desc mic add'
+        'type type cat cat acc acc'
+        'more more more more more more';
+}
+/* the older phone layout of app.css stretches some controls across the row; here every control keeps its area */
+.wallet-home .quick > * {
+    grid-column: auto;
+}
+.wallet-home .quick .quick-type { grid-area: type; }
+.wallet-home .quick .quick-amt { grid-area: amt; }
+.wallet-home .quick .quick-desc { grid-area: desc; }
+.wallet-home .quick .quick-cat { grid-area: cat; }
+.wallet-home .quick .quick-acc { grid-area: acc; }
+.wallet-home .quick .quick-add { grid-area: add; }
+.wallet-home .quick .quick-more { grid-area: more; justify-self: start; }
+.wallet-home .quick .quick-mic {
+    grid-area: mic;
+    width: var(--qh);
+    border-radius: 0.85rem;
+    background: var(--surface-2);
+    color: var(--brand);
+    display: grid;
+    place-items: center;
+}
+.wallet-home .quick .quick-add {
+    min-width: var(--qh);
+    padding: 0 0.95rem;
+    border-radius: 0.85rem;
+}
+.wallet-home .quick .quick-more {
+    height: auto;
+    justify-content: flex-start;
+    padding: 0 0.3rem;
+    font-size: 0.82rem;
+}
+@media (max-width: 40em) {
+    .wallet-home .quick {
+        grid-template-columns: 6.6rem repeat(3, minmax(0, 1fr)) var(--qh) var(--qh);
+    }
+    .wallet-home .quick .quick-add {
+        padding: 0;
+        width: var(--qh);
+        justify-content: center;
+    }
+    .wallet-home .quick .qa-text {
+        display: none;
+    }
+}
+
+/* ---------- alerts ---------- */
+.alert {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 1.1rem;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+}
+.alert b {
+    display: block;
+    font-size: 0.92rem;
+}
+.alert > .ic {
+    margin-left: auto;
+    color: var(--muted);
+}
+.alert-ic {
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    border-radius: 0.65rem;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, #f59e0b 22%, transparent);
+    color: #b45309;
+}
+
+/* ---------- At a glance ---------- */
+.glance {
+    display: flex;
+    gap: 0.65rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 -1rem;
+    padding: 0.15rem 1rem 0.5rem;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+}
+.glance::-webkit-scrollbar {
+    display: none;
+}
+.hc {
+    flex: 0 0 9.5rem;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-height: 9rem;
+    padding: 0.85rem;
+    border: 0;
+    border-radius: 1.4rem;
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+    font: inherit;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: transform 0.22s var(--ease), box-shadow 0.25s var(--ease);
+}
+.hc:active {
+    transform: scale(0.97);
+}
+.hc > small {
+    line-height: 1.3;
+}
+.hc > b {
+    font-size: 0.98rem;
+    line-height: 1.25;
+}
+.hc .hc-v {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+}
+.hc-ic {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.65rem;
+    display: grid;
+    place-items: center;
+    margin-bottom: 0.25rem;
+    flex: none;
+}
+.hc .mini-bar {
+    width: 100%;
+    height: 0.38rem;
+    margin-top: auto;
+    border-radius: 99px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+.hc .mini-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: var(--green);
+}
+.hc .mini-bar i.orange {
+    background: #f59e0b;
+}
+.hc .mini-bar i.red {
+    background: var(--red);
+}
+.hc.as-home .as-ring {
+    --size: 3rem;
+    margin-bottom: 0.2rem;
+}
+.hc.as-home .as-ring b {
+    font-size: 1rem;
+}
+.hc.as-home .as-ring small {
+    display: none;
+}
+.hc.worth .worth-parts {
+    display: none;
+}
+.hc.wide {
+    flex-basis: 19rem;
+}
+.hc .hc-top {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+}
+.hc .hc-top h2 {
+    font-size: 0.95rem;
+}
+.avg-card .avg-figs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: auto;
+}
+.avg-card .avg-figs span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.avg-card .avg-figs > span {
+    background: var(--surface-2);
+    border-radius: 0.8rem;
+    padding: 0.45rem 0.55rem;
+}
+.avg-card .avg-figs b {
+    font-size: 0.92rem;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+.avg-card .avg-figs small {
+    font-size: 0.7rem;
+    line-height: 1.25;
+}
+.c-blue { background: color-mix(in srgb, #3b82f6 18%, transparent); color: #2563eb; }
+.c-green { background: color-mix(in srgb, #22c55e 18%, transparent); color: #16a34a; }
+.c-purple { background: color-mix(in srgb, #8b5cf6 20%, transparent); color: #7c3aed; }
+.c-orange { background: color-mix(in srgb, #f97316 18%, transparent); color: #ea580c; }
+.c-pink { background: color-mix(in srgb, #ec4899 18%, transparent); color: #db2777; }
+.c-teal { background: color-mix(in srgb, #14b8a6 18%, transparent); color: #0d9488; }
+.hc .in {
+    color: var(--green);
+}
+.hc .out {
+    color: var(--red);
+}
+
+/* ---------- wide screens: hero, quick add, alerts and Recent on the left; At a glance as a grid on the right ---------- */
+@media (min-width: 900px) {
+    main.wallet-home {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+        gap: 1.1rem;
+        align-items: start;
+    }
+    .wallet-home .home-main {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+        min-width: 0;
+    }
+    .wallet-home .home-side .sec-head {
+        margin-top: 0;
+    }
+    .wallet-home .swipe-hint {
+        display: none;
+    }
+    .wallet {
+        padding: 1.4rem;
+    }
+    .w-big {
+        font-size: 2.8rem;
+    }
+    .spark {
+        height: 3.8rem;
+    }
+    .spark i {
+        width: 0.75rem;
+    }
+    .glance {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0;
+        padding: 0;
+        overflow: visible;
+    }
+    .hc {
+        min-height: 9.5rem;
+    }
+    .hc.wide,
+    .hc.worth {
+        grid-column: span 2;
+        min-height: 0;
+    }
+    .hc.worth {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas: 'ic label parts' 'ic value parts';
+        column-gap: 0.75rem;
+        align-items: center;
+    }
+    .hc.worth .hc-ic { grid-area: ic; margin: 0; }
+    .hc.worth > small { grid-area: label; }
+    .hc.worth .hc-v { grid-area: value; }
+    .hc.worth .worth-parts {
+        grid-area: parts;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        text-align: right;
+    }
+}

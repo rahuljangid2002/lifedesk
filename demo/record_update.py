@@ -294,7 +294,7 @@ def record(pw, name, fn, kind):
         ctx.add_init_script(VOICE_STAND)
     t0 = time.time()
     page = ctx.new_page()
-    page.on('dialog', lambda d: d.accept())
+    page.on('dialog', lambda d: d.accept()); page.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     R.MARK.clear()
     fn(page)
     end = time.time() - t0
