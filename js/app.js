@@ -532,8 +532,12 @@ function walletCard(key) {
     const months = [5, 4, 3, 2, 1, 0].map((n) => L.addMonths(key, -n));
     const spends = months.map((k) => L.monthSummary(S.data, k).expense);
     const top = Math.max(...spends, 1);
-    const used = m.income > 0 ? Math.round((m.expense / m.income) * 100) : null;
-    const left = m.income - m.expense;
+    // measured against this month's income once most of it has come in, otherwise against the usual month's income,
+    // so a salary that has not arrived yet does not turn the bar into thousands of per cent
+    const usual = a.months && a.income > 0 && m.income < a.income * 0.5;
+    const base = usual ? a.income : m.income;
+    const used = base > 0 ? Math.round((m.expense / base) * 100) : null;
+    const left = base - m.expense;
     const pace = a.months && a.expense > 0 ? Math.round((m.expense / a.expense) * 100) : null;
     const fig = (label, value, href) => (href
         ? `<a class="stat link ${t.cardOwed > 0 ? 'owed' : ''}" href="${href}"><small>${label}</small><b>${value}</b></a>`
@@ -541,11 +545,11 @@ function walletCard(key) {
     return `<section class="wallet span" aria-label="This month">
         <div class="w-head"><small>${esc(L.monthLabel(key).split(' ')[0])} · so far</small>${t.cardOwed > 0 ? `<a class="w-pill" href="#pay">Card owed ${L.money(t.cardOwed)}</a>` : ''}</div>
         <div class="w-main">
-            <div><div class="w-big">${L.money(m.expense)}<span>spent</span></div><small>${m.income > 0 ? `of ${L.money(m.income)} income this month` : 'No income added this month yet'}</small></div>
+            <div><div class="w-big">${L.money(m.expense)}<span>spent</span></div><small>${usual ? `of a usual ${L.money(Math.round(base))} income · ${L.money(m.income)} in so far` : base > 0 ? `of ${L.money(base)} income this month` : 'No income added this month yet'}</small></div>
             <div class="spark" role="img" aria-label="Spending in the last six months">${spends.map((v, i) => `<i class="${i === 5 ? 'now' : ''}" style="height:${Math.max(8, Math.round((v / top) * 100))}%" title="${esc(L.monthLabel(months[i]))}: ${esc(L.money(v))}"></i>`).join('')}</div>
         </div>
         <div class="w-bar"><i class="${used !== null && used > 100 ? 'over' : ''}" style="width:${used === null ? 0 : Math.min(100, used)}%"></i></div>
-        <div class="w-line"><span>${m.income > 0 ? `<b>${L.money(Math.abs(left))} ${left >= 0 ? 'left' : 'over'}</b> · ${used}% used` : `<b>Money in hand ${L.money(t.inHand)}</b>`}</span>${pace !== null ? `<small>usual month ${L.money(Math.round(a.expense))} · ${pace}%</small>` : ''}</div>
+        <div class="w-line"><span>${base > 0 ? `<b>${L.money(Math.round(Math.abs(left)))} ${left >= 0 ? 'left' : 'over'}</b> · ${used > 999 ? '999%+' : `${used}%`} used` : `<b>Money in hand ${L.money(t.inHand)}</b>`}</span>${pace !== null ? `<small>usual month ${L.money(Math.round(a.expense))} · ${pace}%</small>` : ''}</div>
         <div class="stats home-stats">${fig('Net balance', L.money(t.net))}${fig('Invested', L.money(fl.invested))}${fig('Spent + Invested', L.money(fl.spentAndInvested))}
             ${fig('Total money out', L.money(fl.moneyOut))}${fig('Money in hand', L.money(t.inHand))}${fig('Card owed', L.money(t.cardOwed), '#pay')}</div>
     </section>`;
