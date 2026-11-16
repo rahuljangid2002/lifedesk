@@ -320,7 +320,7 @@ with sync_playwright() as p:
     ctx.close()
 
     # a browser without speech recognition: the button explains where it works
-    ctx = b.new_context(viewport={'width': 390, 'height': 844}); ctx.add_init_script("delete window.SpeechRecognition; delete window.webkitSpeechRecognition; Object.defineProperty(window, 'webkitSpeechRecognition', { value: undefined }); Object.defineProperty(window, 'SpeechRecognition', { value: undefined });")
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}); ctx.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {}"); ctx.add_init_script("delete window.SpeechRecognition; delete window.webkitSpeechRecognition; Object.defineProperty(window, 'webkitSpeechRecognition', { value: undefined }); Object.defineProperty(window, 'SpeechRecognition', { value: undefined });")
     pg = ctx.new_page()
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar'); pg.locator('.quick-mic').click(); pg.wait_for_selector('.voice')
