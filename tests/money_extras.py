@@ -29,7 +29,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('pageerror', lambda e: errors.append(str(e)))
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
-    pg.on('dialog', lambda d: d.accept())
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(URL); pg.evaluate('localStorage.clear()'); pg.goto(URL)
     pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
@@ -56,7 +56,7 @@ with sync_playwright() as p:
     shot('x0_payments_bills')
     check('Due this month lists both on Payments', pg.locator('.due-card .row').count() == 2, str(pg.locator('.due-card .row').count()))
     pg.goto(URL + '#home'); time.sleep(0.3)
-    check('Home says 2 bills are due', pg.locator('.notice', has_text='2 bills due this month').count() == 1)
+    check('Home says 2 bills are due', pg.locator('.alert', has_text='2 bills due this month').count() == 1)
     pg.goto(URL + '#daily'); time.sleep(0.3)
     shot('x0_daily_due')
     check('Daily Expenses shows Due this month', pg.locator('.due-card', has_text='Rent').count() == 1)
@@ -121,7 +121,7 @@ with sync_playwright() as p:
     check('WhatsApp opens with the number (with 91) and the amount', ('wa.me/919876543210' in pop.value.url or 'phone=919876543210' in pop.value.url) and '2%2C000' in pop.value.url, pop.value.url[:120])
     pop.value.close()
     pg.goto(URL + '#home'); time.sleep(0.3)
-    check('Home says a follow-up is due', pg.locator('.notice', has_text='follow-up').count() == 1)
+    check('Home says a follow-up is due', pg.locator('.alert', has_text='follow-up').count() == 1)
 
     # ---------- EMI plan ----------
     pg.goto(URL + '#add'); pg.get_by_label('Amount').fill('30000'); pg.get_by_label('Description').fill('Laptop')

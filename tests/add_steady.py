@@ -19,7 +19,7 @@ def check(name, ok, detail=''):
 with sync_playwright() as p:
     b = p.chromium.launch()
     for width, height, label in ((390, 844, 'phone'), (320, 700, 'small phone'), (1280, 800, 'desktop')):
-        pg = b.new_context(viewport={'width': width, 'height': height}).new_page(); errors = []
+        pg = b.new_context(viewport={'width': width, 'height': height}).new_page(); errors = []; pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {}")  # the new look
         pg.on('pageerror', lambda e: errors.append(str(e)))
         pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
         pg.goto(URL + '#accounts')
@@ -51,7 +51,7 @@ with sync_playwright() as p:
             check(f'{label}: …and the chosen account is still in view', visible)
             pg.locator('[data-model="add.amount"]').fill('25'); time.sleep(0.3)
             check(f'{label}: typing the amount does not move the row either', abs(pg.evaluate('(el) => el.scrollLeft', pg.locator('.chips').first.element_handle()) - before) <= 1)
-            pg.goto(URL + '#home'); pg.wait_for_selector('.shortcut'); pg.goto(URL + '#add'); pg.wait_for_selector('.chips'); time.sleep(0.5)
+            pg.goto(URL + '#home'); pg.wait_for_selector('.wallet'); pg.goto(URL + '#add'); pg.wait_for_selector('.chips'); time.sleep(0.5)
             check(f'{label}: coming back to the screen later starts the row from the beginning', pg.evaluate('(el) => el.scrollLeft', pg.locator('.chips').first.element_handle()) == 0)
         else:
             row.locator('.chip').last.click(); time.sleep(0.3)

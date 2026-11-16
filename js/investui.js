@@ -834,7 +834,7 @@ export function investTool(c) {
         },
         async invDelete(el) {
             const inv = invById(el.dataset.id);
-            if (!window.confirm(`Delete ${inv.name} with all its transactions and SIPs?\nLedger entries it wrote are removed too, so account balances change back.`)) {
+            if (!await c.ask(`Delete ${inv.name} with all its transactions and SIPs?\nLedger entries it wrote are removed too, so account balances change back.`)) {
                 return;
             }
             const txIds = S.data.invTxns.filter((t) => t.investmentId === inv.id).map((t) => t.id);
@@ -892,7 +892,7 @@ export function investTool(c) {
         async invTxnSave() {
             const t = st().txn;
             const inv = invById(t.investmentId);
-            if (['buy', 'sip', 'charges'].includes(t.kind) && !t.accountId && !window.confirm('No account is chosen, so nothing is deducted from your bank. Save anyway?')) {
+            if (['buy', 'sip', 'charges'].includes(t.kind) && !t.accountId && !await c.ask('No account is chosen, so nothing is deducted from your bank. Save anyway?')) {
                 return;
             }
             const old = t.id ? S.data.invTxns.find((x) => x.id === t.id) : null;
@@ -919,7 +919,7 @@ export function investTool(c) {
         async invTxnDelete(el) {
             const t = S.data.invTxns.find((x) => x.id === el.dataset.id);
             const ledger = S.data.entries.some((e) => e.id === `inv-${t.id}`) ? ' Its ledger entry is removed too, so the account balance changes back.' : '';
-            if (window.confirm(`Delete this ${I.TXN_KINDS[t.kind] || t.kind} of ${L.money(t.amount)}?${ledger}`)) {
+            if (await c.ask(`Delete this ${I.TXN_KINDS[t.kind] || t.kind} of ${L.money(t.amount)}?${ledger}`)) {
                 await removeTxns([t.id]);
                 c.toast('Transaction deleted.');
             }
@@ -1032,7 +1032,7 @@ export function investTool(c) {
                 while (next.nextDue && next.nextDue < today() && guard++ < 600) {
                     next.nextDue = I.nextDue(next.nextDue, next.frequency, next.day);
                 }
-            } else if (next.status === 'Stopped' && !window.confirm(`Stop ${s.name}? Its instalments so far stay in the holding.`)) {
+            } else if (next.status === 'Stopped' && !await c.ask(`Stop ${s.name}? Its instalments so far stay in the holding.`)) {
                 return;
             }
             await S.save('sips', next);
@@ -1049,7 +1049,7 @@ export function investTool(c) {
         },
         async invSipDelete(el) {
             const s = S.data.sips.find((x) => x.id === el.dataset.id);
-            if (window.confirm(`Delete ${s.name}? The instalments already recorded stay.`)) {
+            if (await c.ask(`Delete ${s.name}? The instalments already recorded stay.`)) {
                 await S.remove('sips', s.id);
                 c.toast('SIP deleted.');
             }
@@ -1092,7 +1092,7 @@ export function investTool(c) {
         },
         async invGoalDelete(el) {
             const g = S.data.goals.find((x) => x.id === el.dataset.id);
-            if (window.confirm(`Delete the goal ${g.name}? Its investments stay.`)) {
+            if (await c.ask(`Delete the goal ${g.name}? Its investments stay.`)) {
                 const pairs = S.data.investments.filter((i) => i.goalId === g.id).map((i) => ['investments', { ...i, goalId: null }]);
                 if (pairs.length) {
                     await S.saveMany(pairs);

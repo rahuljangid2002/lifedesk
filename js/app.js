@@ -15,6 +15,7 @@ import { TRIP_STATE, tripTool } from './tripsui.js';
 import { ASSIST_STATE, assistantTool } from './assistantui.js';
 import { yearStart } from './insights.js';
 import { yearOf } from './reports.js';
+import { startGlide } from './glide.js';
 
 const app = document.getElementById('app');
 const today = () => L.isoDate();
@@ -39,6 +40,7 @@ const state = {
     bills: { form: null },
     push: { busy: false },
     fresh: false, // true for the one drawing right after moving to another screen
+    entered: true, // the same, for any way of arriving (charts draw and records settle in, css/motion.css)
     voice: { open: false, lang: 'en', phase: 'idle', interim: '', note: '', log: [], review: null },
     addMenu: false, // the choice above the + of the bottom bar: type or speak
     net: { offline: !navigator.onLine, dismissed: false, checking: false, failedStart: false },
@@ -81,6 +83,62 @@ function applyTheme(t) {
     }
 }
 
+// The new look (Wallet Home, glass, sliding tabs, motion, glass dialogs) is being tried out by a few accounts before
+// everyone gets it. Those accounts are listed by the SHA-256 of their email (lower case), so no address is in the code;
+// they get the new look with a switch back to the classic one on Account & backup. Everyone else keeps the classic look.
+// The choice is kept on this device; index.html switches the new look's stylesheets on before the first paint.
+const LOOK_KEY = 'lifedesk-look';
+const NEW_LOOK_ACCOUNTS = ['01817242e6ec751ac62d2962ecfa1862e56164fd24b43bad318ef802730c78b2'];
+function look() {
+    try {
+        return localStorage.getItem(LOOK_KEY);
+    } catch (e) {
+        return null;
+    }
+}
+function setLook(value) {
+    try {
+        if (value) {
+            localStorage.setItem(LOOK_KEY, value);
+        } else {
+            localStorage.removeItem(LOOK_KEY);
+        }
+    } catch (e) {
+        // kept for this visit only
+    }
+}
+const newLook = () => look() === 'new';
+function applyLook() {
+    document.querySelectorAll('link[data-look]').forEach((l) => {
+        l.media = newLook() ? 'all' : 'not all';
+    });
+    if (newLook()) {
+        startGlide();
+    }
+}
+/** After sign-in: may this account try the new look? Turns it on the first time; another account on the device gets the classic look. */
+async function checkLook() {
+    if (S.isDemo || !S.user) {
+        return;
+    }
+    let allowed = false;
+    try {
+        const email = String(S.user.contact || '').trim().toLowerCase();
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email));
+        allowed = NEW_LOOK_ACCOUNTS.includes([...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join(''));
+    } catch (e) {
+        allowed = false;
+    }
+    state.lookAllowed = allowed;
+    if (allowed && !look()) {
+        setLook('new');
+    } else if (!allowed && look()) {
+        setLook(null);
+    }
+    applyLook();
+    render();
+}
+
 /** Plain words for the sign-in errors people can actually hit. */
 const AUTH_ERRORS = {
     'auth/requires-recent-login': 'For safety, sign out, sign in again, and then delete the account.',
@@ -119,6 +177,59 @@ function toast(message, kind = 'ok', action = null) {
         state.toast = null;
         render();
     }, action ? 8000 : 3200);
+}
+
+/**
+ * Asks before something that cannot be undone, in a glass dialog of the app's own (the browser's confirm box cannot be
+ * styled). The first line of the message is the question; the rest explains. Resolves true for the main button.
+ * The dialog sits outside the app's markup, so a redraw underneath leaves it in place.
+ */
+const ASK_WORDS = [['Delete', 'Delete', true], ['Remove', 'Remove', true], ['Erase', 'Erase', true], ['Discard', 'Discard', true], ['Lock', 'Lock'], ['Close', 'Close'],
+    ['Stop', 'Stop'], ['Convert', 'Convert'], ['Add', 'Add'], ['Include', 'Include']];
+function ask(message) {
+    if (!newLook()) {
+        return Promise.resolve(window.confirm(message));
+    }
+    const [title, ...rest] = String(message).split('\n');
+    const [, okLabel, danger] = ASK_WORDS.find(([w]) => title.startsWith(w)) || [null, 'OK', false];
+    return new Promise((resolve) => {
+        const prior = document.activeElement;
+        const wrap = document.createElement('div');
+        wrap.className = 'ask-layer';
+        wrap.innerHTML = `<div class="ask-back"></div>
+            <div class="ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-text">
+                <h3 id="ask-title">${esc(title)}</h3>${rest.length ? `<p id="ask-text">${rest.map(esc).join('<br>')}</p>` : ''}
+                <div class="ask-btns"><button class="btn ask-no" type="button">Cancel</button><button class="btn primary ask-ok ${danger ? 'danger-ok' : ''}" type="button">${okLabel}</button></div>
+            </div>`;
+        const done = (yes) => {
+            document.removeEventListener('keydown', onKey, true);
+            wrap.classList.add('closing');
+            window.setTimeout(() => wrap.remove(), 200);
+            if (prior && prior.focus) {
+                prior.focus({ preventScroll: true });
+            }
+            resolve(yes);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                done(false);
+            } else if (e.key === 'Tab') {
+                // keep the focus inside the dialog
+                const btns = [...wrap.querySelectorAll('button')];
+                const i = btns.indexOf(document.activeElement);
+                e.preventDefault();
+                btns[(i + (e.shiftKey ? btns.length - 1 : 1)) % btns.length].focus();
+            }
+        };
+        wrap.querySelector('.ask-ok').addEventListener('click', () => done(true));
+        wrap.querySelector('.ask-no').addEventListener('click', () => done(false));
+        wrap.querySelector('.ask-back').addEventListener('click', () => done(false));
+        document.addEventListener('keydown', onKey, true);
+        document.body.appendChild(wrap);
+        wrap.querySelector(danger ? '.ask-no' : '.ask-ok').focus({ preventScroll: true });
+    });
 }
 
 function blankEntry(keep) {
@@ -251,7 +362,9 @@ function entryAmount(e) {
     return `<span class="amt ${sign > 0 ? 'in' : ''}">${sign > 0 ? '+' : sign < 0 ? '−' : ''}${L.money(Math.abs(e.amount))}</span>`;
 }
 function entryRow(e, withDate) {
-    return `<div class="row">
+    // an entry saved a moment ago slides in with a brief highlight (css/motion.css)
+    const added = e.createdAt && Date.now() - e.createdAt < 1500;
+    return `<div class="row ${added ? 'just-added' : ''}">
         <span class="row-icon t-${e.type}">${icon(L.TYPES[e.type].icon)}</span>
         <span class="row-text"><b>${esc(e.description || L.TYPES[e.type].label)}</b><small>${withDate ? `${shortDate(e.date)} · ` : ''}${esc(entryMeta(e))}</small></span>
         ${entryAmount(e)}
@@ -468,8 +581,139 @@ function hub() {
     </main>`;
 }
 
-/** Home: the last six completed months on average, and this month so far against that average. */
+/** Home: the hero card. This month's spending against income, what is left, the last six months of spending, the pace
+ * against a usual month (the six-month average), and the month's figures along its foot. */
+function walletCard(key) {
+    const m = L.monthSummary(S.data, key);
+    const t = L.totals(S.data);
+    const fl = L.monthFlows(S.data, key);
+    const a = L.averages(S.data, key, 6);
+    const months = [5, 4, 3, 2, 1, 0].map((n) => L.addMonths(key, -n));
+    const spends = months.map((k) => L.monthSummary(S.data, k).expense);
+    const top = Math.max(...spends, 1);
+    // measured against this month's income once most of it has come in, otherwise against the usual month's income,
+    // so a salary that has not arrived yet does not turn the bar into thousands of per cent
+    const usual = a.months && a.income > 0 && m.income < a.income * 0.5;
+    const base = usual ? a.income : m.income;
+    const used = base > 0 ? Math.round((m.expense / base) * 100) : null;
+    const left = base - m.expense;
+    const pace = a.months && a.expense > 0 ? Math.round((m.expense / a.expense) * 100) : null;
+    const fig = (label, value, href) => (href
+        ? `<a class="stat link ${t.cardOwed > 0 ? 'owed' : ''}" href="${href}"><small>${label}</small><b>${value}</b></a>`
+        : `<div class="stat"><small>${label}</small><b>${value}</b></div>`);
+    return `<section class="wallet span" aria-label="This month">
+        <div class="w-head"><small>${esc(L.monthLabel(key).split(' ')[0])} · so far</small>${t.cardOwed > 0 ? `<a class="w-pill" href="#pay">Card owed ${L.money(t.cardOwed)}</a>` : ''}</div>
+        <div class="w-main">
+            <div><div class="w-big">${L.money(m.expense)}<span>spent</span></div><small>${usual ? `of a usual ${L.money(Math.round(base))} income · ${L.money(m.income)} in so far` : base > 0 ? `of ${L.money(base)} income this month` : 'No income added this month yet'}</small></div>
+            <div class="spark" role="img" aria-label="Spending in the last six months">${spends.map((v, i) => `<i class="${i === 5 ? 'now' : ''}" style="height:${Math.max(8, Math.round((v / top) * 100))}%" title="${esc(L.monthLabel(months[i]))}: ${esc(L.money(v))}"></i>`).join('')}</div>
+        </div>
+        <div class="w-bar"><i class="${used !== null && used > 100 ? 'over' : ''}" style="width:${used === null ? 0 : Math.min(100, used)}%"></i></div>
+        <div class="w-line"><span>${base > 0 ? `<b>${L.money(Math.round(Math.abs(left)))} ${left >= 0 ? 'left' : 'over'}</b> · ${used > 999 ? '999%+' : `${used}%`} used` : `<b>Money in hand ${L.money(t.inHand)}</b>`}</span>${pace !== null ? `<small>usual month ${L.money(Math.round(a.expense))} · ${pace}%</small>` : ''}</div>
+        <div class="stats home-stats">${fig('Net balance', L.money(t.net))}${fig('Invested', L.money(fl.invested))}${fig('Spent + Invested', L.money(fl.spentAndInvested))}
+            ${fig('Total money out', L.money(fl.moneyOut))}${fig('Money in hand', L.money(t.inHand))}${fig('Card owed', L.money(t.cardOwed), '#pay')}</div>
+    </section>`;
+}
+
+/** Home: the last six completed months on average, and this month so far against that average (a card of "At a glance"). */
 function averagesCard() {
+    const key = thisMonth();
+    const a = L.averages(S.data, key, 6);
+    if (!a.months) {
+        return '';
+    }
+    const m = L.monthSummary(S.data, key);
+    const soFar = (now, avg) => (avg > 0 ? `${Math.round((now / avg) * 100)}% so far` : '');
+    const period = a.months === 1 ? L.monthLabel(a.to) : `${L.monthLabel(a.from).split(' ')[0]} – ${L.monthLabel(a.to)}`;
+    // ten lakh and more in short (₹1.8 Cr), so three figures fit side by side; the full amount shows on hover
+    const fig = (v) => (Math.abs(v) >= 1e6 ? `<span title="${esc(L.money(Math.round(v)))}">${v < 0 ? '−' : ''}${esc(L.symbol())}${esc(L.compact(Math.abs(v)))}</span>` : L.money(Math.round(v)));
+    return `<a class="hc wide avg-card" href="#insights">
+        <span class="hc-top"><span class="hc-ic c-blue">${icon('chart')}</span><span><h2>Last ${a.months === 6 ? 'six' : a.months} months on average</h2><small>${esc(period)} · a month</small></span></span>
+        <span class="avg-figs">
+            <span><small>Income</small><b class="in">${fig(a.income)}</b><small>${soFar(m.income, a.income)}</small></span>
+            <span><small>Expense</small><b class="out">${fig(a.expense)}</b><small>${soFar(m.expense, a.expense)}</small></span>
+            <span><small>Saved</small><b>${fig(a.saved)}</b><small>${a.rate === null ? '' : `${a.rate}% of income`}</small></span>
+        </span>
+    </a>`;
+}
+
+/** Home: the small cards of "At a glance". A row that swipes on the phone, a grid on a wide screen. */
+function glanceCards(key) {
+    const t = L.totals(S.data);
+    const rows = L.budgetRows(S.data, key);
+    const planned = rows.reduce((s, r) => s + r.planned, 0);
+    const spent = rows.reduce((s, r) => s + r.spent, 0);
+    const pct = planned ? Math.round((spent / planned) * 100) : 0;
+    const w = netWorth(S.data, today());
+    const p = invest.port();
+    const accs = activeAccounts();
+    const cash = accs.filter((a) => a.kind !== 'card').reduce((x, a) => x + L.accountBalance(a, S.data.entries), 0);
+    const card = (cls, href, ic, tone, label, value, sub, extra = '') =>
+        `<a class="hc ${cls}" href="${href}"><span class="hc-ic ${tone}">${icon(ic)}</span><small>${label}</small><b class="hc-v">${value}</b>${sub ? `<small>${sub}</small>` : ''}${extra}</a>`;
+    return `<div class="glance span">
+        ${assist.mini()}
+        ${card('', '#budget', 'target', 'c-orange', 'Budget', planned ? `${pct}%` : 'Not set', planned ? `${L.money(spent)} of ${L.money(planned)}` : `${L.money(spent)} spent · tap to plan`,
+            planned ? `<span class="mini-bar"><i class="${pct >= 100 ? 'red' : pct >= 90 ? 'orange' : ''}" style="width:${Math.min(100, pct)}%"></i></span>` : '')}
+        ${trips.homeMini()}
+        ${card('', '#people', 'users', 'c-pink', 'People &amp; Loans', `<span class="in">${L.money(t.toReceive)}</span>`, `to receive · you owe ${L.money(t.owedToPeople)}`)}
+        <a class="hc worth" href="#insights"><span class="hc-ic c-blue">${icon('chart')}</span><small>Net worth</small><b class="hc-v big">${L.money(w.worth)}</b>
+            <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small>${w.investments ? `<small>+ investments ${L.money(w.investments)}</small>` : ''}<small>− loans ${L.money(w.loans)}</small></span></a>
+        ${card('', '#invest', 'chart', 'c-green', 'Investments', p.rows.length ? L.money(p.value) : 'Start', p.pending.length ? `${p.pending.length} SIP to confirm` : p.rows.length ? `<span class="${p.gain < 0 ? 'out' : 'in'}">${p.gain >= 0 ? '+' : ''}${p.gainPct.toFixed(1)}%</span>${p.sipPerMonth ? ` · SIP ${L.money(p.sipPerMonth)}/mo` : ''}` : 'Funds, SIPs, shares, gold')}
+        ${card('', '#accounts', 'bank', 'c-teal', 'Accounts', L.money(cash), esc(accs.map((a) => a.name).slice(0, 3).join(' · ')) || 'Add an account')}
+        ${averagesCard()}
+    </div>`;
+}
+
+/** Home: add an expense or income in one line, without opening Add Entry. */
+function quickBar() {
+    if (!state.quick) {
+        const acc = defaultAccount();
+        state.quick = { type: 'expense', amount: '', description: '', categoryId: null, touched: false, accountId: acc ? acc.id : null };
+    }
+    const q = state.quick;
+    const cats = S.data.categories.filter((c) => c.type === q.type).sort((a, b) => a.name.localeCompare(b.name));
+    return `<section class="card span quick" data-form="quickAdd">
+        <div class="seg fit quick-type">${[['expense', 'Expense'], ['income', 'Income']].map(([k, label]) => `<button class="${q.type === k ? 'on' : ''}" data-action="quickType" data-type="${k}">${label}</button>`).join('')}</div>
+        <label class="quick-amt"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount" value="${esc(q.amount)}" data-model="quick.amount" aria-label="Quick add: how much"></label>
+        <input class="quick-desc" type="text" maxlength="255" placeholder="What for? e.g. Groceries, Salary" value="${esc(q.description)}" data-model="quick.description" data-then="quickSuggest" aria-label="Quick add: what for">
+        <select id="quick-category" class="quick-cat" data-model="quick.categoryId" data-then="quickTouch" aria-label="Quick add: kind of spend"><option value="">Category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === q.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+        <select class="quick-acc" data-model="quick.accountId" aria-label="Quick add: money from">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === q.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+        ${newLook() ? `<button class="icon-btn quick-mic" data-action="voiceOpen" aria-label="Voice entry" title="Speak it">${icon('mic')}</button>` : ''}
+        <button class="btn primary quick-add" data-action="quickAdd">${icon('plus')}<span class="qa-text"> Add ${q.type === 'income' ? 'income' : 'expense'}</span></button>
+        <a class="link-btn quick-more" href="#add">More kinds</a>
+    </section>`;
+}
+
+function home() {
+    const key = thisMonth();
+    const hour = new Date().getHours();
+    const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const recent = [...S.data.entries].sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1)).slice(0, 5);
+    const due = dueItems();
+    const emis = due.filter((d) => d.kind === 'emi').length;
+    const follow = followUpsDue().length;
+    const alert = (href, title, sub) => `<a class="alert span" href="${href}"><span class="alert-ic">${icon('bell')}</span><span><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</span>${icon('chevRight')}</a>`;
+    return `<header class="hero home-hero">
+        <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
+        <small class="eyebrow">Account Management</small>
+        <div class="hello"><span><small>${hello}</small><h1>${esc(S.user.name.split(' ')[0])}</h1></span><a class="avatar" href="#more" aria-label="Account &amp; backup">${esc((S.user.name || '?').charAt(0).toUpperCase())}</a></div>
+    </header>
+    <main class="dash wallet-home">
+        <div class="home-main">
+            ${walletCard(key)}
+            ${quickBar()}
+            ${due.length ? alert('#pay', `${[emis ? plural(emis, 'EMI') : '', due.length - emis ? plural(due.length - emis, 'bill') : ''].filter(Boolean).join(' and ')} due this month`, `${L.money(due.reduce((x, d) => x + d.amount, 0))} · tap to pay`) : ''}
+            ${follow ? alert('#people', `${plural(follow, 'follow-up')} due`, 'People who owe you · tap to see') : ''}
+            ${recent.length ? `<section class="recent"><div class="sec-head"><h2>Recent</h2><a href="#daily">See all</a></div><div class="list inner">${recent.map((e) => entryRow(e, true)).join('')}</div></section>` : ''}
+        </div>
+        <section class="home-side" aria-label="At a glance">
+            <div class="sec-head"><h2>At a glance</h2><small class="swipe-hint">Swipe ›</small></div>
+            ${glanceCards(key)}
+        </section>
+    </main>`;
+}
+
+/** Home: the last six completed months on average, and this month so far against that average. */
+function classicAverages() {
     const key = thisMonth();
     const a = L.averages(S.data, key, 6);
     if (!a.months) {
@@ -489,26 +733,8 @@ function averagesCard() {
     </section>`;
 }
 
-/** Home: add an expense or income in one line, without opening Add Entry. */
-function quickBar() {
-    if (!state.quick) {
-        const acc = defaultAccount();
-        state.quick = { type: 'expense', amount: '', description: '', categoryId: null, touched: false, accountId: acc ? acc.id : null };
-    }
-    const q = state.quick;
-    const cats = S.data.categories.filter((c) => c.type === q.type).sort((a, b) => a.name.localeCompare(b.name));
-    return `<section class="card span quick" data-form="quickAdd">
-        <div class="seg fit quick-type">${[['expense', 'Expense'], ['income', 'Income']].map(([k, label]) => `<button class="${q.type === k ? 'on' : ''}" data-action="quickType" data-type="${k}">${label}</button>`).join('')}</div>
-        <label class="quick-amt"><span>${esc(L.symbol())}</span><input type="number" inputmode="decimal" min="0" step="0.01" placeholder="Amount" value="${esc(q.amount)}" data-model="quick.amount" aria-label="Quick add: how much"></label>
-        <input class="quick-desc" type="text" maxlength="255" placeholder="What for? e.g. Groceries, Salary" value="${esc(q.description)}" data-model="quick.description" data-then="quickSuggest" aria-label="Quick add: what for">
-        <select id="quick-category" class="quick-cat" data-model="quick.categoryId" data-then="quickTouch" aria-label="Quick add: kind of spend"><option value="">Category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === q.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
-        <select class="quick-acc" data-model="quick.accountId" aria-label="Quick add: money from">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === q.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
-        <button class="btn primary quick-add" data-action="quickAdd">${icon('plus')} Add ${q.type === 'income' ? 'income' : 'expense'}</button>
-        <a class="link-btn quick-more" href="#add">More kinds</a>
-    </section>`;
-}
-
-function home() {
+/** Home in the classic look. */
+function homeClassic() {
     const key = thisMonth();
     const m = L.monthSummary(S.data, key);
     const t = L.totals(S.data);
@@ -546,7 +772,7 @@ function home() {
             <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
         </div>
         ${quickBar()}
-        ${averagesCard()}
+        ${classicAverages()}
         ${(() => { const due = dueItems(); const emis = due.filter((d) => d.kind === 'emi').length; const bills = due.length - emis; return due.length ? `<a class="notice span" href="#pay">${[emis ? plural(emis, 'EMI') : '', bills ? plural(bills, 'bill') : ''].filter(Boolean).join(' and ')} due this month (${L.money(due.reduce((x, d) => x + d.amount, 0))}) – tap to pay</a>` : ''; })()}
         ${(() => { const n = followUpsDue().length; return n ? `<a class="notice span" href="#people">${plural(n, 'follow-up')} due with people who owe you – tap to see</a>` : ''; })()}
         ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
@@ -1371,6 +1597,9 @@ function more() {
         <section class="card"><div class="card-head"><h2>Appearance</h2></div>
             <div class="seg">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, label]) => `<button class="${theme() === v ? 'on' : ''}" data-action="setTheme" data-theme="${v}" aria-pressed="${theme() === v}">${label}</button>`).join('')}</div>
             <small>${theme() === 'system' ? 'Follows this device: light by day or dark, whichever the device is set to.' : `Always ${theme()} on this device, whatever the device setting.`} Saved on this device only.</small></section>
+        ${state.lookAllowed ? `<section class="card"><div class="card-head"><h2>Look</h2><span class="pill">Early access</span></div>
+            <div class="seg">${[['new', 'New look'], ['classic', 'Classic']].map(([v, label]) => `<button class="${(look() || 'classic') === v ? 'on' : ''}" data-action="setLook" data-look="${v}" aria-pressed="${(look() || 'classic') === v}">${label}</button>`).join('')}</div>
+            <small>The new look: Home with one card for the month, glass, sliding tabs and movement. Switch back to the classic look any time. Saved on this device only.</small></section>` : ''}
         ${S.isDemo ? '' : `<section class="card"><div class="card-head"><h2>Privacy</h2><span class="pill">Encrypted</span></div>
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
@@ -1398,7 +1627,7 @@ const invest = investTool({
     get state() {
         return state;
     },
-    S, L, icon, esc, stat, toast, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today, localNotify: (t, b, r) => localNotify(t, b, r),
+    S, L, icon, esc, stat, toast, ask, render, backLink, activeAccounts, defaultAccount, accountName, shortDate, longDate, today, localNotify: (t, b, r) => localNotify(t, b, r),
     yearOf: (iso) => yearOf(iso, yearStart()).label
 });
 // Trips (js/tripsui.js): the screen, the Home tile and "For a trip" on Add Entry
@@ -1406,7 +1635,7 @@ const trips = tripTool({
     get state() {
         return state;
     },
-    S, L, icon, esc, stat, toast, render, go, backLink, activeAccounts, shortDate, categoryName, accountName, today, blankEntry
+    S, L, icon, esc, stat, toast, ask, render, go, backLink, activeAccounts, shortDate, categoryName, accountName, today, blankEntry
 });
 // Assistant (js/assistantui.js): the money check-up, questions and the Money health tile on Home
 const assist = assistantTool({
@@ -1421,7 +1650,7 @@ let sipsChecked = false; // due SIP instalments are recorded once per visit, whi
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow, back: () => backLink('menu') };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), trips: () => trips.screen(), assistant: () => assist.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home: () => (newLook() ? home() : homeClassic()), add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), trips: () => trips.screen(), assistant: () => assist.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
@@ -1504,8 +1733,9 @@ function render() {
         state.route = 'hub';
     }
     const screen = SCREENS[state.route];
-    const fresh = state.fresh ? 'fresh' : ''; // only the first drawing after moving to a screen
+    const fresh = [state.fresh ? 'fresh' : '', state.entered ? 'entered' : ''].join(' '); // only the first drawing after moving to a screen
     state.fresh = false;
+    state.entered = false;
     const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.model : null;
     // rows that scroll sideways (the account chips) keep their place when the same screen is drawn again
     const slid = renderedRoute === state.route ? [...app.querySelectorAll('.chips')].map((el) => el.scrollLeft) : [];
@@ -2348,8 +2578,8 @@ const actions = {
             }
         });
     },
-    lockDevice() {
-        if (window.confirm('Lock this device? Your data passphrase will be asked the next time. Nothing is deleted.')) {
+    async lockDevice() {
+        if (await ask('Lock this device? Your data passphrase will be asked the next time. Nothing is deleted.')) {
             S.lockDevice();
             toast('This device is locked.');
         }
@@ -2447,7 +2677,7 @@ const actions = {
     },
     async assetDelete(el) {
         const a = byId(S.data.assets, el.dataset.id);
-        if (window.confirm(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
+        if (await ask(`Delete ${a.name} from My assets?\nEntries and any loan stay as they are.`)) {
             await S.remove('assets', a.id);
             toast(`${a.name} deleted.`);
         }
@@ -2748,7 +2978,7 @@ const actions = {
     },
     async emailDetails() {
         const value = !(S.push && S.push.emailDetails);
-        if (value && !window.confirm('Include reminder names and amounts in emails?\nTo write them into the email, they are kept readable for the email sender (only the names and amounts of reminders). Everything else stays encrypted.')) {
+        if (value && !await ask('Include reminder names and amounts in emails?\nTo write them into the email, they are kept readable for the email sender (only the names and amounts of reminders). Everything else stays encrypted.')) {
             return render();
         }
         await S.pushUpdate({ emailDetails: value, dates: pushDates(undefined, value) });
@@ -2849,7 +3079,7 @@ const actions = {
     async remSampleLoad() {
         const pairs = buildSample(S.data, today(), L.currentFormat().currency).filter(([c]) => c === 'reminders')
             .map(([c, doc]) => [c, { ...doc, accountId: byId(S.data.accounts, doc.accountId) ? doc.accountId : null }]);
-        if (!window.confirm(`Add ${pairs.length} sample reminders?\nMade-up ones dated from today: one overdue, one due today, one tomorrow, one in 2 days, and others later. Your own reminders stay as they are, and you can remove the sample ones here.`)) {
+        if (!await ask(`Add ${pairs.length} sample reminders?\nMade-up ones dated from today: one overdue, one due today, one tomorrow, one in 2 days, and others later. Your own reminders stay as they are, and you can remove the sample ones here.`)) {
             return;
         }
         remArrive(pairs.map(([, doc]) => doc.id));
@@ -2858,7 +3088,7 @@ const actions = {
     },
     async remSampleRemove() {
         const pairs = sampleReminders();
-        if (!window.confirm(`Remove the ${pairs.length} sample reminders? Your own reminders are kept.`)) {
+        if (!await ask(`Remove the ${pairs.length} sample reminders? Your own reminders are kept.`)) {
             return;
         }
         await remLeave(pairs.map(([, id]) => id));
@@ -2868,7 +3098,7 @@ const actions = {
     },
     async remDelete(el) {
         const r = byId(S.data.reminders, el.dataset.id);
-        if (window.confirm(`Delete the reminder ${r.name}?\nAny payment already recorded in Account Management stays.`)) {
+        if (await ask(`Delete the reminder ${r.name}?\nAny payment already recorded in Account Management stays.`)) {
             await remLeave([r.id]);
             await S.remove('reminders', r.id);
             state.renewals.leaving = [];
@@ -2957,7 +3187,7 @@ const actions = {
     },
     async billDelete(el) {
         const b = byId(S.data.bills, el.dataset.id);
-        if (window.confirm(`Delete the monthly bill "${b.description}"?\nWhat you already paid stays as entries.`)) {
+        if (await ask(`Delete the monthly bill "${b.description}"?\nWhat you already paid stays as entries.`)) {
             await S.remove('bills', b.id);
             toast('Monthly bill deleted.');
         }
@@ -3027,7 +3257,7 @@ const actions = {
     },
     async loanDelete(el) {
         const loan = byId(S.data.loans, el.dataset.id);
-        if (window.confirm(`Delete the loan "${loan.name}"?\nEMIs already paid stay as expenses.`)) {
+        if (await ask(`Delete the loan "${loan.name}"?\nEMIs already paid stay as expenses.`)) {
             await S.remove('loans', loan.id);
             toast('Loan deleted.');
         }
@@ -3190,7 +3420,7 @@ const actions = {
     },
     async deleteEntry() {
         const f = state.add;
-        if (!window.confirm(`Delete this entry?\n${f.label}\nBalances and budget follow. This cannot be undone.`)) {
+        if (!await ask(`Delete this entry?\n${f.label}\nBalances and budget follow. This cannot be undone.`)) {
             return;
         }
         const back = f.back;
@@ -3235,8 +3465,8 @@ const actions = {
     },
 
     // budget
-    budgetMonth(el) {
-        if (state.budget.edits && !window.confirm('Discard unsaved budget changes?')) {
+    async budgetMonth(el) {
+        if (state.budget.edits && !await ask('Discard unsaved budget changes?')) {
             return;
         }
         state.budget = { month: L.addMonths(state.budget.month, Number(el.dataset.step)), edits: null, open: null };
@@ -3338,7 +3568,7 @@ const actions = {
     },
     async personDelete(el) {
         const p = byId(S.data.people, el.dataset.id);
-        if (window.confirm(`Delete ${p.name}?`)) {
+        if (await ask(`Delete ${p.name}?`)) {
             state.people.selected = null;
             await S.remove('people', p.id);
             toast(`${p.name} deleted.`);
@@ -3388,7 +3618,7 @@ const actions = {
         const used = S.data.entries.some((e) => e.accountId === a.id || e.toAccountId === a.id);
         const bal = L.accountBalance(a, S.data.entries);
         if (!used) {
-            if (window.confirm(`Delete ${a.name}? It has no entries.`)) {
+            if (await ask(`Delete ${a.name}? It has no entries.`)) {
                 await S.remove('accounts', a.id);
                 toast(`${a.name} deleted.`);
             }
@@ -3397,7 +3627,7 @@ const actions = {
         if (Math.round(bal * 100) !== 0) {
             return toast(`${a.name} still has ${a.kind === 'card' ? 'an amount owed' : 'a balance'} of ${L.money(Math.abs(bal))}. Move or pay it first.`, 'warn');
         }
-        if (window.confirm(`Close ${a.name}? Its history is kept and you can reopen it.`)) {
+        if (await ask(`Close ${a.name}? Its history is kept and you can reopen it.`)) {
             await S.save('accounts', { ...a, active: false, isDefault: false });
             toast(`${a.name} closed.`);
         }
@@ -3446,10 +3676,12 @@ const actions = {
     // dashboards and reports
     insTab(el) {
         state.insights.tab = el.dataset.tab;
+        state.entered = true; // another dashboard: its charts draw again
         render();
     },
     insMonth(el) {
         state.insights.month = L.addMonths(state.insights.month, Number(el.dataset.step));
+        state.entered = true;
         render();
     },
     reportDownload() {
@@ -3482,7 +3714,7 @@ const actions = {
         if (!(r > 0)) {
             return toast('Enter the exchange rate first.', 'warn');
         }
-        if (!window.confirm(`Convert every saved amount from ${from} to ${to} at 1 ${from} = ${r} ${to}?\n${backup ? 'A backup file is downloaded first.' : 'No backup file will be downloaded, so this cannot be undone exactly.'} This changes your data.`)) {
+        if (!await ask(`Convert every saved amount from ${from} to ${to} at 1 ${from} = ${r} ${to}?\n${backup ? 'A backup file is downloaded first.' : 'No backup file will be downloaded, so this cannot be undone exactly.'} This changes your data.`)) {
             return;
         }
         if (backup) {
@@ -3515,6 +3747,13 @@ const actions = {
             state.more.busy = false;
             render();
         }
+    },
+    setLook(el) {
+        if (el.dataset.look === look()) {
+            return;
+        }
+        setLook(el.dataset.look);
+        window.location.reload(); // the whole app is drawn again in the chosen look
     },
     setTheme(el) {
         const t = el.dataset.theme;
@@ -3551,7 +3790,7 @@ const actions = {
     async sampleLoad() {
         const pairs = buildSample(S.data, today(), L.currentFormat().currency);
         const entries = pairs.filter((p) => p[0] === 'entries').length;
-        if (!window.confirm(`Add sample data?\n${entries} made-up entries from 1 March 2025 to today, in four sample accounts, with three sample people, three assets and two loans on EMI. Your own entries stay as they are, and you can remove the sample data here later.`)) {
+        if (!await ask(`Add sample data?\n${entries} made-up entries from 1 March 2025 to today, in four sample accounts, with three sample people, three assets and two loans on EMI. Your own entries stay as they are, and you can remove the sample data here later.`)) {
             return;
         }
         state.more.busy = true;
@@ -3566,7 +3805,7 @@ const actions = {
     },
     async sampleRemove() {
         const pairs = sampleDocs(S.data);
-        if (!window.confirm(`Remove all sample data (${pairs.length} items)? Your own entries are kept.`)) {
+        if (!await ask(`Remove all sample data (${pairs.length} items)? Your own entries are kept.`)) {
             return;
         }
         state.more.busy = true;
@@ -3580,7 +3819,7 @@ const actions = {
         }
     },
     async deleteAccount() {
-        if (!window.confirm('Delete your LifeDesk account and ALL your data?\nThis cannot be undone. Download a backup first if you may want it.')) {
+        if (!await ask('Delete your LifeDesk account and ALL your data?\nThis cannot be undone. Download a backup first if you may want it.')) {
             return;
         }
         if (window.prompt('Type DELETE to confirm.') !== 'DELETE') {
@@ -3591,7 +3830,7 @@ const actions = {
         toast('Your account and data were deleted.');
     },
     async demoReset() {
-        if (window.confirm('Erase all demo data in this browser?')) {
+        if (await ask('Erase all demo data in this browser?')) {
             await S.clearDemo();
             toast('Demo data erased.');
         }
@@ -3649,7 +3888,8 @@ app.addEventListener('click', async (event) => {
 // Cancel / Close button would. The tap does nothing else, so nothing underneath is pressed by mistake.
 document.addEventListener('click', (event) => {
     const form = [...document.querySelectorAll('section.card.form')].find((f) => getComputedStyle(f).position === 'fixed');
-    if (!form || form.contains(event.target) || event.target.closest('.toast')) {
+    // voice entry has its own tap-outside handling (it must not save or drop an entry waiting to be confirmed)
+    if (!form || form.classList.contains('voice') || form.contains(event.target) || event.target.closest('.toast, .ask-layer')) {
         return;
     }
     const close = [...form.querySelectorAll('button[data-action]')].find((b) => /^(Cancel|Close)$/.test(b.textContent.trim()));
@@ -4007,6 +4247,7 @@ window.addEventListener('hashchange', () => {
         window.scrollTo(0, 0);
         tipBox.hidden = true;
         state.fresh = way === 'tab';
+        state.entered = true;
         render();
     };
     // Screens slide like a phone's own apps: forward from the right, back from the left, tabs cross-fade (css/ios.css).
@@ -4036,6 +4277,10 @@ S.init((status) => {
         trail.push('hub');
     }
     state.status = status;
+    if (status === 'ready' && state.lookFor !== S.user.uid) {
+        state.lookFor = S.user.uid;
+        checkLook();
+    }
     if (status === 'ready' && !sipsChecked) {
         sipsChecked = true;
         invest.recordDueSips().then((r) => (invest.snapshot().catch(() => {}), (r.recorded || r.pending) && toast(`${r.recorded ? `${plural(r.recorded, 'SIP instalment')} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm on Investments` : ''}.`))).catch((e) => console.error(e));
@@ -4061,6 +4306,8 @@ S.init((status) => {
     }
     app.innerHTML = `<div class="loading"><p>Could not start: ${esc(e.message)}</p></div>`;
 });
+
+applyLook();
 
 if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

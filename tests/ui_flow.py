@@ -27,7 +27,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.on('dialog', lambda d: d.accept())
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(URL); pg.wait_for_selector('#welcome-currency')
     check('first visit asks for the currency', pg.locator('#welcome-currency option').count() > 100, str(pg.locator('#welcome-currency option').count()))
     pg.locator('#welcome-currency').select_option('USD'); pg.get_by_role('button', name='Continue').click()
@@ -112,8 +112,9 @@ with sync_playwright() as p:
 
     # Delete the expense
     pg.goto(URL + '#daily'); pg.locator('.row', has_text='Car petrol').get_by_role('button', name='Edit').click()
-    pg.get_by_role('button', name='Delete entry').click(); time.sleep(0.3)
-    check('delete returns to Daily', pg.url.endswith('#daily'), pg.url)
+    pg.get_by_role('button', name='Delete entry').click(); time.sleep(1.0)  # past the confirm dialog
+    here = pg.evaluate('location.hash')  # read from the page: the dialog's button is pressed by script, and pg.url can lag behind
+    check('delete returns to Daily', here == '#daily', here)
     pg.goto(URL + '#home')
     check('delete: net 7,700', money(stat('Net balance')) == 7700, stat('Net balance'))
 
@@ -153,7 +154,7 @@ with sync_playwright() as p:
     ok_accounts = pg.url.endswith('#menu')
     pg.locator('main .row', has_text='Reports').click(); time.sleep(0.3); back().click(); time.sleep(0.4)
     check('My accounts and Reports both go back to More', ok_accounts and pg.url.endswith('#menu'), pg.url)
-    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar'); pg.locator('.shortcut', has_text='Payments').click(); time.sleep(0.3)
+    pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar'); pg.locator('.home-stats .stat.link').click(); time.sleep(0.3)
     check('Payments opened from Home: back says Home', back().inner_text().strip() == 'Home', back().inner_text())
     back().click(); time.sleep(0.4)
     check('…and returns to Home', pg.url.endswith('#home'), pg.url)
@@ -407,6 +408,7 @@ with sync_playwright() as p:
     check('loans dashboard: assets 1,20,000 and loans 52,500 + 1,32,000 to pay', money(stat('Assets worth')) == 120000 and money(stat('Loans to pay')) == 184500, stat('Loans to pay'))
     pg.screenshot(path=os.path.join(OUT, 'e_dash.png'), full_page=True)
     # Net worth, the Payments screen, and the category remembered from earlier entries
+    spent = lambda: pg.locator('.wallet .w-big').inner_text().replace('spent', '')  # this month's expense, on Home's hero card
     f2 = lambda s: float(re.sub(r'[^0-9.\-−]', '', s).replace('−', '-') or 0)
     pg.goto(URL + '#insights'); pg.get_by_role('button', name='Loans & assets').click(); time.sleep(0.3)
     owed_principal = f2(kpi('Principal still owed')); assets_worth = f2(stat('Assets worth'))
@@ -416,19 +418,19 @@ with sync_playwright() as p:
     pg.goto(URL + '#home'); pg.wait_for_selector('.worth')
     check('net worth: shown on Money home with its parts', abs(f2(pg.locator('.worth .big').inner_text()) - expect_worth) < 0.02 and 'assets' in pg.locator('.worth-parts').inner_text())
     pg.goto(URL + '#pay'); time.sleep(0.3)
-    paid0 = f2(stat('Paid this month')); pg.goto(URL + '#home'); exp0 = f2(stat('Expense')); pg.goto(URL + '#pay'); time.sleep(0.3)
+    paid0 = f2(stat('Paid this month')); pg.goto(URL + '#home'); exp0 = f2(spent()); pg.goto(URL + '#pay'); time.sleep(0.3)
     pg.locator('.acct-row', has_text='New phone').get_by_role('button').click(); time.sleep(0.4)
     check('payments: paying an EMI here adds to Paid this month and lists it', f2(stat('Paid this month')) == paid0 + 10500 and 'EMI 2 of 6' in pg.locator('.list').last.inner_text(), stat('Paid this month'))
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')
-    check('payments: the EMI paid is counted in this month\'s expense', f2(stat('Expense')) == exp0 + 10500, stat('Expense'))
+    check('payments: the EMI paid is counted in this month\'s expense', f2(spent()) == exp0 + 10500, spent())
     pg.goto(URL + '#add'); pg.get_by_label('Amount').fill('700'); pg.get_by_label('Description').fill('Zorvex gadget')
     pg.locator('.chip', has_text='Axis Card').click(); pg.get_by_label('Category').select_option(label='Subscriptions'); pg.get_by_role('button', name='Save Expense').click(); time.sleep(0.4)
-    pg.goto(URL + '#home'); exp1 = f2(stat('Expense')); net1 = f2(stat('Net balance'))
+    pg.goto(URL + '#home'); exp1 = f2(spent()); net1 = f2(stat('Net balance'))
     pg.goto(URL + '#pay'); time.sleep(0.3)
     pg.locator('.acct-row', has_text='Axis Card').get_by_role('button', name='Pay bill').click(); pg.get_by_role('button', name='Pay', exact=True).click(); time.sleep(0.4)
     check('payments: card bill paid from this screen, card owes nothing', f2(stat('Card owed')) == 0 and 'Card bill' in pg.locator('.list').last.inner_text(), stat('Card owed'))
     pg.goto(URL + '#home'); pg.wait_for_selector('.tabbar')
-    check('payments: a card bill is not counted as a second expense; net balance unchanged', f2(stat('Expense')) == exp1 and f2(stat('Net balance')) == net1, f"{stat('Expense')} / {stat('Net balance')}")
+    check('payments: a card bill is not counted as a second expense; net balance unchanged', f2(spent()) == exp1 and f2(stat('Net balance')) == net1, f"{spent()} / {stat('Net balance')}")
     cat = lambda: pg.locator('#add-category option:checked').inner_text()
     pg.goto(URL + '#add'); pg.get_by_label('Description').fill('Zorvex gadget'); a1 = cat()
     pg.get_by_label('Description').fill('another zorvex thing'); a2 = cat()

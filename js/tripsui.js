@@ -152,6 +152,17 @@ export function tripTool(c) {
         </section>`;
     }
 
+    /** Home, At a glance: the trip that matters now (as homeCard picks it), or an invitation to plan one. */
+    function homeMini() {
+        const h = T.homeTrip(trips(), S.data.entries, S.data.people, today());
+        if (!h) {
+            return `<a class="hc trip-home empty-trip" href="#trips"><span class="hc-ic c-purple">${icon('trip')}</span><small>Trips</small><b>Going on a trip?</b><small>Split expenses with family and friends</small></a>`;
+        }
+        const { trip: t, sum } = h;
+        return `<button class="hc trip-home" data-action="tripOpen" data-id="${t.id}"><span class="hc-ic c-purple">${icon('trip')}</span><small>${esc(t.name)}</small>
+            <b class="hc-v ${sum.owedToMe > 0 ? 'in' : ''}">${L.money(sum.owedToMe > 0 ? sum.owedToMe : sum.totalSpent)}</b><small>${sum.owedToMe > 0 ? 'owed to you' : 'spent'} · ${esc(statusWords(t, sum.status))}</small></button>`;
+    }
+
     // ---------------------------------------------------------------- Add Entry: "For a trip"
     /** Trips to choose from: ongoing and upcoming first, then the ones that ended in the last 180 days. */
     function options(date) {
@@ -373,7 +384,7 @@ export function tripTool(c) {
             if (S.data.entries.some((e) => e.tripId === t.id)) {
                 return c.toast('This trip has expenses. Delete them first, then delete the trip.', 'warn');
             }
-            if (!window.confirm(`Delete the trip ${t.name}?`)) {
+            if (!await c.ask(`Delete the trip ${t.name}?`)) {
                 return;
             }
             st().open = null;
@@ -391,7 +402,7 @@ export function tripTool(c) {
             }
             const sum = summary(tripById(list[0].tripId));
             const x = sum.expenses.find((e) => e.key === key);
-            if (!window.confirm(`Delete this trip expense?\n${x.description} (${L.money(x.bill)}): your share and everyone's share are deleted.`)) {
+            if (!await c.ask(`Delete this trip expense?\n${x.description} (${L.money(x.bill)}): your share and everyone's share are deleted.`)) {
                 return;
             }
             await S.removeMany(list.map((e) => ['entries', e.id]));
@@ -482,5 +493,5 @@ export function tripTool(c) {
         return rows.length ? rows[0].t : null;
     }
 
-    return { screen, homeCard, arrive, current, returnTo, payerOf, addBlock, splitText, entriesFor, startExpense, actions, summary };
+    return { screen, homeCard, homeMini, arrive, current, returnTo, payerOf, addBlock, splitText, entriesFor, startExpense, actions, summary };
 }

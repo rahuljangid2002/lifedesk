@@ -91,7 +91,7 @@ export function columns(labels, series, fmt, tickFmt, width = 640, height = 240)
                 const x = x0 + j * (barW + 2);
                 const yTop = f.y(v);
                 const r = Math.min(4, barW / 2, f.y(0) - yTop);
-                marks += `<path class="bar s${s.slot}" d="M${x},${f.y(0)}V${yTop + r}Q${x},${yTop} ${x + r},${yTop}H${x + barW - r}Q${x + barW},${yTop} ${x + barW},${yTop + r}V${f.y(0)}Z"/>`;
+                marks += `<path class="bar s${s.slot}" style="--i:${i}" d="M${x},${f.y(0)}V${yTop + r}Q${x},${yTop} ${x + r},${yTop}H${x + barW - r}Q${x + barW},${yTop} ${x + barW},${yTop + r}V${f.y(0)}Z"/>`;
             }
         });
         if (i % every === 0) {
@@ -136,7 +136,7 @@ export function line(labels, values, name, fmt, tickFmt, width = 640, height = 2
     });
     const labelLeft = x(last.i) > width - 110;
     return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(name)} over ${pts.length} periods">${grid}
-        <path class="area" d="${path}L${x(last.i)},${y(min)}L${x(pts[0].i)},${y(min)}Z"/><path class="line" d="${path}"/>
+        <path class="area" d="${path}L${x(last.i)},${y(min)}L${x(pts[0].i)},${y(min)}Z"/><path class="line" pathLength="1" d="${path}"/>
         <circle class="dot" cx="${x(last.i)}" cy="${y(last.v)}" r="4"/>
         <text class="end-label" x="${x(last.i) + (labelLeft ? -8 : 8)}" y="${y(last.v) - 9}" text-anchor="${labelLeft ? 'end' : 'start'}">${esc(fmt(last.v))}</text>${marks}</svg>
         ${tableTwin(['Period', name], labels.map((l, i) => [l.full || l, values[i] === null || values[i] === undefined ? '–' : fmt(values[i])]))}`;

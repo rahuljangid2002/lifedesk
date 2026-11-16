@@ -551,7 +551,7 @@ def prepare(pw):
     b = pw.chromium.launch()
     ctx = b.new_context(viewport={'width': W, 'height': H})
     pg = ctx.new_page()
-    pg.on('dialog', lambda d: d.accept())
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(DEMO); pg.wait_for_selector('#welcome-currency')
     pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(DEMO + '#more'); pg.get_by_role('button', name='Load sample data').click()
@@ -578,7 +578,7 @@ def record(pw, name, fn, kind):
         live.answer_codes(ctx)
     t0 = time.time()
     page = ctx.new_page()
-    page.on('dialog', lambda d: d.accept())
+    page.on('dialog', lambda d: d.accept()); page.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     MARK.clear()
     fn(page)
     end = time.time() - t0

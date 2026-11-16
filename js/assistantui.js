@@ -112,6 +112,14 @@ export function assistantTool(c) {
         </a>`;
     }
 
+    /** Home, At a glance: the score ring, the label and the most important suggestion. */
+    function mini() {
+        const r = check();
+        const done = new Set(doneKeys());
+        const top = r.tips.find((t) => t.tone !== 'good' && !done.has(t.key));
+        return `<a class="hc as-home" href="#assistant">${ring(r.score, 'of 100')}<small>Money health</small><b>${esc(r.scoreLabel)}</b>${top ? `<small>Top: ${esc(top.title)}</small>` : '<small>Nothing to look at</small>'}</a>`;
+    }
+
     function askNow(q) {
         const question = String(q || '').trim();
         if (!question) {
@@ -164,5 +172,5 @@ export function assistantTool(c) {
         }
     };
 
-    return { screen, homeCard, actions };
+    return { screen, homeCard, mini, actions };
 }

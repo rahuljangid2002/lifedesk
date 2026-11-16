@@ -24,6 +24,15 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="css/app.css">
     <link rel="stylesheet" href="css/ios.css">
+    <link rel="stylesheet" href="css/home.css" media="not all" data-look>
+    <link rel="stylesheet" href="css/glass.css" media="not all" data-look>
+    <link rel="stylesheet" href="css/motion.css" media="not all" data-look>
+    <script>
+        // The new look (only for accounts trying it, see js/app.js): its stylesheets switch on before the page is drawn.
+        try {
+            if (localStorage.getItem('lifedesk-look') === 'new') document.querySelectorAll('link[data-look]').forEach(function (l) { l.media = 'all'; });
+        } catch (e) {}
+    </script>
 </head>
 <body>
     <div id="app"><div class="loading"><p>Loading…</p></div></div>
