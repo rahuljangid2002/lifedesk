@@ -32,7 +32,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+    pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     stat = lambda label: pg.locator('.stat', has_text=label).locator('b').first.inner_text()
     shot = lambda n: pg.screenshot(path=os.path.join(OUT, n + '.png'), full_page=True)
     db = lambda: pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")

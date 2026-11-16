@@ -83,6 +83,62 @@ function applyTheme(t) {
     }
 }
 
+// The new look (Wallet Home, glass, sliding tabs, motion, glass dialogs) is being tried out by a few accounts before
+// everyone gets it. Those accounts are listed by the SHA-256 of their email (lower case), so no address is in the code;
+// they get the new look with a switch back to the classic one on Account & backup. Everyone else keeps the classic look.
+// The choice is kept on this device; index.html switches the new look's stylesheets on before the first paint.
+const LOOK_KEY = 'lifedesk-look';
+const NEW_LOOK_ACCOUNTS = ['01817242e6ec751ac62d2962ecfa1862e56164fd24b43bad318ef802730c78b2'];
+function look() {
+    try {
+        return localStorage.getItem(LOOK_KEY);
+    } catch (e) {
+        return null;
+    }
+}
+function setLook(value) {
+    try {
+        if (value) {
+            localStorage.setItem(LOOK_KEY, value);
+        } else {
+            localStorage.removeItem(LOOK_KEY);
+        }
+    } catch (e) {
+        // kept for this visit only
+    }
+}
+const newLook = () => look() === 'new';
+function applyLook() {
+    document.querySelectorAll('link[data-look]').forEach((l) => {
+        l.media = newLook() ? 'all' : 'not all';
+    });
+    if (newLook()) {
+        startGlide();
+    }
+}
+/** After sign-in: may this account try the new look? Turns it on the first time; another account on the device gets the classic look. */
+async function checkLook() {
+    if (S.isDemo || !S.user) {
+        return;
+    }
+    let allowed = false;
+    try {
+        const email = String(S.user.contact || '').trim().toLowerCase();
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email));
+        allowed = NEW_LOOK_ACCOUNTS.includes([...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join(''));
+    } catch (e) {
+        allowed = false;
+    }
+    state.lookAllowed = allowed;
+    if (allowed && !look()) {
+        setLook('new');
+    } else if (!allowed && look()) {
+        setLook(null);
+    }
+    applyLook();
+    render();
+}
+
 /** Plain words for the sign-in errors people can actually hit. */
 const AUTH_ERRORS = {
     'auth/requires-recent-login': 'For safety, sign out, sign in again, and then delete the account.',
@@ -131,6 +187,9 @@ function toast(message, kind = 'ok', action = null) {
 const ASK_WORDS = [['Delete', 'Delete', true], ['Remove', 'Remove', true], ['Erase', 'Erase', true], ['Discard', 'Discard', true], ['Lock', 'Lock'], ['Close', 'Close'],
     ['Stop', 'Stop'], ['Convert', 'Convert'], ['Add', 'Add'], ['Include', 'Include']];
 function ask(message) {
+    if (!newLook()) {
+        return Promise.resolve(window.confirm(message));
+    }
     const [title, ...rest] = String(message).split('\n');
     const [, okLabel, danger] = ASK_WORDS.find(([w]) => title.startsWith(w)) || [null, 'OK', false];
     return new Promise((resolve) => {
@@ -618,7 +677,7 @@ function quickBar() {
         <input class="quick-desc" type="text" maxlength="255" placeholder="What for? e.g. Groceries, Salary" value="${esc(q.description)}" data-model="quick.description" data-then="quickSuggest" aria-label="Quick add: what for">
         <select id="quick-category" class="quick-cat" data-model="quick.categoryId" data-then="quickTouch" aria-label="Quick add: kind of spend"><option value="">Category</option>${cats.map((c) => `<option value="${c.id}" ${c.id === q.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
         <select class="quick-acc" data-model="quick.accountId" aria-label="Quick add: money from">${activeAccounts().map((a) => `<option value="${a.id}" ${a.id === q.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
-        <button class="icon-btn quick-mic" data-action="voiceOpen" aria-label="Voice entry" title="Speak it">${icon('mic')}</button>
+        ${newLook() ? `<button class="icon-btn quick-mic" data-action="voiceOpen" aria-label="Voice entry" title="Speak it">${icon('mic')}</button>` : ''}
         <button class="btn primary quick-add" data-action="quickAdd">${icon('plus')}<span class="qa-text"> Add ${q.type === 'income' ? 'income' : 'expense'}</span></button>
         <a class="link-btn quick-more" href="#add">More kinds</a>
     </section>`;
@@ -650,6 +709,88 @@ function home() {
             <div class="sec-head"><h2>At a glance</h2><small class="swipe-hint">Swipe ›</small></div>
             ${glanceCards(key)}
         </section>
+    </main>`;
+}
+
+/** Home: the last six completed months on average, and this month so far against that average. */
+function classicAverages() {
+    const key = thisMonth();
+    const a = L.averages(S.data, key, 6);
+    if (!a.months) {
+        return '';
+    }
+    const m = L.monthSummary(S.data, key);
+    const soFar = (now, avg) => (avg > 0 ? `${Math.round((now / avg) * 100)}% so far` : '');
+    const period = a.months === 1 ? L.monthLabel(a.to) : `${L.monthLabel(a.from).split(' ')[0]} – ${L.monthLabel(a.to)}`;
+    return `<section class="card span avg-card">
+        <div class="card-head"><span><h2>Last ${a.months === 6 ? 'six' : a.months} months on average</h2><small>${esc(period)} · a month</small></span><a href="#insights">Dashboards</a></div>
+        <div class="avg-figs">
+            <span><small>Income</small><b class="in">${L.money(a.income)}</b><small>${soFar(m.income, a.income)}</small></span>
+            <span><small>Expense</small><b class="out">${L.money(a.expense)}</b><small>${soFar(m.expense, a.expense)}</small></span>
+            <span><small>Saved</small><b>${L.money(a.saved)}</b><small>${a.rate === null ? '' : `${a.rate}% of income`}</small></span>
+        </div>
+        ${a.expense > 0 ? `<div class="avg-pace"><small>This month's spending: ${L.money(m.expense)} of a usual ${L.money(a.expense)}</small><div class="bar"><i class="${m.expense > a.expense ? 'red' : m.expense > a.expense * 0.9 ? 'orange' : ''}" style="width:${Math.min(100, Math.round((m.expense / a.expense) * 100))}%"></i></div></div>` : ''}
+    </section>`;
+}
+
+/** Home in the classic look. */
+function homeClassic() {
+    const key = thisMonth();
+    const m = L.monthSummary(S.data, key);
+    const t = L.totals(S.data);
+    const rows = L.budgetRows(S.data, key);
+    const planned = rows.reduce((s, r) => s + r.planned, 0);
+    const spent = rows.reduce((s, r) => s + r.spent, 0);
+    const pct = planned ? Math.min(100, Math.round((spent / planned) * 100)) : 0;
+    const accounts = activeAccounts()
+        .map((a) => {
+            const bal = L.accountBalance(a, S.data.entries);
+            return `<div class="tile"><span class="tile-top">${icon(KIND_ICON[a.kind])}<small>${L.ACCOUNT_KINDS[a.kind]}</small></span><small>${esc(a.name)}</small><b>${a.kind === 'card' ? `${L.money(Math.max(0, -bal))} owed` : L.money(bal)}</b></div>`;
+        })
+        .join('');
+    const recent = [...S.data.entries].sort((a, b) => (a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1)).slice(0, 5);
+    return `<header class="hero">
+        <a class="back" href="#hub">${icon('chevLeft')} LifeDesk</a>
+        <small class="eyebrow">Account Management</small><h1>${L.monthLabel(key)}</h1>
+        ${(() => { const fl = L.monthFlows(S.data, key); return `<div class="stats home-stats">${stat('Income', L.money(m.income))}${stat('Expense', L.money(m.expense))}${stat('Net balance', L.money(t.net))}
+            ${stat('Invested', L.money(fl.invested))}${stat('Spent + Invested', L.money(fl.spentAndInvested))}${stat('Total money out', L.money(fl.moneyOut))}
+            <a class="stat link ${t.cardOwed > 0 ? 'owed' : ''}" href="#pay"><small>Card owed</small><b>${L.money(t.cardOwed)}</b><small>${t.cardOwed > 0 ? 'Tap to pay' : 'Nothing owed'}</small></a></div>`; })()}
+        <p class="hero-sub">Money in hand ${L.money(t.inHand)}${t.owedToPeople ? ` · Owed to people ${L.money(t.owedToPeople)}` : ''} · Total money out includes lending, EMIs, assets and investments</p>
+    </header>
+    <main class="dash">
+        <div class="shortcuts span">
+            <a class="shortcut main" href="#add">${icon('plus')}<span>Add Entry</span></a>
+            <a class="shortcut" href="#people">${icon('users')}<span>People &amp; Loans</span></a>
+            <a class="shortcut" href="#budget">${icon('target')}<span>Budget</span></a>
+            <a class="shortcut" href="#pay">${icon('card')}<span>Payments</span></a>
+            <a class="shortcut" href="#daily">${icon('calendar')}<span>Daily</span></a>
+            <a class="shortcut" href="#insights">${icon('chart')}<span>Dashboards</span></a>
+            <a class="shortcut" href="#reports">${icon('table')}<span>Reports</span></a>
+            <a class="shortcut" href="#invest">${icon('chart')}<span>Investments</span></a>
+            <a class="shortcut" href="#trips">${icon('trip')}<span>Trips</span></a>
+            <a class="shortcut" href="#assistant">${icon('spark')}<span>Assistant</span></a>
+            <button class="shortcut" data-action="voiceOpen">${icon('mic')}<span>Voice entry</span></button>
+        </div>
+        ${quickBar()}
+        ${classicAverages()}
+        ${(() => { const due = dueItems(); const emis = due.filter((d) => d.kind === 'emi').length; const bills = due.length - emis; return due.length ? `<a class="notice span" href="#pay">${[emis ? plural(emis, 'EMI') : '', bills ? plural(bills, 'bill') : ''].filter(Boolean).join(' and ')} due this month (${L.money(due.reduce((x, d) => x + d.amount, 0))}) – tap to pay</a>` : ''; })()}
+        ${(() => { const n = followUpsDue().length; return n ? `<a class="notice span" href="#people">${plural(n, 'follow-up')} due with people who owe you – tap to see</a>` : ''; })()}
+        ${t.cardOwed > 0 ? `<a class="notice span" href="#pay">Credit card owed ${L.money(t.cardOwed)} – tap to pay</a>` : ''}
+        ${(() => { const w = netWorth(S.data, today()); return `<a class="card link span worth" href="#insights"><div class="card-head"><span><small>Net worth</small><b class="big">${L.money(w.worth)}</b></span>
+            <span class="worth-parts"><small>Net balance ${L.money(w.net)}</small><small>+ owed to you ${L.money(w.toReceive)}</small><small>+ assets ${L.money(w.assets)}</small>${w.investments ? `<small>+ investments ${L.money(w.investments)}</small>` : ''}<small>− loans ${L.money(w.loans)}</small></span></div></a>`; })()}
+        ${(() => { const p = invest.port(); return `<a class="card link span" href="#invest"><div class="card-head"><h2>Investments</h2>${p.pending.length ? '<span class="pill warn">Confirm SIP</span>' : p.rows.length ? `<b>${L.money(p.value)}</b>` : icon('chevRight')}</div>
+            ${p.rows.length ? `<div class="lines"><small class="${p.gain < 0 ? 'out' : 'in'}">Gain ${p.gain >= 0 ? '+' : ''}${L.money(p.gain)} (${p.gainPct.toFixed(1)}%)${p.dayChange ? ` · today ${p.dayChange > 0 ? '+' : ''}${L.money(p.dayChange)}` : ''}</small><small>${p.sipPerMonth ? `SIPs ${L.money(p.sipPerMonth)} a month` : 'No SIP running'}${p.pending.length ? ` · ${p.pending.length} to confirm` : ''}</small></div>` : '<small>Mutual funds, SIPs, shares, deposits, gold – tap to add</small>'}</a>`; })()}
+        ${assist.homeCard()}
+        ${trips.homeCard()}
+        <section class="card"><div class="card-head"><h2>Accounts</h2><a href="#accounts">Manage</a></div><div class="tiles">${accounts}</div></section>
+        <div class="stack">
+            <a class="card link" href="#budget"><div class="card-head"><h2>Budget this month</h2><span class="pill">${planned ? `${pct}%` : 'Not set'}</span></div>
+                <div class="bar"><i class="${pct >= 100 ? 'red' : pct >= 90 ? 'orange' : ''}" style="width:${pct}%"></i></div>
+                <small>${L.money(spent)} spent${planned ? ` of ${L.money(planned)}` : ''}</small></a>
+            <a class="card link" href="#people"><div class="card-head"><h2>People &amp; Loans</h2>${icon('chevRight')}</div>
+                <div class="tiles">${stat('To receive', L.money(t.toReceive))}${stat('I owe', L.money(t.owedToPeople))}</div></a>
+        </div>
+        ${recent.length ? `<section class="card span"><div class="card-head"><h2>Latest entries</h2><a href="#daily">See all</a></div><div class="list inner">${recent.map((e) => entryRow(e, true)).join('')}</div></section>` : ''}
     </main>`;
 }
 
@@ -1456,6 +1597,9 @@ function more() {
         <section class="card"><div class="card-head"><h2>Appearance</h2></div>
             <div class="seg">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([v, label]) => `<button class="${theme() === v ? 'on' : ''}" data-action="setTheme" data-theme="${v}" aria-pressed="${theme() === v}">${label}</button>`).join('')}</div>
             <small>${theme() === 'system' ? 'Follows this device: light by day or dark, whichever the device is set to.' : `Always ${theme()} on this device, whatever the device setting.`} Saved on this device only.</small></section>
+        ${state.lookAllowed ? `<section class="card"><div class="card-head"><h2>Look</h2><span class="pill">Early access</span></div>
+            <div class="seg">${[['new', 'New look'], ['classic', 'Classic']].map(([v, label]) => `<button class="${(look() || 'classic') === v ? 'on' : ''}" data-action="setLook" data-look="${v}" aria-pressed="${(look() || 'classic') === v}">${label}</button>`).join('')}</div>
+            <small>The new look: Home with one card for the month, glass, sliding tabs and movement. Switch back to the classic look any time. Saved on this device only.</small></section>` : ''}
         ${S.isDemo ? '' : `<section class="card"><div class="card-head"><h2>Privacy</h2><span class="pill">Encrypted</span></div>
             <small>Your data is encrypted on this device with your data passphrase before it is saved. In the database it is unreadable text, even to the people who run LifeDesk. If you forget the passphrase, use your recovery code on the unlock screen.</small>
             <div class="split wrap"><button class="btn" data-action="lockDevice">Lock this device</button></div></section>`}
@@ -1506,7 +1650,7 @@ let sipsChecked = false; // due SIP instalments are recorded once per visit, whi
 
 // helpers the dashboard and report screens share with the rest
 const kit = { today, icon, stat, monthNav, entryRow, back: () => backLink('menu') };
-const SCREENS = { hub, home, add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), trips: () => trips.screen(), assistant: () => assist.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
+const SCREENS = { hub, home: () => (newLook() ? home() : homeClassic()), add: addEntry, daily, budget, people, accounts, assets: assetsView, pay: payView, renewals, menu, more, invest: () => invest.screen(), trips: () => trips.screen(), assistant: () => assist.screen(), insights: () => dashboards(state.insights, kit), reports: () => reports(state.reports, kit) };
 const NO_TABS = ['hub', 'renewals', 'more']; // the bottom bar belongs to Account Management; LifeDesk-wide screens and other tools do not show it
 // phone: bottom bar
 const NAV = [['home', 'home', 'Home'], ['daily', 'calendar', 'Daily'], ['add', 'plus', 'Add'], ['budget', 'target', 'Budget'], ['menu', 'grid', 'More']];
@@ -3604,6 +3748,13 @@ const actions = {
             render();
         }
     },
+    setLook(el) {
+        if (el.dataset.look === look()) {
+            return;
+        }
+        setLook(el.dataset.look);
+        window.location.reload(); // the whole app is drawn again in the chosen look
+    },
     setTheme(el) {
         const t = el.dataset.theme;
         try {
@@ -4126,6 +4277,10 @@ S.init((status) => {
         trail.push('hub');
     }
     state.status = status;
+    if (status === 'ready' && state.lookFor !== S.user.uid) {
+        state.lookFor = S.user.uid;
+        checkLook();
+    }
     if (status === 'ready' && !sipsChecked) {
         sipsChecked = true;
         invest.recordDueSips().then((r) => (invest.snapshot().catch(() => {}), (r.recorded || r.pending) && toast(`${r.recorded ? `${plural(r.recorded, 'SIP instalment')} recorded` : ''}${r.recorded && r.pending ? ' · ' : ''}${r.pending ? `${r.pending} to confirm on Investments` : ''}.`))).catch((e) => console.error(e));
@@ -4152,7 +4307,7 @@ S.init((status) => {
     app.innerHTML = `<div class="loading"><p>Could not start: ${esc(e.message)}</p></div>`;
 });
 
-startGlide();
+applyLook();
 
 if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

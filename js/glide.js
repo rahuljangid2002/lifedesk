@@ -192,7 +192,12 @@ function onUp(e) {
 }
 
 /** Starts watching the page: any redraw or change of the chosen item moves the highlight. */
+let started = false;
 export function startGlide(root = document.body) {
+    if (started) {
+        return;
+    }
+    started = true;
     let queued = false;
     const run = () => {
         queued = false;

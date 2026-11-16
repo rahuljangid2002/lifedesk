@@ -50,7 +50,7 @@ def device(browser):
     ctx.add_init_script(f"localStorage.setItem('lifedesk-otp-endpoint', '{OTP}'); localStorage.setItem('lifedesk-test-verified', '1');")
     ctx.route(OTP, stand_in)
     page = ctx.new_page()
-    page.on('dialog', lambda d: d.accept('DELETE') if d.type == 'prompt' else d.accept()); page.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+    page.on('dialog', lambda d: d.accept('DELETE') if d.type == 'prompt' else d.accept()); page.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     return page
 
 

@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 U = 'http://localhost:8765/?demo=1'
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out')
 with sync_playwright() as p:
-    b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1680, 'height': 1000}); pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+    b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1680, 'height': 1000}); pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     pg.goto(U); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')
     pg.goto(U + '#more'); pg.get_by_role('button', name='Load sample data').click(); pg.wait_for_selector('button:has-text("Remove sample data")'); time.sleep(3.5)
     for size, tag in (({'width': 1680, 'height': 1000}, 'w'), ({'width': 390, 'height': 844}, 'm')):

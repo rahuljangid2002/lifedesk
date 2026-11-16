@@ -243,7 +243,7 @@ def take_shots():
         b = pw.chromium.launch()
         ctx = b.new_context(viewport={'width': 1440, 'height': 900}, device_scale_factor=2, color_scheme='light')
         pg = ctx.new_page()
-        pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+        pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
         shot = lambda name, page=None: (page or pg).screenshot(path=os.path.join(SHOTS, name + '.png')) and print('shot', name)
         go = lambda route, wait=0.6: (pg.evaluate("r => { location.hash = r; window.scrollTo(0, 0); }", route), time.sleep(wait))
 

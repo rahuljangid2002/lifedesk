@@ -35,7 +35,7 @@ def check(name, ok, detail=''):
 
 def run(p, width, height, label):
     b = p.chromium.launch()
-    ctx = b.new_context(viewport={'width': width, 'height': height}); ctx.add_init_script(STAND_IN)
+    ctx = b.new_context(viewport={'width': width, 'height': height}); ctx.add_init_script(STAND_IN); ctx.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {}")  # the new look
     pg = ctx.new_page(); errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     pg.on('pageerror', lambda e: errors.append(str(e)))
@@ -93,7 +93,7 @@ def run(p, width, height, label):
 
     # a browser that cannot listen: "Type the entry" closes the sheet and opens the form; Back returns to where it was
     b = p.chromium.launch()
-    ctx = b.new_context(viewport={'width': width, 'height': height})
+    ctx = b.new_context(viewport={'width': width, 'height': height}); ctx.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {}")
     ctx.add_init_script('delete window.SpeechRecognition; delete window.webkitSpeechRecognition; Object.defineProperty(window, "SpeechRecognition", {value: undefined}); Object.defineProperty(window, "webkitSpeechRecognition", {value: undefined});')
     pg = ctx.new_page()
     pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')

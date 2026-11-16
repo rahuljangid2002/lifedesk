@@ -21,7 +21,7 @@ with sync_playwright() as p:
     for width, height, label in ((390, 844, 'phone'), (1280, 800, 'desktop')):
         pg = b.new_context(viewport={'width': width, 'height': height}).new_page(); errors = []
         pg.on('pageerror', lambda e: errors.append(str(e)))
-        pg.on('dialog', lambda d: d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+        pg.on('dialog', lambda d: d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
         db = lambda: pg.evaluate("JSON.parse(localStorage.getItem('lifedesk-demo'))")
         cls = lambda name: pg.evaluate("(n) => { const r = [...document.querySelectorAll('.acct-row')].find(x => x.textContent.includes(n)); return r ? r.className : null; }", name)
         pg.goto(URL); pg.wait_for_selector('#welcome-currency'); pg.locator('#welcome-currency').select_option('INR'); pg.get_by_role('button', name='Continue').click(); pg.wait_for_selector('.tool')

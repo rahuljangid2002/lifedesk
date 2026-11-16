@@ -45,7 +45,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('pageerror', lambda e: errors.append(str(e)))
     answers = []
-    pg.on('dialog', lambda d: d.accept(answers.pop(0)) if d.type == 'prompt' else d.accept()); pg.add_init_script("new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
+    pg.on('dialog', lambda d: d.accept(answers.pop(0)) if d.type == 'prompt' else d.accept()); pg.add_init_script("try { localStorage.setItem('lifedesk-look', 'new'); } catch (e) {} new MutationObserver(() => { const b = document.querySelector('.ask-layer:not(.closing) .ask-ok'); if (b && !b.dataset.auto) { b.dataset.auto = '1'; setTimeout(() => b.click(), 30); } }).observe(document, { childList: true, subtree: true })")  # the app's own glass confirm dialog: press OK
     toast = lambda: pg.locator('.toast').last.inner_text() if pg.locator('.toast').count() else ''
     # daily limit reached: a notice on the form that points to Google, and no account is created
     lim = b.new_context(viewport={'width': 390, 'height': 844})
